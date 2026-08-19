@@ -1,0 +1,41 @@
+# Dependencias de Node.js
+node_modules/
+
+# Variables de entorno
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# Archivos generados
+dist/
+build/
+coverage/
+
+# Archivos temporales
+tmp/
+temp/
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Archivos de Visual Studio Code
+.vscode/
+
+# Archivos de Docker
+docker-data/
+
+# Documentos PDF de desarrollo
+*.pdf
+
+# Archivos de respaldo de bases de datos
+*.sql.gz
+*.zip
+
+# Archivos temporales
+*.tmp
+*.bak
