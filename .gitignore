@@ -39,3 +39,7 @@ docker-data/
 # Archivos temporales
 *.tmp
 *.bak
+
+# Base de datos
+base-datos/respaldos/*
+!base-datos/respaldos/.gitkeep
