@@ -1,0 +1,261 @@
+@import 'tailwindcss';
+
+/* ============================================================
+   DESIGN SYSTEM OFICIAL — "High-Contrast Civic Modern"
+   Fuente única de verdad: documentacion/design/DESIGN.md
+   ============================================================
+   Este proyecto usa Tailwind v4 (@tailwindcss/vite), que NO lee un
+   archivo `tailwind.config.js`: la configuración del tema es CSS-first y
+   vive en este bloque `@theme`. Es el equivalente exacto de
+   `theme.extend.colors` — cada token declarado aquí queda publicado como
+   variable CSS `--color-*` en `:root` Y genera sus utilidades:
+
+     --color-primary-container -> bg-primary-container, text-primary-container,
+                                  border-primary-container, divide-...
+     --text-body-lg            -> text-body-lg (tamaño + interlineado)
+     --font-weight-body-lg     -> font-body-lg (peso)
+     --spacing-touch-target    -> h-touch-target, p-touch-target...
+     --radius-primary          -> rounded-primary
+
+   Los nombres son idénticos (kebab-case) a los del frontmatter de
+   DESIGN.md, para que el documento se pueda leer al lado del código.
+
+   El modificador `static` es deliberado: por defecto Tailwind v4 poda del
+   CSS final las variables de tema que ninguna clase usa, y el design
+   system es un contrato completo — la paleta entera debe quedar
+   publicada en `:root` para poder usarse con `var(--color-...)` desde
+   estilos puntuales o desde componentes futuros.
+   ============================================================ */
+
+@theme static {
+  /* ==========================================================
+     1. COLOR — copiado literal del frontmatter de DESIGN.md
+     ========================================================== */
+
+  /* ---------- Superficies (stack neutral) ---------- */
+  --color-surface: #f9f9f9;
+  --color-surface-dim: #dadada;
+  --color-surface-bright: #f9f9f9;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f3f3f3;
+  --color-surface-container: #eeeeee;
+  --color-surface-container-high: #e8e8e8;
+  --color-surface-container-highest: #e2e2e2;
+
+  /* ---------- Texto sobre superficie ---------- */
+  --color-on-surface: #1a1c1c;
+  --color-on-surface-variant: #5e3f3a;
+  --color-inverse-surface: #2f3131;
+  --color-inverse-on-surface: #f0f1f1;
+
+  /* ---------- Contornos ---------- */
+  --color-outline: #936e69;
+  --color-outline-variant: #e8bdb6;
+
+  /* ---------- Primario (rojo institucional) ---------- */
+  --color-surface-tint: #c00002;
+  --color-primary: #a60001;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #d30505;
+  --color-on-primary-container: #ffe3de;
+  --color-inverse-primary: #ffb4a8;
+
+  /* ---------- Secundario y terciario (neutros) ---------- */
+  --color-secondary: #595f64;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #dde3e8;
+  --color-on-secondary-container: #5f656a;
+  --color-tertiary: #4e5156;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #66696e;
+  --color-on-tertiary-container: #e8e9ef;
+
+  /* ---------- Error ---------- */
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+
+  /* ---------- Pares "fixed" ---------- */
+  --color-primary-fixed: #ffdad5;
+  --color-primary-fixed-dim: #ffb4a8;
+  --color-on-primary-fixed: #410000;
+  --color-on-primary-fixed-variant: #930001;
+  --color-secondary-fixed: #dde3e8;
+  --color-secondary-fixed-dim: #c1c7cc;
+  --color-on-secondary-fixed: #161c20;
+  --color-on-secondary-fixed-variant: #41484c;
+  --color-tertiary-fixed: #e1e2e8;
+  --color-tertiary-fixed-dim: #c4c6cc;
+  --color-on-tertiary-fixed: #191c20;
+  --color-on-tertiary-fixed-variant: #44474c;
+
+  /* ---------- Fondo y extras de marca ---------- */
+  --color-background: #f9f9f9;
+  --color-on-background: #1a1c1c;
+  --color-surface-variant: #e2e2e2;
+  --color-deep-onyx: #0a0c11;
+  --color-surface-alt: #f0f0f1;
+  --color-pure-white: #ffffff;
+
+  /* ==========================================================
+     2. TIPOGRAFÍA — Public Sans, escala de DESIGN.md
+     ==========================================================
+     El peso NO se declara como `--text-*--font-weight` a propósito: las
+     vistas combinan `font-<escalón>` con `font-bold` puntuales, y tener
+     el peso dentro del token de tamaño haría impredecible cuál gana.
+     Se mantienen separados: `--text-*` (tamaño/interlineado) y
+     `--font-weight-*` (peso). */
+  --font-sans:
+    'Public Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+
+  /* 32px / 800 / 1.2 */
+  --text-headline-lg: 2rem;
+  --text-headline-lg--line-height: 1.2;
+  --font-weight-headline-lg: 800;
+
+  /* 28px / 800 / 1.2 */
+  --text-headline-lg-mobile: 1.75rem;
+  --text-headline-lg-mobile--line-height: 1.2;
+  --font-weight-headline-lg-mobile: 800;
+
+  /* 24px / 700 / 1.3 */
+  --text-headline-md: 1.5rem;
+  --text-headline-md--line-height: 1.3;
+  --font-weight-headline-md: 700;
+
+  /* 20px / 700 / 1.4 */
+  --text-headline-sm: 1.25rem;
+  --text-headline-sm--line-height: 1.4;
+  --font-weight-headline-sm: 700;
+
+  /* 17px / 400 / 1.55 — tamaño BASE de lectura (decisión del PO:
+     legibilidad para personas mayores y lectura en móvil). */
+  --text-body-lg: 1.0625rem;
+  --text-body-lg--line-height: 1.55;
+  --font-weight-body-lg: 400;
+
+  /* 14px / 400 / 1.5 — texto denso: tablas, metadatos, etiquetas de campo */
+  --text-body-md: 0.875rem;
+  --text-body-md--line-height: 1.5;
+  --font-weight-body-md: 400;
+
+  /* 12px / 600 / 1.2 / 0.05em */
+  --text-label-sm: 0.75rem;
+  --text-label-sm--line-height: 1.2;
+  --text-label-sm--letter-spacing: 0.05em;
+  --font-weight-label-sm: 600;
+
+  /* ==========================================================
+     3. FORMAS — DESIGN.md > Shapes
+     ==========================================================
+     `--radius` es el DEFAULT de la utilidad `rounded` (Tailwind lo trae
+     en 0.25rem; aquí se sube a los 0.5rem que pide DESIGN.md).
+     Los dos alias `primary`/`secondary` existen para que el marcado diga
+     la intención y no un número: son los dos "standards" del documento.
+     `rounded-full` queda reservado a badges de estado. */
+  --radius-sm: 0.25rem;
+  --radius: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-full: 9999px;
+  /* Primary standard: botones, cards, campos de formulario */
+  --radius-primary: 0.5rem;
+  /* Secondary standard: buscadores, tags, botones de ícono anidados */
+  --radius-secondary: 0.375rem;
+
+  /* ==========================================================
+     4. ESPACIADO — escala lineal de 8px
+     ==========================================================
+     Todo margen/padding con nombre es múltiplo de 8px. La única
+     excepción deliberada es `touch-target` (44px), que no es espaciado
+     sino el mínimo táctil accesible que fija DESIGN.md. */
+  --spacing-base: 0.5rem; /* 8px  */
+  --spacing-gutter-sm: 1rem; /* 16px */
+  --spacing-gutter-lg: 1.5rem; /* 24px */
+  --spacing-margin-mobile: 1rem; /* 16px */
+  --spacing-margin-desktop: 1.5rem; /* 24px */
+  --spacing-touch-target: 2.75rem; /* 44px — WCAG 2.5.5 / DESIGN.md */
+  --spacing-list-row: 3rem; /* 48px — altura mínima de fila de lista */
+
+  /* ==========================================================
+     5. ELEVACIÓN — DESIGN.md > Elevation & Depth
+     ==========================================================
+     Sin sombras atmosféricas: la jerarquía se construye apilando
+     superficies del stack neutral y separando con bordes de 1px. Las
+     sombras solo existen para elementos transitorios (modales,
+     desplegables) y llevan tinte deep-onyx de baja opacidad. */
+  --shadow-modal:
+    0 2px 4px -1px rgb(10 12 17 / 0.1), 0 8px 16px -4px rgb(10 12 17 / 0.12);
+  --shadow-dropdown:
+    0 1px 2px 0 rgb(10 12 17 / 0.08), 0 4px 12px -2px rgb(10 12 17 / 0.1);
+}
+
+/* ============================================================
+   BASE
+   ============================================================ */
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-on-background);
+    /* 17px es el tamaño base de lectura del design system, no 16px. */
+    font-size: var(--text-body-lg);
+    line-height: 1.55;
+    margin: 0;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Los controles nativos heredan la tipografía del sistema operativo; se
+     fuerza la de la aplicación para que no desentonen con la interfaz. */
+  input,
+  select,
+  button,
+  textarea {
+    font-family: inherit;
+  }
+
+  /* DESIGN.md > Components > Buttons: "Focus states must display a 2px
+     high-contrast outline with an offset". Se aplica de forma global para
+     que ningún control quede sin indicador de foco visible. */
+  :focus-visible {
+    outline: 2px solid var(--color-on-surface);
+    outline-offset: 2px;
+  }
+}
+
+/* ============================================================
+   ICONOS — Material Symbols
+   ============================================================
+   La familia se carga desde index.html. Esta clase es la que activa las
+   ligaduras: sin ella, <span class="material-symbols-outlined">search</span>
+   mostraría literalmente la palabra "search".
+   ============================================================ */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined', sans-serif;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 1.25rem;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
