@@ -6,14 +6,22 @@
 import { onMounted, ref, computed, watch } from 'vue';
 import { useUsuarios } from '@/composables/useUsuarios';
 import { useRolesPermisos } from '@/composables/useRolesPermisos';
-import type { EstadoUsuario } from '@/types/usuario.types';
+import { useAutenticacion } from '@/composables/useAutenticacion';
+import { useNotificaciones } from '@/composables/useNotificaciones';
+import ModalConfirmacion from '@/components/ModalConfirmacion.vue';
+import type { EstadoUsuario, UsuarioResumenDto } from '@/types/usuario.types';
 
 const { usuarios, total, pagina, limite, cargando, error, listar, cambiarEstado } = useUsuarios();
 const { roles, cargarRoles } = useRolesPermisos();
+const { usuario: usuarioActual } = useAutenticacion();
+const { notificarExito, notificarError } = useNotificaciones();
 
 const textoBusqueda = ref('');
 const idRolFiltro = ref<number | null>(null);
 const estadoFiltro = ref<EstadoUsuario | null>(null);
+
+const usuarioPendienteDeConfirmar = ref<UsuarioResumenDto | null>(null);
+const cambiandoEstado = ref(false);
 
 let temporizadorBusqueda: ReturnType<typeof setTimeout> | undefined;
 
@@ -40,9 +48,42 @@ function obtenerIniciales(nombreCompleto: string): string {
     .join('');
 }
 
-async function manejarCambiarEstado(idUsuario: number, estadoActual: EstadoUsuario): Promise<void> {
-  const nuevoEstado: EstadoUsuario = estadoActual === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO';
-  await cambiarEstado(idUsuario, nuevoEstado);
+function esUsuarioActual(idUsuario: number): boolean {
+  return usuarioActual.value?.idUsuario === idUsuario;
+}
+
+function solicitarCambioEstado(usuario: UsuarioResumenDto): void {
+  usuarioPendienteDeConfirmar.value = usuario;
+}
+
+function cancelarCambioEstado(): void {
+  usuarioPendienteDeConfirmar.value = null;
+}
+
+async function confirmarCambioEstado(): Promise<void> {
+  const usuario = usuarioPendienteDeConfirmar.value;
+  if (!usuario) return;
+
+  const nuevoEstado: EstadoUsuario = usuario.estado === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO';
+  cambiandoEstado.value = true;
+  try {
+    await cambiarEstado(usuario.idUsuario, nuevoEstado);
+    notificarExito(
+      nuevoEstado === 'INACTIVO'
+        ? 'Usuario inactivado correctamente.'
+        : 'Usuario reactivado correctamente.',
+    );
+    usuarioPendienteDeConfirmar.value = null;
+  } catch (err) {
+    notificarError(
+      err,
+      nuevoEstado === 'INACTIVO'
+        ? 'No se pudo inactivar el usuario.'
+        : 'No se pudo reactivar el usuario.',
+    );
+  } finally {
+    cambiandoEstado.value = false;
+  }
 }
 
 const totalPaginas = computed(() => Math.max(1, Math.ceil(total.value / limite.value)));
@@ -77,15 +118,16 @@ onMounted(async () => {
       </div>
       <div class="flex items-center gap-3">
         <!-- Botón primario -->
-        <button
-          type="button"
+        <router-link
+          :to="{ name: 'usuario-nuevo' }"
           class="h-touch-target px-gutter-lg bg-primary-container text-pure-white font-label-sm text-label-sm rounded-primary hover:bg-primary active:bg-primary transition-colors flex items-center justify-center gap-2 whitespace-nowrap"
         >
           <span class="material-symbols-outlined text-[18px]">person_add</span>
           Nuevo Usuario
-        </button>
+        </router-link>
       </div>
     </div>
+
 
     <!-- Controles de búsqueda y filtros -->
     <div
@@ -213,18 +255,25 @@ onMounted(async () => {
                 <td class="py-gutter-sm px-gutter-lg text-right space-x-1 whitespace-nowrap">
                   <!-- Botones de ícono: NO son pill. Radio "Secondary
                        standard" (6px) y 44x44 de objetivo táctil. -->
-                  <button
-                    type="button"
+                  <router-link
+                    :to="{ name: 'usuario-editar', params: { id: usuario.idUsuario } }"
                     title="Editar"
                     class="w-touch-target h-touch-target rounded-secondary hover:bg-surface-container text-secondary hover:text-on-surface transition-colors inline-flex items-center justify-center"
                   >
                     <span class="material-symbols-outlined text-[20px]">edit</span>
-                  </button>
+                  </router-link>
                   <button
                     type="button"
-                    :title="usuario.estado === 'ACTIVO' ? 'Inactivar' : 'Activar'"
-                    class="w-touch-target h-touch-target rounded-secondary hover:bg-surface-container text-secondary hover:text-on-surface transition-colors inline-flex items-center justify-center"
-                    @click="manejarCambiarEstado(usuario.idUsuario, usuario.estado)"
+                    :disabled="usuario.estado === 'ACTIVO' && esUsuarioActual(usuario.idUsuario)"
+                    :title="
+                      usuario.estado === 'ACTIVO' && esUsuarioActual(usuario.idUsuario)
+                        ? 'No puede inactivar su propia cuenta'
+                        : usuario.estado === 'ACTIVO'
+                          ? 'Inactivar'
+                          : 'Activar'
+                    "
+                    class="w-touch-target h-touch-target rounded-secondary hover:bg-surface-container text-secondary hover:text-on-surface transition-colors inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                    @click="solicitarCambioEstado(usuario)"
                   >
                     <span class="material-symbols-outlined text-[20px]">
                       {{ usuario.estado === 'ACTIVO' ? 'block' : 'check_circle' }}
@@ -281,5 +330,18 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+
+    <ModalConfirmacion
+      v-if="usuarioPendienteDeConfirmar"
+      :titulo="usuarioPendienteDeConfirmar.estado === 'ACTIVO' ? 'Inactivar usuario' : 'Activar usuario'"
+      :procesando="cambiandoEstado"
+      @cancelar="cancelarCambioEstado"
+      @confirmar="confirmarCambioEstado"
+    >
+      ¿Confirma que desea
+      {{ usuarioPendienteDeConfirmar.estado === 'ACTIVO' ? 'inactivar' : 'activar' }}
+      a <strong class="text-on-surface">{{ usuarioPendienteDeConfirmar.nombreCompleto }}</strong
+      >?
+    </ModalConfirmacion>
   </div>
 </template>

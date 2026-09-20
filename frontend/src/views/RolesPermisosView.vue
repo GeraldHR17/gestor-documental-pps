@@ -8,6 +8,7 @@
 import { onMounted, ref, computed } from 'vue';
 import { useRolesPermisos } from '@/composables/useRolesPermisos';
 import { useAutenticacion } from '@/composables/useAutenticacion';
+import { useNotificaciones } from '@/composables/useNotificaciones';
 
 const {
   roles,
@@ -23,6 +24,7 @@ const {
 } = useRolesPermisos();
 
 const { esRol } = useAutenticacion();
+const { notificarExito, notificarError } = useNotificaciones();
 // RF-15: solo el Superadministrador puede modificar roles_permisos; el resto
 // ve la matriz en modo solo lectura.
 const puedeEditar = computed(() => esRol('Superadministrador'));
@@ -39,8 +41,12 @@ const rolActual = computed(() => roles.value.find((rol) => rol.idRol === idRolSe
 async function manejarGuardar(): Promise<void> {
   try {
     await guardarCambios();
-  } catch {
-    // El mensaje de error ya queda expuesto de forma reactiva vía `error`.
+    notificarExito('Permisos actualizados correctamente.');
+  } catch (err) {
+    // El mensaje inline ya queda expuesto de forma reactiva vía `error`; el
+    // toast repite el texto real devuelto por el backend para que el
+    // resultado se vea sin tener que buscarlo en la pantalla.
+    notificarError(err, 'No se pudieron guardar los cambios de permisos.');
   }
 }
 

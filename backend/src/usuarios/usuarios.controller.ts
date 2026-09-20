@@ -46,13 +46,17 @@ export class UsuariosController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  crear(@Body() dto: CrearUsuarioDto) {
-    return this.usuariosService.crear(dto);
+  crear(@Body() dto: CrearUsuarioDto, @UsuarioJwtActual() usuarioActual: PayloadJwt) {
+    return this.usuariosService.crear(dto, usuarioActual);
   }
 
   @Patch(':id')
-  actualizar(@Param('id', ParseIntPipe) id: number, @Body() dto: ActualizarUsuarioDto) {
-    return this.usuariosService.actualizar(id, dto);
+  actualizar(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ActualizarUsuarioDto,
+    @UsuarioJwtActual() usuarioActual: PayloadJwt,
+  ) {
+    return this.usuariosService.actualizar(id, dto, usuarioActual);
   }
 
   @Patch(':id/estado')

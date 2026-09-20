@@ -11,9 +11,12 @@ import { UsuariosController } from './usuarios.controller';
 import { UsuariosService } from './usuarios.service';
 import { Usuario } from '../entidades/usuario.entidad';
 import { Rol } from '../entidades/rol.entidad';
+import { Dependencia } from '../entidades/dependencia.entidad';
+import { Documento } from '../entidades/documento.entidad';
+import { BitacoraModule } from '../bitacora/bitacora.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Usuario, Rol])],
+  imports: [TypeOrmModule.forFeature([Usuario, Rol, Dependencia, Documento]), BitacoraModule],
   controllers: [UsuariosController],
   providers: [UsuariosService],
   exports: [UsuariosService],

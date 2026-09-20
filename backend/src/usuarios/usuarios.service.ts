@@ -8,11 +8,14 @@ import { ConfigService } from '@nestjs/config';
 
 import { Usuario } from '../entidades/usuario.entidad';
 import { Rol } from '../entidades/rol.entidad';
+import { Dependencia } from '../entidades/dependencia.entidad';
+import { Documento } from '../entidades/documento.entidad';
 import { CrearUsuarioDto } from './dto/crear-usuario.dto';
 import { ActualizarUsuarioDto } from './dto/actualizar-usuario.dto';
 import { FiltrosUsuariosDto } from './dto/filtros-usuarios.dto';
 import { UsuarioResumenRespuestaDto } from './dto/usuario-resumen-respuesta.dto';
 import { ListaPaginadaUsuariosRespuestaDto } from './dto/lista-paginada-usuarios-respuesta.dto';
+import { BitacoraService } from '../bitacora/bitacora.service';
 import type { PayloadJwt } from '../autenticacion/estrategias/jwt.strategy';
 
 import {
@@ -23,6 +26,7 @@ import {
   AutoModificacionNoPermitidaException,
   PermisoDenegadoException,
 } from '../comun/excepciones/excepciones-autenticacion';
+import { ClasificacionInvalidaException } from '../comun/excepciones/excepciones-documentos';
 
 @Injectable()
 export class UsuariosService {
@@ -31,7 +35,12 @@ export class UsuariosService {
     private readonly repositorioUsuarios: Repository<Usuario>,
     @InjectRepository(Rol)
     private readonly repositorioRoles: Repository<Rol>,
+    @InjectRepository(Dependencia)
+    private readonly repositorioDependencias: Repository<Dependencia>,
+    @InjectRepository(Documento)
+    private readonly repositorioDocumentos: Repository<Documento>,
     private readonly configuracion: ConfigService,
+    private readonly bitacoraService: BitacoraService,
   ) {}
 
   // RF-19 — Listado paginado y filtrable
@@ -42,6 +51,7 @@ export class UsuariosService {
     const consulta = this.repositorioUsuarios
       .createQueryBuilder('usuario')
       .leftJoinAndSelect('usuario.rol', 'rol')
+      .leftJoinAndSelect('usuario.dependencia', 'dependencia')
       .orderBy('usuario.nombreCompleto', 'ASC')
       .skip((pagina - 1) * limite)
       .take(limite);
@@ -74,16 +84,23 @@ export class UsuariosService {
   async obtener(idUsuario: number): Promise<UsuarioResumenRespuestaDto> {
     const usuario = await this.repositorioUsuarios.findOne({
       where: { idUsuario },
-      relations: { rol: true },
+      relations: { rol: true, dependencia: true },
     });
     if (!usuario) {
       throw new UsuarioNoEncontradoException();
     }
-    return this.mapearResumen(usuario);
+
+    // Un COUNT y no la lista completa: el panel de resumen del formulario
+    // sólo necesita la cifra (mejora aprobada, E.3).
+    const cantidadDocumentosRegistrados = await this.repositorioDocumentos.count({
+      where: { idUsuarioCreador: idUsuario },
+    });
+
+    return this.mapearResumen(usuario, cantidadDocumentosRegistrados);
   }
 
   // RF-06 — Creación administrativa (correoVerificado = true, regla #8)
-  async crear(dto: CrearUsuarioDto): Promise<UsuarioResumenRespuestaDto> {
+  async crear(dto: CrearUsuarioDto, usuarioAutenticado: PayloadJwt): Promise<UsuarioResumenRespuestaDto> {
     const correoExistente = await this.repositorioUsuarios.findOne({ where: { correo: dto.correo } });
     if (correoExistente) {
       throw new CorreoYaRegistradoException();
@@ -101,6 +118,9 @@ export class UsuariosService {
       throw new RolNoEncontradoException();
     }
 
+    const dependencia =
+      dto.idDependencia !== undefined ? await this.verificarDependencia(dto.idDependencia) : null;
+
     const saltRounds = Number(this.configuracion.get<string>('BCRYPT_SALT_ROUNDS') ?? 12);
     const contrasenaHash = await bcrypt.hash(dto.contrasenaTemporal, saltRounds);
 
@@ -111,17 +131,41 @@ export class UsuariosService {
       contrasenaHash,
       estado: 'ACTIVO',
       idRol: dto.idRol,
+      idDependencia: dependencia?.idDependencia ?? null,
       correoVerificado: true, // regla #8: creado por administrador, no pasa por autoregistro
     });
 
     const usuarioGuardado = await this.repositorioUsuarios.save(nuevoUsuario);
     usuarioGuardado.rol = rol;
+    usuarioGuardado.dependencia = dependencia;
+
+    await this.bitacoraService.registrar({
+      idUsuario: usuarioAutenticado.idUsuario,
+      accion: 'CREAR_USUARIO',
+      entidad: 'usuarios',
+      idRegistro: usuarioGuardado.idUsuario,
+      resultado: 'EXITO',
+      detalles: {
+        correo: usuarioGuardado.correo,
+        idRol: usuarioGuardado.idRol,
+        idDependencia: usuarioGuardado.idDependencia,
+      },
+    });
+
     return this.mapearResumen(usuarioGuardado);
   }
 
-  // RF-07 — Edición
-  async actualizar(idUsuario: number, dto: ActualizarUsuarioDto): Promise<UsuarioResumenRespuestaDto> {
-    const usuario = await this.repositorioUsuarios.findOne({ where: { idUsuario }, relations: { rol: true } });
+  // RF-07 — Edición (nombre, identificación, correo). El rol se cambia
+  // aparte con asignarRol(): ver nota en ActualizarUsuarioDto.
+  async actualizar(
+    idUsuario: number,
+    dto: ActualizarUsuarioDto,
+    usuarioAutenticado: PayloadJwt,
+  ): Promise<UsuarioResumenRespuestaDto> {
+    const usuario = await this.repositorioUsuarios.findOne({
+      where: { idUsuario },
+      relations: { rol: true, dependencia: true },
+    });
     if (!usuario) {
       throw new UsuarioNoEncontradoException();
     }
@@ -134,20 +178,38 @@ export class UsuariosService {
       usuario.correo = dto.correo;
     }
 
+    if (dto.identificacion && dto.identificacion !== usuario.identificacion) {
+      const identificacionExistente = await this.repositorioUsuarios.findOne({
+        where: { identificacion: dto.identificacion },
+      });
+      if (identificacionExistente) {
+        throw new IdentificacionYaRegistradaException();
+      }
+      usuario.identificacion = dto.identificacion;
+    }
+
     if (dto.nombreCompleto) {
       usuario.nombreCompleto = dto.nombreCompleto;
     }
 
-    if (dto.idRol) {
-      const rol = await this.repositorioRoles.findOne({ where: { idRol: dto.idRol } });
-      if (!rol) {
-        throw new RolNoEncontradoException();
-      }
-      usuario.idRol = dto.idRol;
-      usuario.rol = rol;
+    // Omitido = no tocar; `null` explícito = quitar la dependencia.
+    if (dto.idDependencia !== undefined) {
+      usuario.dependencia =
+        dto.idDependencia === null ? null : await this.verificarDependencia(dto.idDependencia);
+      usuario.idDependencia = usuario.dependencia?.idDependencia ?? null;
     }
 
     await this.repositorioUsuarios.save(usuario);
+
+    await this.bitacoraService.registrar({
+      idUsuario: usuarioAutenticado.idUsuario,
+      accion: 'ACTUALIZAR_USUARIO',
+      entidad: 'usuarios',
+      idRegistro: usuario.idUsuario,
+      resultado: 'EXITO',
+      detalles: { camposActualizados: Object.keys(dto) },
+    });
+
     return this.mapearResumen(usuario);
   }
 
@@ -168,6 +230,15 @@ export class UsuariosService {
 
     usuario.estado = nuevoEstado;
     await this.repositorioUsuarios.save(usuario);
+
+    await this.bitacoraService.registrar({
+      idUsuario: usuarioAutenticado.idUsuario,
+      accion: nuevoEstado === 'INACTIVO' ? 'INACTIVAR_USUARIO' : 'REACTIVAR_USUARIO',
+      entidad: 'usuarios',
+      idRegistro: usuario.idUsuario,
+      resultado: 'EXITO',
+    });
+
     return this.mapearResumen(usuario);
   }
 
@@ -199,17 +270,45 @@ export class UsuariosService {
     usuario.idRol = idRolNuevo;
     usuario.rol = rolNuevo;
     await this.repositorioUsuarios.save(usuario);
+
+    await this.bitacoraService.registrar({
+      idUsuario: usuarioAutenticado.idUsuario,
+      accion: 'ASIGNAR_ROL_USUARIO',
+      entidad: 'usuarios',
+      idRegistro: usuario.idUsuario,
+      resultado: 'EXITO',
+      detalles: { idRolNuevo },
+    });
+
     return this.mapearResumen(usuario);
   }
 
-  private mapearResumen(usuario: Usuario): UsuarioResumenRespuestaDto {
+  private async verificarDependencia(idDependencia: number): Promise<Dependencia> {
+    const dependencia = await this.repositorioDependencias.findOne({ where: { idDependencia } });
+    if (!dependencia) {
+      throw new ClasificacionInvalidaException('La dependencia seleccionada no existe');
+    }
+    if (dependencia.estado !== 'ACTIVO') {
+      throw new ClasificacionInvalidaException('La dependencia seleccionada está inactiva');
+    }
+    return dependencia;
+  }
+
+  private mapearResumen(
+    usuario: Usuario,
+    cantidadDocumentosRegistrados?: number,
+  ): UsuarioResumenRespuestaDto {
     return new UsuarioResumenRespuestaDto({
       idUsuario: usuario.idUsuario,
       nombreCompleto: usuario.nombreCompleto,
+      identificacion: usuario.identificacion,
       correo: usuario.correo,
       nombreRol: usuario.rol?.nombre ?? '',
       idRol: usuario.idRol,
+      idDependencia: usuario.idDependencia ?? null,
+      nombreDependencia: usuario.dependencia?.nombre ?? null,
       estado: usuario.estado,
+      cantidadDocumentosRegistrados,
     });
   }
 }
