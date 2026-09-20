@@ -18,7 +18,7 @@ SET NAMES utf8mb4;
 -- la columna `correo_verificado` que ese script agrega.
 --
 -- Credenciales de arranque (SOLO PARA DESARROLLO LOCAL):
---     correo     : admin@palmares.go.cr
+--     correo     : admin@munipalmares.go.cr
 --     contraseña : Palmares#2026
 --
 -- El valor almacenado es un hash bcrypt (12 rondas) de esa contraseña;
@@ -41,7 +41,7 @@ INSERT INTO usuarios (
 SELECT
     'Administrador del Sistema',
     '000000000',
-    'admin@palmares.go.cr',
+    'admin@munipalmares.go.cr',
     '$2b$12$gQ4SU2ojTIgrrJUNPWIlh.7GYBYXJ0lkyyYO0ozzBdfAAGpZBEWya',
     'ACTIVO',
     r.id_rol,
