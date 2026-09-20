@@ -6,10 +6,14 @@
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAutenticacion } from '@/composables/useAutenticacion';
+import { useNotificaciones } from '@/composables/useNotificaciones';
+import ModalConfirmacion from '@/components/ModalConfirmacion.vue';
+import { CATALOGOS_SIMPLES } from '@/lib/catalogos.config';
 
 const route = useRoute();
 const router = useRouter();
 const { usuario, cerrarSesion, tienePermiso } = useAutenticacion();
+const { notificarExito } = useNotificaciones();
 
 const menuLateralAbierto = ref(false);
 
@@ -30,18 +34,62 @@ const ENLACES: EnlaceNavegacion[] = [
     permisoRequerido: 'usuarios.administrar',
   },
   { nombreRuta: 'roles-permisos', etiqueta: 'Roles y Permisos', icono: 'admin_panel_settings' },
+  {
+    nombreRuta: 'documentos',
+    etiqueta: 'Documentos',
+    icono: 'folder_open',
+    permisoRequerido: 'documentos.consultar',
+  },
+  {
+    nombreRuta: 'bitacora',
+    etiqueta: 'Bitácora',
+    icono: 'history',
+    permisoRequerido: 'bitacora.consultar',
+  },
+];
+
+// Los catálogos van en su propio grupo, bajo un encabezado: son cuatro
+// entradas que comparten permiso y propósito, y mezclarlas con las de
+// arriba dejaría una lista larga y plana difícil de recorrer.
+const ENLACES_CATALOGOS: EnlaceNavegacion[] = [
+  {
+    nombreRuta: 'categorias-itsp',
+    etiqueta: 'Categorías ITSP',
+    icono: 'account_tree',
+    permisoRequerido: 'catalogos.administrar',
+  },
+  ...Object.values(CATALOGOS_SIMPLES).map((catalogo) => ({
+    nombreRuta: catalogo.nombreRutaLista,
+    etiqueta: catalogo.titulo,
+    icono: catalogo.icono,
+    permisoRequerido: 'catalogos.administrar',
+  })),
 ];
 
 // RF-05: la navegación refleja los permisos efectivos del usuario; ocultar
 // el enlace es solo cosmético — el acceso real lo sigue bloqueando el
 // guard del router y, sobre todo, el backend.
-const enlacesVisibles = computed(() =>
-  ENLACES.filter((enlace) => !enlace.permisoRequerido || tienePermiso(enlace.permisoRequerido)),
-);
+function visiblesSegunPermisos(enlaces: EnlaceNavegacion[]): EnlaceNavegacion[] {
+  return enlaces.filter((enlace) => !enlace.permisoRequerido || tienePermiso(enlace.permisoRequerido));
+}
 
-const tituloSeccion = computed(
-  () => enlacesVisibles.value.find((e) => e.nombreRuta === route.name)?.etiqueta ?? 'Inicio',
-);
+const enlacesVisibles = computed(() => visiblesSegunPermisos(ENLACES));
+const enlacesCatalogosVisibles = computed(() => visiblesSegunPermisos(ENLACES_CATALOGOS));
+
+// El título busca en ambos grupos, y además reconoce las rutas de alta y
+// edición: estando en '/catalogos/etiquetas/nueva' la cabecera debe seguir
+// diciendo "Etiquetas", no caer al "Inicio" por defecto.
+const tituloSeccion = computed(() => {
+  const todos = [...enlacesVisibles.value, ...enlacesCatalogosVisibles.value];
+  const coincidencia =
+    todos.find((e) => e.nombreRuta === route.name) ??
+    todos.find((e) => route.path.startsWith(rutaBaseDe(e.nombreRuta)));
+  return coincidencia?.etiqueta ?? 'Inicio';
+});
+
+function rutaBaseDe(nombreRuta: string): string {
+  return router.resolve({ name: nombreRuta }).path;
+}
 
 const iniciales = computed(() =>
   (usuario.value?.nombreCompleto ?? '')
@@ -54,8 +102,21 @@ const iniciales = computed(() =>
 
 const anioActual = new Date().getFullYear();
 
+const mostrarModalCerrarSesion = ref(false);
+const cerrandoSesion = ref(false);
+
 async function manejarCerrarSesion(): Promise<void> {
-  await cerrarSesion();
+  cerrandoSesion.value = true;
+  try {
+    await cerrarSesion();
+  } finally {
+    cerrandoSesion.value = false;
+    mostrarModalCerrarSesion.value = false;
+  }
+  // El toast se publica antes de navegar a propósito: el contenedor vive en
+  // App.vue (fuera del RouterView), así que el aviso sobrevive al cambio de
+  // ruta y se lee ya en la pantalla de login.
+  notificarExito('Sesión cerrada correctamente.');
   router.push({ name: 'login' });
 }
 </script>
@@ -109,13 +170,41 @@ async function manejarCerrarSesion(): Promise<void> {
             </RouterLink>
           </li>
         </ul>
+
+        <!-- Grupo de catálogos. El encabezado es `aria-hidden` porque la
+             lista ya se anuncia por su propio `aria-label`; dejarlo
+             legible para lectores de pantalla lo leería dos veces. -->
+        <template v-if="enlacesCatalogosVisibles.length">
+          <p
+            class="px-3 pt-gutter-lg pb-2 text-label-sm font-label-sm text-pure-white/50 uppercase tracking-wide"
+          >
+            Catálogos
+          </p>
+          <ul class="flex flex-col gap-1">
+            <li v-for="enlace in enlacesCatalogosVisibles" :key="enlace.nombreRuta">
+              <RouterLink
+                :to="{ name: enlace.nombreRuta }"
+                class="flex items-center gap-3 px-3 rounded-primary h-touch-target transition-colors font-label-sm text-label-sm"
+                :class="
+                  route.name === enlace.nombreRuta
+                    ? 'bg-primary-container text-pure-white font-bold'
+                    : 'text-pure-white/85 hover:bg-pure-white/10'
+                "
+                @click="menuLateralAbierto = false"
+              >
+                <span aria-hidden="true" class="material-symbols-outlined">{{ enlace.icono }}</span>
+                {{ enlace.etiqueta }}
+              </RouterLink>
+            </li>
+          </ul>
+        </template>
       </nav>
 
       <div class="px-base py-gutter-sm border-t border-pure-white/15">
         <button
           type="button"
           class="w-full flex items-center gap-3 px-3 rounded-primary h-touch-target text-pure-white/85 hover:bg-pure-white/10 transition-colors font-label-sm text-label-sm"
-          @click="manejarCerrarSesion"
+          @click="mostrarModalCerrarSesion = true"
         >
           <span aria-hidden="true" class="material-symbols-outlined">logout</span>
           Cerrar sesión
@@ -161,7 +250,14 @@ async function manejarCerrarSesion(): Promise<void> {
 
       <!-- Contenido de la ruta activa -->
       <main class="flex-1 flex flex-col min-w-0">
-        <RouterView />
+        <!-- La llave por ruta fuerza un montaje nuevo cuando dos rutas
+             distintas comparten componente (los tres catálogos planos usan
+             CatalogoSimpleView, y crear/editar comparten formulario). Sin
+             ella el router reutiliza la instancia, setup() no vuelve a
+             correr y la vista se quedaría con los datos de la ruta anterior. -->
+        <RouterView v-slot="{ Component }">
+          <component :is="Component" :key="route.fullPath" />
+        </RouterView>
       </main>
 
       <!-- Pie institucional -->
@@ -175,5 +271,14 @@ async function manejarCerrarSesion(): Promise<void> {
         </span>
       </footer>
     </div>
+
+    <ModalConfirmacion
+      v-if="mostrarModalCerrarSesion"
+      titulo="Cerrar sesión"
+      mensaje="¿Desea cerrar sesión?"
+      :procesando="cerrandoSesion"
+      @cancelar="mostrarModalCerrarSesion = false"
+      @confirmar="manejarCerrarSesion"
+    />
   </div>
 </template>

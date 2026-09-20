@@ -100,6 +100,16 @@ export class VersionDocumento {
   })
   mimeType: string;
 
+  // 08-ajuste-dependencia-y-paginas.sql. NULL cuando el PDF no se pudo
+  // interpretar: es un dato informativo, no bloquea la carga.
+  @Column({
+    name: 'numero_paginas',
+    type: 'int',
+    unsigned: true,
+    nullable: true,
+  })
+  numeroPaginas: number | null;
+
   @Column({
     name: 'comentario_version',
     type: 'varchar',

@@ -6,7 +6,8 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 
-import { DocumentoDependencia } from './documento-dependencia.entidad';
+import { Documento } from './documento.entidad';
+import { Usuario } from './usuario.entidad';
 
 @Entity('dependencias')
 @Index('idx_dependencias_estado', ['estado'])
@@ -57,9 +58,11 @@ export class Dependencia {
   })
   fechaActualizacion: Date;
 
-  @OneToMany(
-    () => DocumentoDependencia,
-    (documentoDependencia) => documentoDependencia.dependencia,
-  )
-  documentosDependencias: DocumentoDependencia[];
+  // Relación 1:N desde 08-ajuste-dependencia-y-paginas.sql: un documento
+  // tiene una sola dependencia (decisión del PO), igual que un usuario.
+  @OneToMany(() => Documento, (documento) => documento.dependencia)
+  documentos: Documento[];
+
+  @OneToMany(() => Usuario, (usuario) => usuario.dependencia)
+  usuarios: Usuario[];
 }

@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 
 import { Rol } from './rol.entidad';
+import { Dependencia } from './dependencia.entidad';
 import { Documento } from './documento.entidad';
 import { VersionDocumento } from './version-documento.entidad';
 import { BitacoraLog } from './bitacora-log.entidad';
@@ -70,6 +71,16 @@ export class Usuario {
   })
   idRol: number;
 
+  // Agregada por 08-ajuste-dependencia-y-paginas.sql. Sirve para precargar
+  // (no forzar) la dependencia de los documentos que registre la persona.
+  @Column({
+    name: 'id_dependencia',
+    type: 'int',
+    unsigned: true,
+    nullable: true,
+  })
+  idDependencia: number | null;
+
   @Column({
     name: 'fecha_creacion',
     type: 'datetime',
@@ -122,6 +133,18 @@ export class Usuario {
     foreignKeyConstraintName: 'fk_usuarios_rol',
   })
   rol: Rol;
+
+  @ManyToOne(() => Dependencia, (dependencia) => dependencia.usuarios, {
+    nullable: true,
+    onUpdate: 'CASCADE',
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'id_dependencia',
+    referencedColumnName: 'idDependencia',
+    foreignKeyConstraintName: 'fk_usuarios_dependencia',
+  })
+  dependencia: Dependencia | null;
 
   @OneToMany(() => Documento, (documento) => documento.usuarioCreador)
   documentosCreados: Documento[];

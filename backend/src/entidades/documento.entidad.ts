@@ -12,7 +12,7 @@ import { CategoriaItsp } from './categoria-itsp.entidad';
 import { TipoDocumento } from './tipo-documento.entidad';
 import { Usuario } from './usuario.entidad';
 import { VersionDocumento } from './version-documento.entidad';
-import { DocumentoDependencia } from './documento-dependencia.entidad';
+import { Dependencia } from './dependencia.entidad';
 import { DocumentoEtiqueta } from './documento-etiqueta.entidad';
 
 @Entity('documentos')
@@ -22,6 +22,7 @@ import { DocumentoEtiqueta } from './documento-etiqueta.entidad';
 @Index('idx_documentos_usuario_creador', ['idUsuarioCreador'])
 @Index('idx_documentos_categoria_itsp', ['idCategoriaItsp'])
 @Index('idx_documentos_tipo_documento', ['idTipoDocumento'])
+@Index('idx_documentos_dependencia', ['idDependencia'])
 export class Documento {
   @PrimaryGeneratedColumn({
     name: 'id_documento',
@@ -78,6 +79,17 @@ export class Documento {
     unsigned: true,
   })
   idTipoDocumento: number;
+
+  // Agregada por 08-ajuste-dependencia-y-paginas.sql en reemplazo de la
+  // tabla N:M documentos_dependencias. NULL a propósito: la dependencia no
+  // es obligatoria para publicar (VP-03).
+  @Column({
+    name: 'id_dependencia',
+    type: 'int',
+    unsigned: true,
+    nullable: true,
+  })
+  idDependencia: number | null;
 
   @Column({
     name: 'id_usuario_creador',
@@ -152,11 +164,17 @@ export class Documento {
   )
   versiones: VersionDocumento[];
 
-  @OneToMany(
-    () => DocumentoDependencia,
-    (documentoDependencia) => documentoDependencia.documento,
-  )
-  documentosDependencias: DocumentoDependencia[];
+  @ManyToOne(() => Dependencia, (dependencia) => dependencia.documentos, {
+    nullable: true,
+    onUpdate: 'CASCADE',
+    onDelete: 'RESTRICT',
+  })
+  @JoinColumn({
+    name: 'id_dependencia',
+    referencedColumnName: 'idDependencia',
+    foreignKeyConstraintName: 'fk_documentos_dependencia',
+  })
+  dependencia: Dependencia | null;
 
   @OneToMany(
     () => DocumentoEtiqueta,

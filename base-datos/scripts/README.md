@@ -13,13 +13,15 @@ al crearse por primera vez el volumen `mysql_data` del contenedor MySQL.
 | `04-alter-usuarios-auth.sql`         | Fase 4: columnas de bloqueo y verificación de correo            |
 | `05-tablas-sesiones-tokens.sql`      | Fase 4: sesiones de refresh token y tokens de un solo uso       |
 | `06-usuario-superadministrador.sql`  | Fase 4: usuario semilla para el primer inicio de sesión         |
+| `07-datos-catalogos-fase5.sql`       | Fase 5: 30 tipos de documento (dependencias y etiquetas vacías) |
+| `08-ajuste-dependencia-y-paginas.sql`| Pulido F6: dependencia única (1:N) en documentos y usuarios, `numero_paginas` |
 
 ### Credenciales del usuario semilla
 
 `06-usuario-superadministrador.sql` crea la única cuenta con la que se
 puede entrar al sistema por primera vez:
 
-- **Correo:** `admin@palmares.go.cr`
+- **Correo:** `admin@munipalmares.go.cr`
 - **Contraseña:** `Palmares#2026`
 
 Son credenciales **de desarrollo local**. Cámbielas antes de cualquier

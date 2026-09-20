@@ -14,12 +14,20 @@ interface EstadoAutenticacion {
   usuario: PerfilUsuario | null;
   cargando: boolean;
   error: string | null;
+  /**
+   * Por qué se perdió la sesión la última vez que se intentó restaurar.
+   * 'sesion-expirada' cuando el servidor respondió que el refresh token
+   * venció (8 horas absolutas); el router lo lleva al login como `motivo`
+   * para explicar la salida en vez de mostrar el formulario a secas.
+   */
+  motivoCierre: 'sesion-expirada' | null;
 }
 
 const estado = reactive<EstadoAutenticacion>({
   usuario: null,
   cargando: false,
   error: null,
+  motivoCierre: null,
 });
 
 function obtenerMensajeError(error: unknown, mensajePorDefecto: string): string {
@@ -82,9 +90,15 @@ export function useAutenticacion() {
           const { accessToken } = await authService.renovarToken();
           establecerAccessToken(accessToken);
           estado.usuario = await authService.obtenerPerfil();
-        } catch {
+          estado.motivoCierre = null;
+        } catch (error) {
           limpiarAccessToken();
           estado.usuario = null;
+          // Sólo la expiración se explica; sin cookie (primera visita) o con
+          // sesión revocada no hay nada que avisar en el login.
+          const nombreError = (error as { response?: { data?: { error?: string } } })?.response
+            ?.data?.error;
+          estado.motivoCierre = nombreError === 'TokenExpiradoException' ? 'sesion-expirada' : null;
         }
       })();
     }

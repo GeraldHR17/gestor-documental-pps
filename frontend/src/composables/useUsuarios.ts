@@ -62,11 +62,16 @@ export function useUsuarios() {
     await listar({ pagina: estado.pagina });
   }
 
+  async function asignarRol(idUsuario: number, idRol: number): Promise<void> {
+    await usuariosService.asignarRol(idUsuario, idRol);
+    await listar({ pagina: estado.pagina });
+  }
+
   async function cambiarEstado(idUsuario: number, nuevoEstado: EstadoUsuario): Promise<void> {
     await usuariosService.cambiarEstado(idUsuario, nuevoEstado);
     const usuarioEnLista = estado.usuarios.find((u) => u.idUsuario === idUsuario);
     if (usuarioEnLista) usuarioEnLista.estado = nuevoEstado;
   }
 
-  return { ...toRefs(estado), listar, crear, actualizar, cambiarEstado };
+  return { ...toRefs(estado), listar, crear, actualizar, asignarRol, cambiarEstado };
 }

@@ -35,6 +35,9 @@ export interface PerfilUsuario {
   correo: string;
   rol: string;
   permisos: string[];
+  /** Para precargar la dependencia al registrar documentos. */
+  idDependencia: number | null;
+  nombreDependencia: string | null;
 }
 
 export interface RespuestaLogin {

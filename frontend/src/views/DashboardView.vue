@@ -1,7 +1,6 @@
 <script setup lang="ts">
-// Portada del área autenticada. En la Fase 4 solo orienta hacia los
-// módulos ya construidos; los indicadores de documentos llegarán con las
-// Fases 5 (Catálogos) y 6 (Gestión Documental).
+// Portada del área autenticada: accesos directos a los módulos, cada uno
+// visible sólo si la persona tiene el permiso que gobierna esa pantalla.
 import { computed } from 'vue';
 import { useAutenticacion } from '@/composables/useAutenticacion';
 
@@ -28,6 +27,15 @@ const ACCESOS: AccesoDirecto[] = [
     titulo: 'Roles y Permisos',
     descripcion: 'Consulte la matriz de permisos por rol del control de acceso del sistema.',
     icono: 'admin_panel_settings',
+  },
+  {
+    nombreRuta: 'documentos',
+    titulo: 'Documentos',
+    descripcion: 'Registre, versione y publique los documentos del índice de transparencia.',
+    icono: 'folder_open',
+    // Mismo permiso que gobierna el listado de documentos y su enlace en
+    // la barra lateral.
+    permisoRequerido: 'documentos.consultar',
   },
 ];
 

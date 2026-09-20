@@ -15,7 +15,6 @@ import { Dependencia } from './entidades/dependencia.entidad';
 import { Etiqueta } from './entidades/etiqueta.entidad';
 import { Documento } from './entidades/documento.entidad';
 import { VersionDocumento } from './entidades/version-documento.entidad';
-import { DocumentoDependencia } from './entidades/documento-dependencia.entidad';
 import { DocumentoEtiqueta } from './entidades/documento-etiqueta.entidad';
 import { BitacoraLog } from './entidades/bitacora-log.entidad';
 import { SesionRefreshToken } from './entidades/sesion-refresh-token.entidad';
@@ -28,6 +27,8 @@ import { UsuariosModule } from './usuarios/usuarios.module';
 import { RolesModule } from './roles/roles.module';
 import { CorreoModule } from './correo/correo.module';
 import { BitacoraModule } from './bitacora/bitacora.module';
+import { CatalogosModule } from './catalogos/catalogos.module';
+import { DocumentosModule } from './documentos/documentos.module';
 
 import { JwtAuthGuard } from './comun/guards/jwt-auth.guard';
 import { PermisosGuard } from './comun/guards/permisos.guard';
@@ -66,7 +67,6 @@ import { ExcepcionGlobalFilter } from './comun/filtros/excepcion-global.filter';
           Etiqueta,
           Documento,
           VersionDocumento,
-          DocumentoDependencia,
           DocumentoEtiqueta,
           BitacoraLog,
           SesionRefreshToken,
@@ -87,9 +87,8 @@ import { ExcepcionGlobalFilter } from './comun/filtros/excepcion-global.filter';
     RolesModule,
     CorreoModule,
     BitacoraModule,
-
-    // Fase 5 (Catálogos) y Fase 6 (Documentos) se agregan aquí más
-    // adelante, cuando toque construirlas.
+    CatalogosModule,
+    DocumentosModule,
   ],
   providers: [
     // ORDEN IMPORTANTE: NestJS ejecuta los guards globales en el orden en
