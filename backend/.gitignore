@@ -54,3 +54,6 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Almacenamiento privado de PDF (RNF-004): nunca se versiona ni se publica.
+/storage
