@@ -43,6 +43,7 @@ describe('AutenticacionService', () => {
   let repositorioUsuarios: ReturnType<typeof crearRepositorioMock<Usuario>>;
   let repositorioSesiones: ReturnType<typeof crearRepositorioMock<SesionRefreshToken>>;
   let repositorioRoles: ReturnType<typeof crearRepositorioMock<Rol>>;
+  let modulo: TestingModule;
 
   const contextoPeticion = { ipOrigen: '127.0.0.1', userAgent: 'jest' };
 
@@ -51,7 +52,7 @@ describe('AutenticacionService', () => {
     repositorioSesiones = crearRepositorioMock<SesionRefreshToken>();
     repositorioRoles = crearRepositorioMock<Rol>();
 
-    const modulo: TestingModule = await Test.createTestingModule({
+    modulo = await Test.createTestingModule({
       providers: [
         AutenticacionService,
         { provide: getRepositoryToken(Usuario), useValue: repositorioUsuarios },
@@ -221,6 +222,47 @@ describe('AutenticacionService', () => {
 
       expect(resultado.accessToken).toBe('token-firmado-de-prueba');
       expect(repositorioSesiones.save).toHaveBeenCalled(); // marca la sesion anterior como revocada
+    });
+
+    // Pulido de Fase 6, sección B: expiración ABSOLUTA de 8 horas. La
+    // renovación rota el token pero NO reinicia el plazo: el refresh token
+    // nuevo hereda la fecha de expiración de la sesión original.
+    it('la renovación conserva la expiración absoluta de la sesión original', async () => {
+      const usuario = construirUsuario();
+      const expiracionOriginal = new Date(Date.now() + 2 * 3_600_000); // faltan 2 h de las 8
+      repositorioSesiones.findOne.mockResolvedValue({
+        idSesion: '10',
+        idUsuario: usuario.idUsuario,
+        tokenHash: 'hash-valido',
+        fechaExpiracion: expiracionOriginal,
+        revocado: false,
+      } as SesionRefreshToken);
+      repositorioUsuarios.findOne.mockResolvedValue(usuario);
+      const jwtService = modulo.get(JwtService) as { sign: jest.Mock };
+
+      await servicio.renovarToken('token-valido', contextoPeticion);
+
+      // La segunda firma es la del refresh token (la primera es el access).
+      const opcionesRefresh = jwtService.sign.mock.calls[1][1] as { expiresIn: unknown };
+      expect(typeof opcionesRefresh.expiresIn).toBe('number');
+      // ~7200 s restantes, no una ventana nueva de 8 h (28 800 s).
+      expect(opcionesRefresh.expiresIn as number).toBeLessThanOrEqual(7_200);
+      expect(opcionesRefresh.expiresIn as number).toBeGreaterThan(7_100);
+    });
+
+    it('el login abre una ventana nueva leída de JWT_REFRESH_EXPIRATION', async () => {
+      const usuario = construirUsuario();
+      repositorioUsuarios.findOne.mockResolvedValue(usuario);
+      const jwtService = modulo.get(JwtService) as { sign: jest.Mock };
+
+      await servicio.iniciarSesion(
+        { correo: usuario.correo, contrasena: 'Clave#2024' },
+        contextoPeticion,
+      );
+
+      const opcionesRefresh = jwtService.sign.mock.calls[1][1] as { expiresIn: unknown };
+      // Sin sesión previa no hay fecha que heredar: se usa la configuración.
+      expect(typeof opcionesRefresh.expiresIn).toBe('string');
     });
   });
 

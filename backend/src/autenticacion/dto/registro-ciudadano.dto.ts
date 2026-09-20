@@ -1,9 +1,23 @@
 // src/autenticacion/dto/registro-ciudadano.dto.ts
+//
+// Autoregistro ciudadano (RF-10). Reutiliza las MISMAS reglas que el alta
+// administrativa de Usuario (identificación alfanumérica de 8 a 12 y
+// política de contraseña), con una diferencia deliberada: el correo es
+// personal, de cualquier dominio válido. La restricción al dominio
+// institucional aplica sólo a las cuentas de funcionarios que crea el
+// administrador, no a la ciudadanía.
+//
+// Antes la identificación aceptaba de 9 a 30 caracteres: una cédula de 8
+// que el formulario ya daba por válida habría sido rechazada con un 400.
+
 import { IsEmail, Length, Matches, IsString } from 'class-validator';
 
-const REGEX_POLITICA_CONTRASENA = /^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
-const MENSAJE_POLITICA_CONTRASENA =
-  'La contraseña debe tener mínimo 8 caracteres, una mayúscula, un número y un carácter especial';
+import {
+  MENSAJE_IDENTIFICACION,
+  MENSAJE_POLITICA_CONTRASENA,
+  REGEX_IDENTIFICACION,
+  REGEX_POLITICA_CONTRASENA,
+} from '../../usuarios/dto/crear-usuario.dto';
 
 export class RegistroCiudadanoDto {
   @IsString()
@@ -11,7 +25,7 @@ export class RegistroCiudadanoDto {
   nombreCompleto: string;
 
   @IsString()
-  @Length(9, 30, { message: 'La identificación debe tener entre 9 y 30 caracteres' })
+  @Matches(REGEX_IDENTIFICACION, { message: MENSAJE_IDENTIFICACION })
   identificacion: string;
 
   @IsEmail({}, { message: 'El correo no tiene un formato válido' })

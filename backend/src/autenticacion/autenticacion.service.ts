@@ -85,7 +85,7 @@ export class AutenticacionService {
   ): Promise<{ tokens: ResultadoTokens; usuario: PerfilUsuarioRespuestaDto }> {
     const usuario = await this.repositorioUsuarios.findOne({
       where: { correo: dto.correo },
-      relations: { rol: true },
+      relations: { rol: true, dependencia: true },
     });
 
     if (!usuario) {
@@ -153,7 +153,7 @@ export class AutenticacionService {
 
     const usuario = await this.repositorioUsuarios.findOne({
       where: { idUsuario: sesion.idUsuario },
-      relations: { rol: true },
+      relations: { rol: true, dependencia: true },
     });
 
     if (!usuario || usuario.estado !== 'ACTIVO') {
@@ -163,7 +163,12 @@ export class AutenticacionService {
     sesion.revocado = true;
     await this.repositorioSesiones.save(sesion);
 
-    return this.emitirTokens(usuario, contexto);
+    // Expiración ABSOLUTA (pulido de Fase 6, sección B): el token rotado
+    // hereda la fecha de expiración de la sesión original en vez de
+    // recibir una ventana nueva. Antes, cada renovación reiniciaba el plazo
+    // y una sesión activa no expiraba jamás; ahora, a las 8 horas del
+    // login se exige volver a autenticar, se haya usado o no el sistema.
+    return this.emitirTokens(usuario, contexto, sesion.fechaExpiracion);
   }
 
   // ============================================================
@@ -192,7 +197,7 @@ export class AutenticacionService {
   async obtenerPerfil(idUsuario: number): Promise<PerfilUsuarioRespuestaDto> {
     const usuario = await this.repositorioUsuarios.findOne({
       where: { idUsuario },
-      relations: { rol: true },
+      relations: { rol: true, dependencia: true },
     });
 
     if (!usuario) {
@@ -336,7 +341,16 @@ export class AutenticacionService {
   // Helpers privados
   // ============================================================
 
-  private async emitirTokens(usuario: Usuario, contexto: ContextoPeticion): Promise<ResultadoTokens> {
+  /**
+   * @param expiracionAbsoluta Si se indica (renovación), el refresh token
+   *   nuevo expira exactamente en esa fecha; si se omite (login), se abre
+   *   una ventana nueva de JWT_REFRESH_EXPIRATION (8 horas).
+   */
+  private async emitirTokens(
+    usuario: Usuario,
+    contexto: ContextoPeticion,
+    expiracionAbsoluta?: Date,
+  ): Promise<ResultadoTokens> {
     const permisos = await this.obtenerPermisosEfectivos(usuario.idRol);
 
     const payloadAcceso: PayloadJwt = {
@@ -351,9 +365,21 @@ export class AutenticacionService {
       this.opcionesFirma('JWT_ACCESS_SECRET', 'JWT_ACCESS_EXPIRATION', '15m'),
     );
 
+    const opcionesRefresh = this.opcionesFirma('JWT_REFRESH_SECRET', 'JWT_REFRESH_EXPIRATION', '8h');
+    if (expiracionAbsoluta) {
+      // jsonwebtoken acepta segundos como número; se garantiza al menos 1
+      // para no firmar un token que nazca vencido si la renovación llega
+      // justo en el límite (renovarToken ya rechazó los expirados antes).
+      const segundosRestantes = Math.max(
+        1,
+        Math.floor((expiracionAbsoluta.getTime() - Date.now()) / 1000),
+      );
+      opcionesRefresh.expiresIn = segundosRestantes;
+    }
+
     const refreshToken = this.jwtService.sign(
       { idUsuario: usuario.idUsuario, jti: crypto.randomUUID() },
-      this.opcionesFirma('JWT_REFRESH_SECRET', 'JWT_REFRESH_EXPIRATION', '7d'),
+      opcionesRefresh,
     );
 
     const payloadDecodificado = this.jwtService.decode(refreshToken) as { exp: number };
@@ -380,6 +406,8 @@ export class AutenticacionService {
       correo: usuario.correo,
       rol: usuario.rol?.nombre ?? '',
       permisos,
+      idDependencia: usuario.idDependencia ?? null,
+      nombreDependencia: usuario.dependencia?.nombre ?? null,
     });
   }
 

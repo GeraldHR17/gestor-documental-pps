@@ -75,8 +75,11 @@ clienteHttp.interceptors.response.use(
       };
       return clienteHttp(peticionOriginal);
     } catch (errorRenovacion) {
+      // La renovación falló: la sesión expiró (8 horas absolutas) o fue
+      // revocada. Se sale de forma controlada al login, con un motivo que
+      // esa pantalla muestra como aviso y no como error crudo.
       limpiarAccessToken();
-      window.location.href = '/login';
+      window.location.href = '/login?motivo=sesion-expirada';
       return Promise.reject(errorRenovacion);
     }
   },

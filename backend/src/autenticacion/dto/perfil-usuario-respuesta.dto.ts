@@ -10,6 +10,9 @@ export class PerfilUsuarioRespuestaDto {
   correo: string;
   rol: string;
   permisos: string[];
+  /** Para precargar la dependencia al registrar documentos (sección A). */
+  idDependencia: number | null;
+  nombreDependencia: string | null;
 
   constructor(datos: PerfilUsuarioRespuestaDto) {
     Object.assign(this, datos);

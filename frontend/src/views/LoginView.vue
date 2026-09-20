@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+// Rediseño Etapa B (captura del PO): split-screen de 2 columnas. Este
+// archivo es exclusivamente maquetación/estilos — la lógica de
+// autenticación (iniciarSesion, error, cargando) es la misma de siempre,
+// sin tocar.
+import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAutenticacion } from '@/composables/useAutenticacion';
 
@@ -10,6 +14,11 @@ const { iniciarSesion, cargando, error } = useAutenticacion();
 const correo = ref('');
 const contrasena = ref('');
 const mostrarContrasena = ref(false);
+
+// Llegada controlada tras expirar la sesión (8 horas absolutas): el
+// interceptor HTTP redirige aquí con este motivo, y se explica por qué se
+// pide volver a entrar en vez de mostrar un error crudo.
+const sesionExpirada = computed(() => route.query.motivo === 'sesion-expirada');
 
 async function manejarIniciarSesion(): Promise<void> {
   try {
@@ -31,105 +40,154 @@ async function manejarIniciarSesion(): Promise<void> {
 </script>
 
 <template>
-  <div
-    class="bg-surface-alt text-on-background min-h-screen flex items-center justify-center p-margin-mobile md:p-margin-desktop font-body-lg"
-  >
-    <!-- Card: radio 8px, borde 1px surface-alt, sin sombra (la jerarquía
-         la da el escalón de superficie, no la elevación). -->
+  <div class="min-h-screen flex flex-col md:flex-row">
+    <!-- Panel de marca. En desktop ocupa exactamente la mitad del viewport:
+         `md:w-1/2` sin ancho máximo — el tope fijo anterior era justo lo que
+         rompía la proporción en pantallas anchas. En mobile (<768px) es el
+         mismo bloque colapsado a una barra compacta: solo el logo y el
+         nombre, sin el bloque de texto grande. Deliberadamente NO hay un
+         segundo encabezado aparte: un único elemento de logo, siempre dentro
+         del panel, para que nunca quede flotando fuera de las dos columnas. -->
     <div
-      class="w-full max-w-md bg-pure-white rounded-primary border border-surface-alt overflow-hidden flex flex-col"
+      class="w-full md:w-1/2 shrink-0 bg-inverse-surface flex flex-col justify-between px-margin-mobile py-gutter-sm md:p-margin-desktop"
     >
-      <!-- Encabezado -->
-      <div
-        class="px-gutter-lg pt-gutter-lg pb-gutter-sm text-center border-b border-surface-alt flex flex-col items-center"
-      >
+      <!-- Logo e institución en la misma fila, como en el mockup del PO.
+           El ícono es el mismo `account_balance` del login previo al
+           rediseño, con los colores invertidos: allá era ícono rojo sobre
+           círculo rosa claro; aquí es ícono blanco sobre cuadrado rojo. -->
+      <div class="flex items-center gap-3">
         <div
-          class="w-16 h-16 bg-primary-fixed rounded-full flex items-center justify-center mb-gutter-sm"
+          class="w-12 h-12 md:w-14 md:h-14 rounded-md bg-primary-container flex items-center justify-center shrink-0"
         >
-          <span aria-hidden="true" class="material-symbols-outlined text-primary text-3xl"
+          <span aria-hidden="true" class="material-symbols-outlined text-pure-white text-[28px]"
             >account_balance</span
           >
         </div>
-        <h1 class="font-headline-md text-headline-md text-on-surface mb-2">Gestión Municipal</h1>
-        <p class="font-headline-sm text-headline-sm text-on-surface-variant">Acceso Seguro</p>
-        <p class="font-body-lg text-body-lg text-secondary mt-2">Inicie sesión para continuar</p>
+        <div class="min-w-0">
+          <p class="font-body-lg text-body-lg font-bold text-pure-white">Municipalidad de Palmares</p>
+          <p
+            class="hidden md:block font-body-md text-body-md text-inverse-on-surface mt-1"
+            style="opacity: 0.7"
+          >
+            Departamento de Tecnologías de la Información
+          </p>
+        </div>
       </div>
 
-      <!-- Formulario -->
-      <div class="p-gutter-lg flex-1">
-        <form class="flex flex-col gap-gutter-lg" @submit.prevent="manejarIniciarSesion">
-          <div>
-            <label for="correo" class="block font-body-md text-body-md text-on-surface mb-2">
-              Correo Electrónico Institucional
-            </label>
-            <div class="relative">
-              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <span class="material-symbols-outlined text-secondary">mail</span>
-              </div>
-              <input
-                id="correo"
-                v-model="correo"
-                type="email"
-                required
-                autocomplete="username"
-                placeholder="usuario@municipio.gob"
-                class="block w-full pl-10 pr-3 border border-outline rounded-primary bg-pure-white text-on-surface placeholder:text-secondary focus:border-2 focus:border-on-surface focus:outline-none transition-colors font-body-lg text-body-lg h-touch-target"
-              />
-            </div>
-          </div>
+      <div class="hidden md:block">
+        <h1 class="font-headline-lg text-headline-lg text-pure-white mb-gutter-sm">
+          Sistema Integral de Gestión Documental
+        </h1>
+        <p class="font-body-lg text-body-lg text-inverse-on-surface" style="opacity: 0.85">
+          Acceso restringido a funcionarios autorizados. Toda operación queda registrada en la bitácora
+          institucional.
+        </p>
+      </div>
 
+      <p class="hidden md:block font-body-md text-body-md text-inverse-on-surface" style="opacity: 0.6">
+        Autenticación JWT · Control de acceso por roles (RBAC)
+      </p>
+    </div>
+
+    <!-- Columna del formulario: la otra mitad exacta. -->
+    <div
+      class="flex-1 md:w-1/2 bg-surface-alt flex items-center justify-center p-margin-mobile md:p-margin-desktop"
+    >
+      <!-- Contenido de la tarjeta según "Contenido del Login.png" del PO.
+           `overflow-hidden` es lo que permite que la franja de pie llegue a
+           los bordes redondeados de la tarjeta, por eso el relleno vive en
+           el bloque interno y no en la tarjeta. -->
+      <div
+        class="w-full max-w-[440px] bg-surface-container-lowest rounded-lg overflow-hidden flex flex-col"
+        style="box-shadow: var(--shadow-modal)"
+      >
+        <div class="p-gutter-lg flex flex-col gap-gutter-lg">
           <div>
-            <label for="contrasena" class="block font-body-md text-body-md text-on-surface mb-2"
-              >Contraseña</label
-            >
-            <div class="relative">
-              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <span class="material-symbols-outlined text-secondary">lock</span>
-              </div>
-              <input
-                id="contrasena"
-                v-model="contrasena"
-                :type="mostrarContrasena ? 'text' : 'password'"
-                required
-                autocomplete="current-password"
-                placeholder="••••••••"
-                class="block w-full pl-10 pr-12 border border-outline rounded-primary bg-pure-white text-on-surface placeholder:text-secondary focus:border-2 focus:border-on-surface focus:outline-none transition-colors font-body-lg text-body-lg h-touch-target"
-              />
-              <button
-                type="button"
-                class="absolute inset-y-0 right-0 w-touch-target rounded-secondary flex items-center justify-center text-secondary hover:text-on-surface transition-colors"
-                :aria-label="mostrarContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'"
-                @click="mostrarContrasena = !mostrarContrasena"
-              >
-                <span class="material-symbols-outlined">{{
-                  mostrarContrasena ? 'visibility_off' : 'visibility'
-                }}</span>
-              </button>
-            </div>
-            <div class="mt-2 flex justify-end">
-              <!-- Botón terciario/ghost: sin fondo, deep-onyx y subrayado
-                   permanente (DESIGN.md > Components > Buttons). -->
-              <router-link
-                :to="{ name: 'recuperar-contrasena' }"
-                class="inline-flex items-center h-touch-target px-2 rounded-secondary font-body-md text-body-md text-deep-onyx underline transition-colors hover:text-primary"
-              >
-                Olvidé mi contraseña
-              </router-link>
-            </div>
+            <h2 class="font-headline-sm text-headline-sm text-on-surface font-bold">Iniciar sesión</h2>
+            <p class="font-body-md text-body-md text-on-surface-variant mt-1">
+              Utilice su cuenta institucional.
+            </p>
           </div>
 
           <p
-            v-if="error"
-            role="alert"
-            aria-live="assertive"
-            class="text-error font-body-md text-body-md"
+            v-if="sesionExpirada"
+            role="status"
+            class="font-body-md text-body-md text-on-surface bg-surface-container-low border border-surface-alt rounded-primary p-gutter-sm flex items-start gap-2"
           >
-            {{ error }}
+            <span aria-hidden="true" class="material-symbols-outlined text-[20px] shrink-0">schedule</span>
+            Su sesión expiró por seguridad (8 horas desde el inicio). Vuelva a iniciar sesión para continuar.
           </p>
 
-          <div>
-            <!-- Botón primario: fondo primary-container, texto blanco,
-                 oscurecido a `primary` en hover/pressed. -->
+          <form class="flex flex-col gap-gutter-sm" @submit.prevent="manejarIniciarSesion">
+            <div>
+              <label for="correo" class="block font-body-md text-body-md text-on-surface mb-2">
+                Correo Electrónico Institucional
+              </label>
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <span aria-hidden="true" class="material-symbols-outlined text-secondary">mail</span>
+                </div>
+                <input
+                  id="correo"
+                  v-model="correo"
+                  type="email"
+                  required
+                  autocomplete="username"
+                  placeholder="usuario@munipalmares.go.cr"
+                  class="block w-full pl-10 pr-3 border border-outline rounded-primary bg-pure-white text-on-surface placeholder:text-secondary focus:border-2 focus:border-on-surface focus:outline-none transition-colors font-body-lg text-body-lg h-touch-target"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label for="contrasena" class="block font-body-md text-body-md text-on-surface mb-2">
+                Contraseña
+              </label>
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <span aria-hidden="true" class="material-symbols-outlined text-secondary">lock</span>
+                </div>
+                <input
+                  id="contrasena"
+                  v-model="contrasena"
+                  :type="mostrarContrasena ? 'text' : 'password'"
+                  required
+                  autocomplete="current-password"
+                  placeholder="••••••••"
+                  class="block w-full pl-10 pr-12 border border-outline rounded-primary bg-pure-white text-on-surface placeholder:text-secondary focus:border-2 focus:border-on-surface focus:outline-none transition-colors font-body-lg text-body-lg h-touch-target"
+                />
+                <button
+                  type="button"
+                  class="absolute inset-y-0 right-0 w-touch-target rounded-secondary flex items-center justify-center text-secondary hover:text-on-surface transition-colors"
+                  :aria-label="mostrarContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+                  @click="mostrarContrasena = !mostrarContrasena"
+                >
+                  <span class="material-symbols-outlined">{{
+                    mostrarContrasena ? 'visibility_off' : 'visibility'
+                  }}</span>
+                </button>
+              </div>
+              <div class="mt-2 flex justify-end">
+                <!-- Botón terciario/ghost: sin fondo, deep-onyx y subrayado
+                     permanente (DESIGN.md > Components > Buttons). -->
+                <router-link
+                  :to="{ name: 'recuperar-contrasena' }"
+                  class="inline-flex items-center h-touch-target px-2 rounded-secondary font-body-md text-body-md text-deep-onyx underline transition-colors hover:text-primary"
+                >
+                  Olvidé mi contraseña
+                </router-link>
+              </div>
+            </div>
+
+            <p
+              v-if="error"
+              role="alert"
+              aria-live="assertive"
+              class="bg-error-container text-on-error-container rounded-primary px-3 py-2 font-body-md text-body-md"
+            >
+              {{ error }}
+            </p>
+
             <button
               type="submit"
               :disabled="cargando"
@@ -138,27 +196,26 @@ async function manejarIniciarSesion(): Promise<void> {
               <span>{{ cargando ? 'Ingresando...' : 'Iniciar Sesión' }}</span>
               <span v-if="!cargando" class="material-symbols-outlined text-[18px]">login</span>
             </button>
-          </div>
 
-          <p class="text-center font-body-md text-body-md text-secondary">
-            ¿No tiene cuenta?
-            <router-link :to="{ name: 'registro' }" class="inline-flex items-center align-middle h-touch-target px-1 rounded-secondary text-deep-onyx font-semibold underline">
-              Regístrese como ciudadano
-            </router-link>
-          </p>
-        </form>
-      </div>
+            <p class="text-center font-body-md text-body-md text-secondary">
+              ¿No tiene cuenta?
+              <router-link
+                :to="{ name: 'registro' }"
+                class="inline-flex items-center align-middle h-touch-target px-1 rounded-secondary text-deep-onyx font-semibold underline"
+              >
+                Regístrese como ciudadano
+              </router-link>
+            </p>
+          </form>
+        </div>
 
-      <!-- Pie -->
-      <div
-        class="px-gutter-lg pb-gutter-lg pt-gutter-sm bg-surface-container-low flex justify-center items-center gap-2 border-t border-surface-alt"
-      >
-        <span aria-hidden="true" class="material-symbols-outlined text-tertiary text-[16px]"
-          >shield</span
+        <!-- Pie de la tarjeta -->
+        <div
+          class="px-gutter-lg pb-gutter-lg pt-gutter-sm bg-surface-container-low flex justify-center items-center gap-2 border-t border-surface-alt"
         >
-        <span class="font-label-sm text-label-sm text-tertiary uppercase"
-          >Seguridad Protegida por JWT</span
-        >
+          <span aria-hidden="true" class="material-symbols-outlined text-tertiary text-[16px]">shield</span>
+          <span class="font-label-sm text-label-sm text-tertiary uppercase">Seguridad Protegida por JWT</span>
+        </div>
       </div>
     </div>
   </div>
