@@ -18,7 +18,6 @@ import { CorreoService } from '../correo/correo.service';
 import { BitacoraService } from '../bitacora/bitacora.service';
 
 import { LoginDto } from './dto/login.dto';
-import { RegistroCiudadanoDto } from './dto/registro-ciudadano.dto';
 import { ConfirmarVerificacionCorreoDto } from './dto/confirmar-verificacion-correo.dto';
 import { ReenviarVerificacionCorreoDto } from './dto/reenviar-verificacion-correo.dto';
 import { SolicitarRecuperacionDto } from './dto/solicitar-recuperacion.dto';
@@ -33,10 +32,7 @@ import {
   RefreshTokenRevocadoException,
   TokenExpiradoException,
   TokenInvalidoException,
-  CorreoYaRegistradoException,
-  IdentificacionYaRegistradaException,
   UsuarioNoEncontradoException,
-  RolNoEncontradoException,
   TokenRecuperacionInvalidoException,
 } from '../comun/excepciones/excepciones-autenticacion';
 import type { PayloadJwt } from './estrategias/jwt.strategy';
@@ -205,46 +201,6 @@ export class AutenticacionService {
     }
 
     return this.construirPerfil(usuario);
-  }
-
-  // ============================================================
-  // RF-10 / RF-18 / RF-21 — Autoregistro ciudadano
-  // ============================================================
-  async registrarCiudadano(dto: RegistroCiudadanoDto): Promise<void> {
-    const correoExistente = await this.repositorioUsuarios.findOne({
-      where: { correo: dto.correo },
-    });
-    if (correoExistente) {
-      throw new CorreoYaRegistradoException();
-    }
-
-    const identificacionExistente = await this.repositorioUsuarios.findOne({
-      where: { identificacion: dto.identificacion },
-    });
-    if (identificacionExistente) {
-      throw new IdentificacionYaRegistradaException();
-    }
-
-    const rolCiudadano = await this.repositorioRoles.findOne({ where: { nombre: 'Usuario' } });
-    if (!rolCiudadano) {
-      throw new RolNoEncontradoException();
-    }
-
-    const saltRounds = Number(this.configuracion.get<string>('BCRYPT_SALT_ROUNDS') ?? 12);
-    const contrasenaHash = await bcrypt.hash(dto.contrasena, saltRounds);
-
-    const nuevoUsuario = this.repositorioUsuarios.create({
-      nombreCompleto: dto.nombreCompleto,
-      identificacion: dto.identificacion,
-      correo: dto.correo,
-      contrasenaHash,
-      estado: 'ACTIVO',
-      idRol: rolCiudadano.idRol,
-      correoVerificado: false,
-    });
-    await this.repositorioUsuarios.save(nuevoUsuario);
-
-    await this.generarYEnviarTokenVerificacion(nuevoUsuario);
   }
 
   // ============================================================

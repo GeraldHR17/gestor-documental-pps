@@ -47,9 +47,12 @@ async function manejarIniciarSesion(): Promise<void> {
          mismo bloque colapsado a una barra compacta: solo el logo y el
          nombre, sin el bloque de texto grande. Deliberadamente NO hay un
          segundo encabezado aparte: un único elemento de logo, siempre dentro
-         del panel, para que nunca quede flotando fuera de las dos columnas. -->
+         del panel, para que nunca quede flotando fuera de las dos columnas.
+         Usa `bg-on-surface`, el mismo token del panel lateral del área
+         autenticada: así el fondo oscuro de la marca es idéntico antes y
+         después de entrar, en vez del gris algo más claro de antes. -->
     <div
-      class="w-full md:w-1/2 shrink-0 bg-inverse-surface flex flex-col justify-between px-margin-mobile py-gutter-sm md:p-margin-desktop"
+      class="w-full md:w-1/2 shrink-0 bg-on-surface flex flex-col justify-between px-margin-mobile py-gutter-sm md:p-margin-desktop"
     >
       <!-- Logo e institución en la misma fila, como en el mockup del PO.
            El ícono es el mismo `account_balance` del login previo al
@@ -197,15 +200,6 @@ async function manejarIniciarSesion(): Promise<void> {
               <span v-if="!cargando" class="material-symbols-outlined text-[18px]">login</span>
             </button>
 
-            <p class="text-center font-body-md text-body-md text-secondary">
-              ¿No tiene cuenta?
-              <router-link
-                :to="{ name: 'registro' }"
-                class="inline-flex items-center align-middle h-touch-target px-1 rounded-secondary text-deep-onyx font-semibold underline"
-              >
-                Regístrese como ciudadano
-              </router-link>
-            </p>
           </form>
         </div>
 

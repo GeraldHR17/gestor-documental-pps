@@ -5,13 +5,6 @@ export interface CredencialesLoginDto {
   contrasena: string;
 }
 
-export interface RegistroCiudadanoDto {
-  nombreCompleto: string;
-  identificacion: string;
-  correo: string;
-  contrasena: string;
-}
-
 export interface ConfirmarVerificacionCorreoDto {
   token: string;
 }

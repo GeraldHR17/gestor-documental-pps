@@ -3,7 +3,6 @@
 import clienteHttp from '@/lib/http';
 import type {
   CredencialesLoginDto,
-  RegistroCiudadanoDto,
   ConfirmarVerificacionCorreoDto,
   ReenviarVerificacionCorreoDto,
   SolicitarRecuperacionDto,
@@ -32,10 +31,6 @@ export default {
   async obtenerPerfil(): Promise<PerfilUsuario> {
     const { data } = await clienteHttp.get<PerfilUsuario>('/auth/perfil');
     return data;
-  },
-
-  async registrarCiudadano(datos: RegistroCiudadanoDto): Promise<void> {
-    await clienteHttp.post('/auth/registro', datos);
   },
 
   async confirmarVerificacionCorreo(datos: ConfirmarVerificacionCorreoDto): Promise<RespuestaMensaje> {

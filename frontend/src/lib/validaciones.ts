@@ -54,13 +54,8 @@ export function validarCorreoInstitucional(valor: string): string | null {
   return REGEX_CORREO_INSTITUCIONAL.test(normalizarCorreo(valor)) ? null : MENSAJE_CORREO_INSTITUCIONAL;
 }
 
-/**
- * @param etiqueta Cómo se nombra el campo en el mensaje de vacío: 'La
- *   contraseña temporal' en el alta administrativa, 'La contraseña' en el
- *   registro ciudadano. La política (regex) es la misma en ambos.
- */
-export function validarContrasena(valor: string, etiqueta = 'La contraseña temporal'): string | null {
-  if (!valor) return `${etiqueta} es obligatoria.`;
+export function validarContrasena(valor: string): string | null {
+  if (!valor) return 'La contraseña temporal es obligatoria.';
   return REGEX_POLITICA_CONTRASENA.test(valor) ? null : MENSAJE_POLITICA_CONTRASENA;
 }
 
@@ -175,24 +170,6 @@ export function validarComentarioVersion(valor: string): string | null {
     return `El comentario no puede superar los ${LONGITUD_MAXIMA_COMENTARIO_VERSION} caracteres.`;
   }
   return null;
-}
-
-// ---------------------------------------------------------------------
-// Registro ciudadano
-// ---------------------------------------------------------------------
-
-/**
- * Formato general de correo, sin restricción de dominio: la ciudadanía se
- * registra con su correo personal. La versión institucional
- * (`validarCorreoInstitucional`) es sólo para las cuentas de funcionarios.
- */
-export const REGEX_CORREO_GENERAL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-export function validarCorreoPersonal(valor: string): string | null {
-  if (!valor.trim()) return 'El correo electrónico es obligatorio.';
-  return REGEX_CORREO_GENERAL.test(normalizarCorreo(valor))
-    ? null
-    : 'Ingrese un correo electrónico válido.';
 }
 
 // ---------------------------------------------------------------------

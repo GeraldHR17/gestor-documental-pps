@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Raíz de la aplicación. Toda la estructura visible la aportan las rutas:
-// las públicas se pintan solas (login, registro, recuperación) y las
+// las públicas se pintan solas (login, recuperación, verificación) y las
 // autenticadas se montan dentro de AppShellLayout.
 //
 // ToastContainer va aquí, fuera del RouterView, para que sea el mismo

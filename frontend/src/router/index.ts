@@ -70,14 +70,6 @@ const router = createRouter({
       meta: { publica: true, soloAnonimos: true },
     },
     {
-      path: '/registro',
-      name: 'registro',
-      // Carga diferida: no forman parte del recorrido habitual del
-      // funcionario, así que no tienen por qué pesar en el bundle inicial.
-      component: () => import('@/views/RegistroView.vue'),
-      meta: { publica: true, soloAnonimos: true },
-    },
-    {
       path: '/recuperar-contrasena',
       name: 'recuperar-contrasena',
       component: () => import('@/views/RecuperarContrasenaView.vue'),

@@ -20,7 +20,6 @@ import { UsuarioJwtActual } from '../comun/decoradores/usuario-jwt-actual.decora
 import type { PayloadJwt } from './estrategias/jwt.strategy';
 
 import { LoginDto } from './dto/login.dto';
-import { RegistroCiudadanoDto } from './dto/registro-ciudadano.dto';
 import { ConfirmarVerificacionCorreoDto } from './dto/confirmar-verificacion-correo.dto';
 import { ReenviarVerificacionCorreoDto } from './dto/reenviar-verificacion-correo.dto';
 import { SolicitarRecuperacionDto } from './dto/solicitar-recuperacion.dto';
@@ -94,16 +93,6 @@ export class AutenticacionController {
   @Get('perfil')
   async perfil(@UsuarioJwtActual() usuarioActual: PayloadJwt) {
     return this.autenticacionService.obtenerPerfil(usuarioActual.idUsuario);
-  }
-
-  @Publico()
-  @Post('registro')
-  @HttpCode(HttpStatus.CREATED)
-  async registro(@Body() dto: RegistroCiudadanoDto) {
-    await this.autenticacionService.registrarCiudadano(dto);
-    return {
-      mensaje: 'Registro exitoso. Revise su correo para verificar la cuenta antes de iniciar sesión.',
-    };
   }
 
   @Publico()
