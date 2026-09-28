@@ -4,11 +4,13 @@
 // modal de confirmación PREVIA a cada transición de estado y toast de
 // resultado DESPUÉS.
 import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useDocumentos } from '@/composables/useDocumentos';
 import { useClasificacionDocumental } from '@/composables/useClasificacionDocumental';
 import { useNotificaciones } from '@/composables/useNotificaciones';
 import { useAutenticacion } from '@/composables/useAutenticacion';
 import ModalConfirmacion from '@/components/ModalConfirmacion.vue';
+import BadgeEstadoDocumento from '@/components/BadgeEstadoDocumento.vue';
 import { bloquearNegativos } from '@/lib/validaciones';
 import { ETIQUETAS_ESTADO_DOCUMENTO, formatearFecha } from '@/lib/documentos.config';
 import { TRANSICIONES_PERMITIDAS } from '@/services/documentos.service';
@@ -32,7 +34,18 @@ const filtroCategoria = ref<number | null>(null);
 const filtroTipo = ref<number | null>(null);
 const filtroDependencia = ref<number | null>(null);
 const filtroAnio = ref<string>('');
-const filtroEstado = ref<EstadoDocumento | null>(null);
+const route = useRoute();
+
+/**
+ * El estado puede venir preaplicado desde otra pantalla (p. ej. el botón
+ * "Revisar cola" de Inicio enlaza con ?estado=BORRADOR). Se acepta sólo si
+ * es uno de los tres estados reales, para que un valor arbitrario en la URL
+ * no deje el selector en un estado imposible.
+ */
+const ESTADOS_VALIDOS: EstadoDocumento[] = ['BORRADOR', 'PUBLICADO', 'INACTIVO'];
+const estadoDeLaUrl = ESTADOS_VALIDOS.find((estado) => estado === route.query.estado) ?? null;
+
+const filtroEstado = ref<EstadoDocumento | null>(estadoDeLaUrl);
 const paginaActual = ref(1);
 
 let temporizadorBusqueda: ReturnType<typeof setTimeout> | undefined;
@@ -270,24 +283,24 @@ onMounted(() => {
       <div class="overflow-x-auto w-full">
         <table class="w-full min-w-[900px] text-left border-collapse">
           <thead>
-            <tr class="bg-surface-container-low border-b border-surface-alt">
-              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase">
+            <tr class="bg-on-surface">
+              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">
                 Documento
               </th>
-              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase">
+              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">
                 Clasificación
               </th>
-              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase">
+              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">
                 Año
               </th>
-              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase">
+              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">
                 Versión
               </th>
-              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase">
+              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">
                 Estado
               </th>
               <th
-                class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase text-right"
+                class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase text-right"
               >
                 Acciones
               </th>
@@ -332,22 +345,7 @@ onMounted(() => {
                   </span>
                 </td>
                 <td class="py-gutter-sm px-gutter-lg">
-                  <!-- Badge de estado: forma pill en neutros; el rojo del
-                       sistema queda reservado a los errores. -->
-                  <span
-                    class="inline-flex items-center px-3 py-1 rounded-full font-label-sm text-label-sm border whitespace-nowrap"
-                    :class="
-                      documento.estado === 'PUBLICADO'
-                        ? 'bg-secondary-container text-on-surface border-secondary-fixed-dim'
-                        : 'bg-surface-container-high text-on-surface border-surface-dim'
-                    "
-                  >
-                    <span
-                      class="w-1.5 h-1.5 rounded-full mr-1.5"
-                      :class="documento.estado === 'PUBLICADO' ? 'bg-secondary' : 'bg-outline'"
-                    ></span>
-                    {{ ETIQUETAS_ESTADO_DOCUMENTO[documento.estado] }}
-                  </span>
+                  <BadgeEstadoDocumento :estado="documento.estado" />
                 </td>
                 <td class="py-gutter-sm px-gutter-lg text-right space-x-1 whitespace-nowrap">
                   <router-link

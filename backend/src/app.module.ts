@@ -29,6 +29,7 @@ import { CorreoModule } from './correo/correo.module';
 import { BitacoraModule } from './bitacora/bitacora.module';
 import { CatalogosModule } from './catalogos/catalogos.module';
 import { DocumentosModule } from './documentos/documentos.module';
+import { ReportesModule } from './reportes/reportes.module';
 
 import { JwtAuthGuard } from './comun/guards/jwt-auth.guard';
 import { PermisosGuard } from './comun/guards/permisos.guard';
@@ -89,6 +90,7 @@ import { ExcepcionGlobalFilter } from './comun/filtros/excepcion-global.filter';
     BitacoraModule,
     CatalogosModule,
     DocumentosModule,
+    ReportesModule,
   ],
   providers: [
     // ORDEN IMPORTANTE: NestJS ejecuta los guards globales en el orden en

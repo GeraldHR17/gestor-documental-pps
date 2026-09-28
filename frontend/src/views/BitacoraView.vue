@@ -188,12 +188,12 @@ onMounted(recargar);
       <div class="overflow-x-auto w-full">
         <table class="w-full min-w-[900px] text-left border-collapse">
           <thead>
-            <tr class="bg-surface-container-low border-b border-surface-alt">
-              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase">Fecha y hora</th>
-              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase">Acción</th>
-              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase">Entidad afectada</th>
-              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase">Usuario</th>
-              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase">Detalles</th>
+            <tr class="bg-on-surface">
+              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">Fecha y hora</th>
+              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">Acción</th>
+              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">Entidad afectada</th>
+              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">Usuario</th>
+              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">Detalles</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-surface-alt font-body-md text-body-md text-on-surface">

@@ -14,8 +14,8 @@ import { useNotificaciones, obtenerMensajeError } from '@/composables/useNotific
 import { useAutenticacion } from '@/composables/useAutenticacion';
 import ModalConfirmacion from '@/components/ModalConfirmacion.vue';
 import ZonaCargaPdf from '@/components/ZonaCargaPdf.vue';
+import BadgeEstadoDocumento from '@/components/BadgeEstadoDocumento.vue';
 import {
-  ETIQUETAS_ESTADO_DOCUMENTO,
   formatearFecha,
   formatearTamano,
   type ArchivoPdfInspeccionado,
@@ -269,20 +269,7 @@ onMounted(cargar);
             {{ documento.titulo }}
           </h1>
           <div class="flex items-center gap-gutter-sm mt-2 flex-wrap">
-            <span
-              class="inline-flex items-center px-3 py-1 rounded-full font-label-sm text-label-sm border whitespace-nowrap"
-              :class="
-                documento.estado === 'PUBLICADO'
-                  ? 'bg-secondary-container text-on-surface border-secondary-fixed-dim'
-                  : 'bg-surface-container-high text-on-surface border-surface-dim'
-              "
-            >
-              <span
-                class="w-1.5 h-1.5 rounded-full mr-1.5"
-                :class="documento.estado === 'PUBLICADO' ? 'bg-secondary' : 'bg-outline'"
-              ></span>
-              {{ ETIQUETAS_ESTADO_DOCUMENTO[documento.estado] }}
-            </span>
+            <BadgeEstadoDocumento :estado="documento.estado" />
             <span class="font-body-md text-body-md text-secondary">
               {{ documento.cantidadVersiones }}
               {{ documento.cantidadVersiones === 1 ? 'versión' : 'versiones' }}
@@ -509,21 +496,21 @@ onMounted(cargar);
         <div class="overflow-x-auto w-full">
           <table class="w-full min-w-[820px] text-left border-collapse">
             <thead>
-              <tr class="bg-surface-container-low border-b border-surface-alt">
-                <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase">
+              <tr class="bg-on-surface">
+                <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">
                   Versión
                 </th>
-                <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase">
+                <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">
                   Archivo
                 </th>
-                <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase">
+                <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">
                   Cargada por
                 </th>
-                <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase">
+                <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">
                   Integridad
                 </th>
                 <th
-                  class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase text-right"
+                  class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase text-right"
                 >
                   Acciones
                 </th>

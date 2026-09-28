@@ -124,3 +124,16 @@ async function contarPaginasPdf(archivo: File): Promise<number | null> {
     return null;
   }
 }
+
+// ---------------------------------------------------------------------
+// Portal público (sistema externo)
+// ---------------------------------------------------------------------
+
+/**
+ * Portal de transparencia en WordPress: un sistema aparte, fuera del
+ * alcance de este gestor y todavía no desplegado. Se toma de la variable
+ * de entorno para no fijar en el código una dirección que aún no existe;
+ * mientras esté vacía, quien la consume oculta el enlace en vez de
+ * mostrar un botón que no lleva a ninguna parte.
+ */
+export const URL_PORTAL_PUBLICO: string = import.meta.env.VITE_URL_PORTAL_PUBLICO ?? '';

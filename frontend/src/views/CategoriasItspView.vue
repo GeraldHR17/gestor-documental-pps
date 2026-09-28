@@ -130,21 +130,21 @@ onMounted(recargar);
       <div class="overflow-x-auto w-full">
         <table class="w-full min-w-[760px] text-left border-collapse">
           <thead>
-            <tr class="bg-surface-container-low border-b border-surface-alt">
-              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase">
+            <tr class="bg-on-surface">
+              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">
                 Categoría
               </th>
-              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase">
+              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">
                 Código
               </th>
-              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase">
+              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">
                 Nivel
               </th>
-              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase">
+              <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">
                 Estado
               </th>
               <th
-                class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-tertiary uppercase text-right"
+                class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase text-right"
               >
                 Acciones
               </th>
