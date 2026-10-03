@@ -2,8 +2,9 @@
 //
 // Consulta de la bitácora de auditoría (MF-07, RN-013). Sólo lectura: la
 // bitácora la escriben los servicios, nunca el cliente, y sin exportación
-// ni purga en este MVP (VP-09). Protegido por 'bitacora.consultar', que en
-// la semilla sólo tiene el Superadministrador.
+// en este MVP (VP-09). La purga sí existe, pero no se expone por HTTP:
+// corre sola cada mes en BitacoraLimpiezaService. Protegido por
+// 'bitacora.consultar', que en la semilla sólo tiene el Superadministrador.
 
 import { Controller, Get, Query } from '@nestjs/common';
 

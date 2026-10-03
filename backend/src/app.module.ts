@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -47,6 +48,11 @@ import { ExcepcionGlobalFilter } from './comun/filtros/excepcion-global.filter';
     // sensibles de autenticación aplican además un @Throttle() propio,
     // mucho más estricto, declarado en AutenticacionController.
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+
+    // Tareas programadas del servidor. Hoy la única es la retención de la
+    // bitácora (BitacoraLimpiezaService); forRoot() va aquí porque debe
+    // registrarse una sola vez para toda la aplicación.
+    ScheduleModule.forRoot(),
 
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],

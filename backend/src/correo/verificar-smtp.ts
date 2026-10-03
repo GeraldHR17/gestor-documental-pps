@@ -292,14 +292,16 @@ async function principal(): Promise<number> {
   };
 
   try {
-    const resultado = await transporte.sendMail({
+    // Nodemailer declara la respuesta de sendMail como `any`; se acota a
+    // lo único que se usa aquí.
+    const resultado = (await transporte.sendMail({
       from: { name: NOMBRE_INSTITUCION, address: config.remitente },
       to: destinatarioPrueba,
       subject: `Prueba de correo — ${NOMBRE_INSTITUCION}`,
       text: construirTextoPlano(contenido),
       html: construirCorreoInstitucional(contenido),
-    });
-    console.log(`OK: aceptado por el servidor (id ${resultado.messageId}).`);
+    })) as { messageId?: string };
+    console.log(`OK: aceptado por el servidor (id ${resultado.messageId ?? 'sin id'}).`);
     // El remitente efectivo puede no ser el pedido: Gmail lo reescribe a la
     // cuenta autenticada si SMTP_FROM no es un alias verificado.
     console.log(
