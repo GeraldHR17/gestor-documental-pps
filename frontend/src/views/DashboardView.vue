@@ -169,7 +169,7 @@ onMounted(async () => {
           Bienvenido, {{ usuario?.nombreCompleto }} 
         </h1>
         <p class="font-body-lg text-body-lg text-secondary mt-2">
-          · Estado general de la gestión documental,
+          Estado general de la gestión documental,
           actualizado a las {{ actualizadoA }}
         </p>
       </div>
