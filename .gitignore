@@ -6,6 +6,16 @@ node_modules/
 .env.*
 !.env.example
 
+# Excepciones: estos dos SI se versionan porque no contienen secretos.
+#  - frontend/.env.production solo lleva rutas publicas relativas, y Vite
+#    las necesita en el build; todo lo que empieza por VITE_ viaja en el
+#    bundle, asi que por definicion no puede ser secreto.
+#  - despliegue/.env.produccion.ejemplo es una plantilla con valores
+#    ficticios; el archivo real vive en la carpeta de configuracion de la
+#    VM, fuera del repositorio.
+!frontend/.env.production
+!despliegue/.env.produccion.ejemplo
+
 # Logs
 *.log
 logs/

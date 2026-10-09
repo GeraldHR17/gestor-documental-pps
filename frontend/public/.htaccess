@@ -1,0 +1,86 @@
+# ============================================================
+# Muni Data — frontend servido por Apache
+# ============================================================
+# Vite copia este archivo tal cual desde frontend/public/ a dist/, y
+# despliegue/desplegar.ps1 lo publica junto al resto del build.
+#
+# Requiere que el <Directory> de esta carpeta tenga "AllowOverride All"
+# en la configuracion de Apache (ver despliegue/apache/munidata.conf);
+# sin eso Apache ignora este archivo por completo y las rutas profundas
+# del SPA devuelven 404.
+#
+# ATENCION: RewriteBase es un valor FIJO y debe coincidir exactamente con
+# la ruta publica bajo la que se publica la carpeta y con VITE_RUTA_BASE
+# de frontend/.env.production. Si se cambia la ruta de publicacion, hay
+# que cambiar las tres cosas. No se puede parametrizar: .htaccess no
+# admite variables de build.
+
+Options -Indexes
+
+# ------------------------------------------------------------
+# Enrutamiento del SPA (history mode)
+# ------------------------------------------------------------
+# Vue Router usa createWebHistory, asi que /documentos/7 es una URL real
+# del navegador pero no un archivo en disco. Sin este bloque, recargar la
+# pagina en una ruta profunda devuelve 404 de Apache.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /munipalmares/wp-munidata/
+
+  # La API la atiende el proxy declarado en la configuracion de Apache
+  # (ProxyPass no es valido dentro de un .htaccess). Se excluye aqui para
+  # que ninguna regla de reescritura la desvie hacia index.html: si eso
+  # pasara, la API responderia HTML y el frontend veria errores de
+  # parseo en vez de datos.
+  RewriteRule ^api(/|$) - [L]
+
+  # Si el recurso pedido existe como archivo o carpeta, se sirve tal cual.
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Cualquier otra cosa la resuelve el router del lado del cliente.
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# ------------------------------------------------------------
+# Encabezados de seguridad
+# ------------------------------------------------------------
+<IfModule mod_headers.c>
+  # Impide que el navegador adivine el tipo de contenido, que es el vector
+  # clasico para que un archivo subido se interprete como script.
+  Header always set X-Content-Type-Options "nosniff"
+
+  # El sistema no se embebe en ningun otro sitio; SAMEORIGIN corta el
+  # clickjacking sin romper nada propio.
+  Header always set X-Frame-Options "SAMEORIGIN"
+
+  # Evita filtrar la ruta completa (que incluye identificadores de
+  # documento) hacia sitios externos.
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+  # No se declara Content-Security-Policy aqui: la aplicacion carga
+  # fuentes e iconos desde fonts.googleapis.com y fonts.gstatic.com, y una
+  # politica incompleta romperia la tipografia sin avisar. Queda como
+  # mejora posterior, con la lista de origenes verificada.
+</IfModule>
+
+# ------------------------------------------------------------
+# Cache
+# ------------------------------------------------------------
+# Los assets que genera Vite llevan un hash en el nombre, asi que cambiar
+# de version cambia la URL: se pueden cachear agresivamente. index.html no
+# lleva hash y es quien referencia esos assets, asi que debe revalidarse
+# siempre; si se cacheara, tras un despliegue el navegador seguiria
+# pidiendo los archivos de la version anterior, que ya no existen.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(?:js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|gif|ico|webp)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+
+  <FilesMatch "^index\.html$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
+</IfModule>

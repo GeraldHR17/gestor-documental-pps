@@ -14,8 +14,29 @@ interface PeticionConReintento extends AxiosRequestConfig {
   _reintentado?: boolean;
 }
 
+/**
+ * URL base de la API.
+ *
+ * En producción es una ruta **relativa** (`/munipalmares/wp-munidata/api`):
+ * Apache sirve el frontend y hace proxy de la API bajo el mismo origen, de
+ * modo que no hay CORS y la cookie httpOnly del refresh token viaja sin
+ * restricciones de terceros. Por eso no debe llevar dominio ni IP: si los
+ * llevara, el sistema dejaría de funcionar al cambiar de host o de
+ * certificado.
+ *
+ * Se aceptan dos nombres: `VITE_URL_API` es el de la guía de despliegue y
+ * `VITE_API_URL` el que ya existía. Mantener ambos evita que un `.env`
+ * escrito con cualquiera de los dos deje el frontend apuntando a
+ * localhost en la VM, que es un fallo silencioso hasta que alguien
+ * intenta iniciar sesión.
+ */
+const URL_BASE_API =
+  import.meta.env.VITE_URL_API?.trim() ||
+  import.meta.env.VITE_API_URL?.trim() ||
+  'http://localhost:3000';
+
 const clienteHttp = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:3000',
+  baseURL: URL_BASE_API,
   withCredentials: true,
 });
 
