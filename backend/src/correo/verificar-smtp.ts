@@ -30,6 +30,7 @@ import {
   construirTextoPlano,
   type ContenidoCorreoInstitucional,
 } from './plantillas-correo';
+import { normalizarContrasenaSmtp } from './correo.service';
 
 // El mismo archivo que carga `ConfigModule` en `app.module.ts`
 // (`envFilePath: '../.env'`), resuelto desde la raíz del backend para que
@@ -46,7 +47,10 @@ interface Configuracion {
   host: string;
   puerto: number;
   usuario: string;
+  /** Ya normalizada: es exactamente la que se manda al servidor. */
   contrasena: string;
+  /** Tal como está en el `.env`; solo para describir su forma. */
+  contrasenaBruta: string;
   remitente: string;
 }
 
@@ -58,21 +62,26 @@ function leerConfiguracion(): Configuracion | null {
     host,
     puerto: Number(process.env.SMTP_PORT ?? 587),
     usuario: process.env.SMTP_USER?.trim() ?? '',
-    // Sin `trim()`: hay servidores donde los espacios son parte real de la
-    // contraseña. Si sobran, el informe de abajo lo señala en vez de
-    // corregirlo a escondidas.
-    contrasena: process.env.SMTP_PASS ?? '',
+    // Se normaliza con la misma función que usa CorreoService al construir
+    // el transporte real: un diagnóstico que probara una contraseña
+    // distinta de la que se envía de verdad no serviría de diagnóstico.
+    contrasena: normalizarContrasenaSmtp(process.env.SMTP_PASS) ?? '',
+    // El valor sin normalizar se conserva solo para describir su forma en
+    // el informe (nunca su contenido).
+    contrasenaBruta: process.env.SMTP_PASS ?? '',
     remitente: process.env.SMTP_FROM?.trim() || process.env.SMTP_USER?.trim() || '',
   };
 }
 
 /** Describe la contraseña sin imprimirla: lo único que interesa es su forma. */
-function describirContrasena(contrasena: string): string {
-  if (!contrasena) return 'vacía';
-  const espacios = (contrasena.match(/\s/g) ?? []).length;
-  const partes = [`${contrasena.length} caracteres`];
-  if (espacios > 0) partes.push(`${espacios} espacio(s)`);
-  if (/^["']|["']$/.test(contrasena)) partes.push('entre comillas (probable error de copiado)');
+function describirContrasena(bruta: string): string {
+  if (!bruta) return 'vacía';
+  const espacios = (bruta.match(/\s/g) ?? []).length;
+  const partes = [`${bruta.length} caracteres`];
+  if (espacios > 0) {
+    partes.push(`${espacios} espacio(s), que se descartan al autenticar`);
+  }
+  if (/^["']|["']$/.test(bruta)) partes.push('entre comillas (probable error de copiado)');
   return partes.join(', ');
 }
 
@@ -99,15 +108,10 @@ function revisarFormato(config: Configuracion): string[] {
   }
 
   if (HOSTS_GOOGLE.includes(config.host.toLowerCase())) {
-    const sinEspacios = config.contrasena.replace(/\s/g, '');
+    const sinEspacios = config.contrasena;
 
-    if (/\s/.test(config.contrasena)) {
-      problemas.push(
-        'SMTP_PASS contiene espacios. Google muestra la contraseña de aplicación en cuatro ' +
-          'grupos de cuatro letras por legibilidad, pero debe guardarse sin espacios.',
-      );
-    }
-
+    // Los espacios del formato «xxxx xxxx xxxx xxxx» ya no son un problema:
+    // normalizarContrasenaSmtp() los quita, igual que en el envío real.
     if (sinEspacios && !FORMATO_CONTRASENA_APLICACION.test(sinEspacios)) {
       problemas.push(
         `SMTP_PASS no tiene la forma de una contraseña de aplicación de Google ` +
@@ -239,7 +243,7 @@ async function principal(): Promise<number> {
   console.log(`  SMTP_HOST  ${config.host}`);
   console.log(`  SMTP_PORT  ${config.puerto} (${config.puerto === 465 ? 'SMTPS' : 'STARTTLS'})`);
   console.log(`  SMTP_USER  ${config.usuario || '(vacío)'}`);
-  console.log(`  SMTP_PASS  ${describirContrasena(config.contrasena)}`);
+  console.log(`  SMTP_PASS  ${describirContrasena(config.contrasenaBruta)}`);
   console.log(`  SMTP_FROM  ${config.remitente || '(vacío)'}`);
 
   const problemas = revisarFormato(config);

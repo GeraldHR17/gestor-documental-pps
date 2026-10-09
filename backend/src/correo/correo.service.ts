@@ -30,6 +30,26 @@ import {
 /** Remitente de pruebas acordado con el PO; se cambia por variable de entorno. */
 const REMITENTE_POR_DEFECTO = 'alcaldia@munipalmares.go.cr';
 
+/**
+ * Quita los espacios de la contraseña SMTP antes de usarla.
+ *
+ * Google presenta la contraseña de aplicación en cuatro grupos de cuatro
+ * letras («xxxx xxxx xxxx xxxx») solo para que se lea mejor, pero el
+ * servidor espera las 16 letras seguidas; al copiarla tal cual al `.env`
+ * los espacios viajan con ella y la autenticación falla. Se normaliza
+ * aquí en vez de exigir que el `.env` esté «bien» escrito, porque el
+ * formato con espacios es el que la gente copia de la pantalla de Google.
+ *
+ * El efecto secundario es que una contraseña que de verdad contuviera
+ * espacios quedaría alterada. Se acepta: ningún proveedor SMTP usado por
+ * el proyecto lo requiere, y el fallo por espacios de más es mucho más
+ * frecuente. Está exportada para que `verificar-smtp.ts` normalice igual
+ * y el diagnóstico no difiera de lo que hace el envío real.
+ */
+export function normalizarContrasenaSmtp(valor: string | undefined): string | undefined {
+  return valor?.replace(/\s+/g, '');
+}
+
 @Injectable()
 export class CorreoService {
   private readonly logger = new Logger(CorreoService.name);
@@ -109,6 +129,17 @@ export class CorreoService {
         this.logger.log(
           `Correo de prueba para ${destinatario}: ${nodemailer.getTestMessageUrl(resultado) || '(sin vista previa)'}`,
         );
+      } else {
+        // Con SMTP real el éxito no dejaba ninguna huella, y como la API
+        // responde igual haya o no envío (ver nota del catch), no existía
+        // forma de saber desde los logs si un correo salió. Se registra el
+        // acuse del servidor: `messageId` y la respuesta SMTP, que para un
+        // envío aceptado empieza por 250.
+        const acuse = resultado as { messageId?: string; response?: string };
+        this.logger.log(
+          `Correo enviado a ${destinatario} (id ${acuse.messageId ?? 'sin id'}): ` +
+            `${acuse.response ?? 'sin respuesta del servidor'}`,
+        );
       }
     } catch (error) {
       // No se relanza hacia el flujo de negocio: por diseño (Sección 9,
@@ -143,7 +174,7 @@ export class CorreoService {
     if (host) {
       const puerto = Number(this.configuracion.get<string>('SMTP_PORT') ?? 587);
       const usuario = this.configuracion.get<string>('SMTP_USER')?.trim();
-      const contrasena = this.configuracion.get<string>('SMTP_PASS');
+      const contrasena = normalizarContrasenaSmtp(this.configuracion.get<string>('SMTP_PASS'));
       return nodemailer.createTransport({
         host,
         port: puerto,
