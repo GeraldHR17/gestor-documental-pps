@@ -31,6 +31,7 @@ import { BitacoraModule } from './bitacora/bitacora.module';
 import { CatalogosModule } from './catalogos/catalogos.module';
 import { DocumentosModule } from './documentos/documentos.module';
 import { ReportesModule } from './reportes/reportes.module';
+import { SaludModule } from './salud/salud.module';
 
 import { JwtAuthGuard } from './comun/guards/jwt-auth.guard';
 import { PermisosGuard } from './comun/guards/permisos.guard';
@@ -84,7 +85,12 @@ import { ExcepcionGlobalFilter } from './comun/filtros/excepcion-global.filter';
         // El esquema lo gobiernan los scripts de base-datos/scripts/init;
         // TypeORM nunca lo altera por su cuenta.
         synchronize: false,
-        logging: true,
+
+        // En desarrollo conviene ver cada consulta; en producción no: el
+        // volcado de SQL llena el log del servicio, cuesta rendimiento y
+        // además deja valores de negocio escritos en disco sin control de
+        // retención.
+        logging: configuracion.get<string>('NODE_ENV') !== 'production',
       }),
     }),
 
@@ -97,6 +103,7 @@ import { ExcepcionGlobalFilter } from './comun/filtros/excepcion-global.filter';
     CatalogosModule,
     DocumentosModule,
     ReportesModule,
+    SaludModule,
   ],
   providers: [
     // ORDEN IMPORTANTE: NestJS ejecuta los guards globales en el orden en

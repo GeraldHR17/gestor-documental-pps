@@ -74,10 +74,21 @@ export class AlmacenamientoDocumentosService {
   private readonly raizAlmacenamiento: string;
 
   constructor(configuracion: ConfigService) {
-    // Por defecto `backend/storage`, fuera de cualquier carpeta publicada.
-    this.raizAlmacenamiento = resolve(
-      configuracion.get<string>('ALMACENAMIENTO_RUTA') ?? join(process.cwd(), 'storage'),
-    );
+    // Se aceptan dos nombres para la misma cosa: `RUTA_ALMACENAMIENTO` es
+    // el que usa la guía de despliegue y el que respeta el orden de
+    // palabras del resto de las variables en español, y
+    // `ALMACENAMIENTO_RUTA` es el que ya existía. Mantener ambos evita que
+    // un `.env` escrito con cualquiera de los dos deje los PDF en una
+    // carpeta inesperada, que es un fallo silencioso y difícil de notar.
+    //
+    // `resolve()` admite rutas absolutas de Windows (C:\munidata\storage)
+    // y las deja intactas; solo compone cuando la ruta es relativa. Por
+    // defecto `backend/storage`, fuera de cualquier carpeta publicada.
+    const rutaConfigurada =
+      configuracion.get<string>('RUTA_ALMACENAMIENTO')?.trim() ||
+      configuracion.get<string>('ALMACENAMIENTO_RUTA')?.trim();
+
+    this.raizAlmacenamiento = resolve(rutaConfigurada || join(process.cwd(), 'storage'));
   }
 
   /**
