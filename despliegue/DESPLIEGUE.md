@@ -181,9 +181,8 @@ imprime un resumen parecido a:
 
 **`Usuarios: 0` es lo correcto.** El script
 `06-usuario-superadministrador.sql` se omite a propósito: crea una cuenta
-con la contraseña `Palmares#2026`, que está publicada en el repositorio. El
-administrador inicial se crea en el paso 2.6 con una contraseña que solo
-usted conoce.
+con la contraseña publicada en el script 06. El administrador inicial se
+crea en el paso 2.6 con una contraseña que solo usted conoce.
 
 El script es idempotente. Lleva una tabla `scripts_aplicados` dentro de la
 propia base, así que volver a ejecutarlo solo aplica los scripts nuevos.

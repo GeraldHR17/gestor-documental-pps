@@ -11,11 +11,10 @@
     Dos decisiones importantes:
 
     1. El script 06-usuario-superadministrador.sql NO se aplica por
-       defecto. Ese script crea una cuenta con la contrasena
-       'Palmares#2026', que esta publicada en el repositorio. En
-       produccion el administrador inicial se crea despues con
-       crear-administrador.ps1, que pide la contrasena. Si de verdad
-       quiere aplicarlo, use -IncluirUsuarioSemilla.
+       defecto. Ese script crea una cuenta con la contrasena publicada en
+       el script 06. En produccion el administrador inicial se crea
+       despues con crear-administrador.ps1, que pide la contrasena. Si de
+       verdad quiere aplicarlo, use -IncluirUsuarioSemilla.
 
     2. Los scripts del repositorio empiezan con
        "USE gestor_documental_pps;", el nombre de la base de desarrollo.

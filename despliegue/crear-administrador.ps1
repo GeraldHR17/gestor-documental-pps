@@ -13,9 +13,8 @@
     se escribe en ningun archivo.
 
     Hace falta porque el script SQL 06-usuario-superadministrador.sql crea
-    una cuenta con la contrasena 'Palmares#2026', publicada en el
-    repositorio. En produccion ese script no se aplica y la primera cuenta
-    se crea con este.
+    una cuenta con la contrasena publicada en el script 06. En produccion
+    ese script no se aplica y la primera cuenta se crea con este.
 
     Es idempotente: si ya existe un usuario con ese correo, no modifica
     nada.
