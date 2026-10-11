@@ -13,7 +13,7 @@ terceros: cada comando se puede copiar y pegar tal como aparece.
 | Componente | Cómo corre |
 | --- | --- |
 | Frontend (Vue) | Archivos estáticos servidos por Apache en `/munipalmares/wp-munidata/` |
-| Backend (NestJS) | Servicio de Windows `MuniData-API`, escuchando solo en `127.0.0.1:3000` |
+| Backend (NestJS) | Servicio de Windows `MuniData-API`, escuchando solo en `127.0.0.1:3100` |
 | API pública | Apache hace proxy de `/munipalmares/wp-munidata/api/` hacia el backend |
 | Base de datos | MySQL 8 como servicio de Windows en la misma máquina |
 | HTTPS | Lo resuelve Apache; el backend nunca habla TLS |
@@ -97,44 +97,152 @@ Si `mysql` o `mysqldump` no se encuentran, agregue al `PATH` la carpeta
 Si MySQL no está instalado, use el instalador de
 <https://dev.mysql.com/downloads/installer/>, elija *Server only*,
 configúrelo como servicio de arranque automático y guarde la contraseña de
-`root` en un lugar seguro: la necesitará una sola vez, en el paso 2.2.
+`root` en un lugar seguro: la necesitará una sola vez, en el paso 3.2.
 
-### 1.5 Módulos de Apache
+---
 
-Deben estar activos cuatro módulos. Compruébelo con:
+## 2. Reconocimiento previo (solo lectura)
+
+Antes de cambiar nada conviene mirar. **Ninguno de los comandos de esta
+sección modifica el sistema**: todos leen. El objetivo es llegar al
+despliegue sabiendo qué hay, en vez de descubrirlo a mitad de camino.
+
+Esta VM no está vacía: Apache ya sirve WordPress y otros sistemas
+municipales, y hay procesos escuchando en los puertos **3000, 3306, 7070,
+8081, 8082, 9002 y 9090**. Muni Data usa el **3100** precisamente para no
+chocar con ninguno.
+
+> **Nada de lo que ya está configurado se modifica.** En particular, el
+> servicio de MySQL escucha en `0.0.0.0:3306`, lo cual no es ideal pero lo
+> dejó otro sistema que depende de ello: **no se cambia**. Muni Data se
+> conecta por `127.0.0.1` y su usuario de base de datos solo existe para
+> `localhost` y `127.0.0.1`, nunca para `%`, así que ese `0.0.0.0` no le
+> añade exposición. Los puertos de los otros sistemas tampoco se tocan.
+
+### 2.1 Módulos de Apache cargados
 
 ```
-httpd -M
+C:\Apache24\bin\httpd.exe -M
 ```
 
-Deben aparecer `proxy_module`, `proxy_http_module`, `headers_module` y
-`rewrite_module`. Si falta alguno, abra `httpd.conf` y quite el `#` de la
-línea `LoadModule` correspondiente:
+Deben aparecer `proxy_module`, `proxy_http_module`, `rewrite_module` y
+`headers_module`. Anote cuáles faltan.
+
+### 2.2 Qué dice la configuración actual
+
+```
+Select-String -Path C:\Apache24\conf\httpd.conf -Pattern '^\s*#?\s*LoadModule\s+(proxy|proxy_http|rewrite|headers)_module'
+Select-String -Path C:\Apache24\conf\httpd.conf -Pattern '^\s*DocumentRoot'
+Select-String -Path C:\Apache24\conf\*.conf, C:\Apache24\conf\extra\*.conf -Pattern 'ProxyPass|AllowOverride|Include ' -ErrorAction SilentlyContinue
+```
+
+La primera línea muestra si los `LoadModule` están comentados o activos.
+La tercera dice si ya existe algún `ProxyPass` (para no duplicar rutas) y
+con qué valor está `AllowOverride`, del que depende que el `.htaccess` del
+frontend se aplique.
+
+### 2.3 La carpeta de destino
+
+```
+Test-Path C:\Apache24\htdocs\munipalmares\wp-munidata
+Get-ChildItem C:\Apache24\htdocs\munipalmares -ErrorAction SilentlyContinue
+Get-ChildItem C:\Apache24\htdocs\munipalmares\wp-munidata -Force -ErrorAction SilentlyContinue
+```
+
+Lo que se busca saber es si la carpeta ya existe y qué contiene. `-Force`
+es necesario para ver los archivos que empiezan por punto.
+
+`desplegar.ps1` **se niega a publicar** si esa carpeta tiene contenido y
+no lleva el archivo marcador `.munidata-despliegue`, precisamente para no
+borrar la carpeta de otro sistema por una ruta mal escrita. Si contiene
+algo que no es de Muni Data, no la fuerce: revise la ruta.
+
+### 2.4 Puertos y servicios
+
+```
+Get-NetTCPConnection -State Listen | Sort-Object LocalPort | Select-Object LocalAddress, LocalPort, OwningProcess
+Get-NetTCPConnection -LocalPort 3100 -State Listen -ErrorAction SilentlyContinue
+Get-Service | Where-Object { $_.Name -match 'Apache|mysql|nssm' }
+```
+
+El puerto 3100 debe aparecer libre. Si estuviera ocupado, elija otro y
+cámbielo en los tres sitios que indica la sección 10.4.
+
+### 2.5 Comprobación automática
+
+Todo lo anterior, más Node, Git, NSSM y el cliente de MySQL, lo revisa de
+una vez:
+
+```
+powershell -ExecutionPolicy Bypass -File .\despliegue\verificar-requisitos.ps1 -RutaHttpd "C:\Apache24\bin\httpd.exe"
+```
+
+Ese script también **imprime la ruta exacta de `nssm.exe` y de
+`mysql.exe` aunque no estén en el `PATH`**, lista para pasarla por
+parámetro. En esta VM ambos están fuera del `PATH`, así que esa salida
+ahorra buscarlos a mano.
+
+### 2.6 Habilitar los módulos que falten
+
+Solo si el paso 2.1 mostró alguno ausente.
+
+**Primero, copia de seguridad.** Si Apache no arranca después del cambio,
+esto es lo que permite volver atrás:
+
+```
+Copy-Item C:\Apache24\conf\httpd.conf "C:\Apache24\conf\httpd.conf.respaldo-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+```
+
+Edite el archivo y quite el `#` del inicio de las líneas que falten:
+
+```
+notepad C:\Apache24\conf\httpd.conf
+```
 
 ```
 LoadModule proxy_module modules/mod_proxy.so
 LoadModule proxy_http_module modules/mod_proxy_http.so
-LoadModule headers_module modules/mod_headers.so
 LoadModule rewrite_module modules/mod_rewrite.so
+LoadModule headers_module modules/mod_headers.so
 ```
 
-Después **valide la sintaxis antes de reiniciar**. Si `httpd -t` falla y
-reinicia de todos modos, Apache no arranca y se cae WordPress junto con
-todo lo demás:
+**Valide la sintaxis antes de reiniciar.** Este paso no es opcional: si
+`httpd -t` falla y usted reinicia de todos modos, Apache no arranca y se
+cae WordPress junto con todo lo demás que sirve esta VM.
 
 ```
-httpd -t
+C:\Apache24\bin\httpd.exe -t
+```
+
+Debe responder `Syntax OK`. **Solo entonces**:
+
+```
+Restart-Service -Name Apache2.4
+```
+
+Y confirme que quedaron cargados:
+
+```
+C:\Apache24\bin\httpd.exe -M
+```
+
+Si algo salió mal, restaure el respaldo, valide y reinicie:
+
+```
+Copy-Item "C:\Apache24\conf\httpd.conf.respaldo-<marca>" C:\Apache24\conf\httpd.conf -Force
+C:\Apache24\bin\httpd.exe -t
+Restart-Service -Name Apache2.4
 ```
 
 ---
 
-## 2. Orden de ejecución el día del despliegue
+## 3. Orden de ejecución el día del despliegue
 
 Los pasos van en este orden porque cada uno depende del anterior. Anote la
 hora de inicio: si algo sale mal, los registros de esa franja son lo
 primero que hay que leer.
 
-### 2.1 Obtener el código
+### 3.1 Obtener el código
 
 ```
 cd C:\munidata-repo
@@ -152,7 +260,7 @@ git pull
 > repositorio es código fuente; `C:\munidata` guarda lo que se ejecuta y
 > los datos.
 
-### 2.2 Preparar la base de datos
+### 3.2 Preparar la base de datos
 
 ```
 powershell -ExecutionPolicy Bypass -File .\despliegue\preparar-base-datos.ps1
@@ -163,7 +271,7 @@ Le pedirá, sin mostrar lo que escribe:
 1. La contraseña de `root` en MySQL.
 2. Una contraseña **nueva** para el usuario `munidata_app`, dos veces.
    Mínimo 12 caracteres, sin comillas simples ni barras invertidas.
-   **Anótela**: la necesitará en el paso 2.4.
+   **Anótela**: la necesitará en el paso 3.4.
 
 **Qué esperar.** El script crea la base `munidata` con `utf8mb4`, crea el
 usuario `munidata_app` con privilegios `SELECT, INSERT, UPDATE, DELETE`
@@ -182,15 +290,19 @@ imprime un resumen parecido a:
 **`Usuarios: 0` es lo correcto.** El script
 `06-usuario-superadministrador.sql` se omite a propósito: crea una cuenta
 con la contraseña publicada en el script 06. El administrador inicial se
-crea en el paso 2.6 con una contraseña que solo usted conoce.
+crea en el paso 3.6 con una contraseña que solo usted conoce.
 
 El script es idempotente. Lleva una tabla `scripts_aplicados` dentro de la
 propia base, así que volver a ejecutarlo solo aplica los scripts nuevos.
 
-### 2.3 Primera ejecución del despliegue
+### 3.3 Primera ejecución del despliegue
 
-Necesita saber dónde está `htdocs`. Búsquelo en `httpd.conf`, en la
-directiva `DocumentRoot`.
+En esta VM, Apache está instalado en `C:\Apache24`, así que `htdocs` es
+`C:\Apache24\htdocs`. Puede confirmarlo con:
+
+```
+Select-String -Path C:\Apache24\conf\httpd.conf -Pattern '^\s*DocumentRoot'
+```
 
 **Abra PowerShell como administrador** (crea un servicio y escribe en el
 registro) y ejecute:
@@ -203,7 +315,7 @@ La primera vez el script crea `C:\munidata\config\.env.produccion`, genera
 los secretos JWT y **se detiene con código 2**, pidiéndole que complete el
 resto. Eso es lo esperado, no un error.
 
-### 2.4 Completar las variables de entorno
+### 3.4 Completar las variables de entorno
 
 ```
 notepad C:\munidata\config\.env.produccion
@@ -213,7 +325,7 @@ Reemplace **todos** los valores que empiezan por `CAMBIEME`:
 
 | Variable | Qué poner |
 | --- | --- |
-| `BD_CONTRASENA` | La contraseña de `munidata_app` del paso 2.2 |
+| `BD_CONTRASENA` | La contraseña de `munidata_app` del paso 3.2 |
 | `FRONTEND_URL` | La URL pública real, con la subruta y **sin barra final** |
 | `SMTP_USER` | La cuenta de Gmail del proyecto |
 | `SMTP_PASS` | La contraseña de aplicación, **sin espacios** |
@@ -230,9 +342,9 @@ la contraseña de la cuenta: con la contraseña normal, Gmail responde
 No use comillas alrededor de ningún valor: en un archivo `.env` las
 comillas viajan como parte del valor.
 
-### 2.5 Ejecutar el despliegue de verdad
+### 3.5 Ejecutar el despliegue de verdad
 
-El mismo comando del paso 2.3:
+El mismo comando del paso 3.3:
 
 ```
 powershell -ExecutionPolicy Bypass -File .\despliegue\desplegar.ps1 -RutaHtdocs "C:\Apache24\htdocs"
@@ -253,7 +365,7 @@ Si el servicio no arranca:
 Get-Content C:\munidata\registros\api-error.log -Tail 40
 ```
 
-### 2.6 Crear el administrador inicial
+### 3.6 Crear el administrador inicial
 
 ```
 powershell -ExecutionPolicy Bypass -File .\despliegue\crear-administrador.ps1
@@ -266,7 +378,7 @@ número, la misma política que aplica la interfaz.
 El script es idempotente: si ya existe un usuario con ese correo, no
 modifica nada.
 
-### 2.7 Programar los respaldos
+### 3.7 Programar los respaldos
 
 ```
 powershell -ExecutionPolicy Bypass -File .\despliegue\respaldar.ps1 -RegistrarTarea
@@ -287,18 +399,18 @@ Get-ChildItem C:\munidata\respaldos
 
 ---
 
-## 3. Configuración de Apache
+## 4. Configuración de Apache
 
 Este es el único paso que toca un servicio compartido con WordPress.
 Hágalo con calma y valide antes de reiniciar.
 
-### 3.1 Copiar el archivo de configuración
+### 4.1 Copiar el archivo de configuración
 
 ```
 Copy-Item .\despliegue\apache\munidata.conf C:\Apache24\conf\extra\munidata.conf
 ```
 
-### 3.2 Ajustar las dos rutas
+### 4.2 Ajustar las dos rutas
 
 ```
 notepad C:\Apache24\conf\extra\munidata.conf
@@ -309,7 +421,7 @@ Busque las líneas marcadas con `AJUSTAR`:
 1. El bloque `<Directory "C:/Apache24/htdocs/munipalmares/wp-munidata">`
    debe apuntar a la carpeta real donde se publicó el frontend. Las rutas
    de Apache se escriben con `/` incluso en Windows.
-2. El puerto del `ProxyPass` (3000 por defecto) debe coincidir con `PUERTO`
+2. El puerto del `ProxyPass` (3100 por defecto) debe coincidir con `PUERTO`
    de `.env.produccion`.
 
 > Si `httpd.conf` ya define un `<Directory>` para `htdocs` con
@@ -317,7 +429,7 @@ Busque las líneas marcadas con `AJUSTAR`:
 > `munidata.conf` es más específico y gana. **No reemplace el bloque
 > existente**, que es el que usa WordPress.
 
-### 3.3 Incluir el archivo
+### 4.3 Incluir el archivo
 
 Edite la configuración de Apache y agregue la línea de `Include` **dentro
 del `<VirtualHost *:443>` que ya sirve HTTPS**:
@@ -326,7 +438,7 @@ del `<VirtualHost *:443>` que ya sirve HTTPS**:
 Include conf/extra/munidata.conf
 ```
 
-### 3.4 Validar y reiniciar
+### 4.4 Validar y reiniciar
 
 ```
 httpd -t
@@ -344,7 +456,7 @@ El nombre del servicio puede variar. Para averiguarlo:
 Get-Service | Where-Object { $_.Name -match 'apache|httpd' }
 ```
 
-### 3.5 Verificar
+### 4.5 Verificar
 
 ```
 powershell -ExecutionPolicy Bypass -File .\despliegue\verificar-despliegue.ps1 -UrlPublica "https://<host>/munipalmares/wp-munidata"
@@ -353,9 +465,9 @@ powershell -ExecutionPolicy Bypass -File .\despliegue\verificar-despliegue.ps1 -
 Reemplace `<host>` por la dirección real de la VM, la misma que puso en
 `FRONTEND_URL`. Ahora deberían pasar las siete comprobaciones.
 
-### 3.6 Revertir el cambio de Apache
+### 4.6 Revertir el cambio de Apache
 
-Si algo se rompió, comente la línea del paso 3.3:
+Si algo se rompió, comente la línea del paso 4.3:
 
 ```
 # Include conf/extra/munidata.conf
@@ -374,7 +486,7 @@ y no afecta a nada: solo escucha en loopback.
 
 ---
 
-## 4. Variables de entorno de producción
+## 5. Variables de entorno de producción
 
 Viven en `C:\munidata\config\.env.produccion`, fuera del repositorio y
 fuera de `htdocs`. Esto último es deliberado: ninguna configuración de
@@ -392,7 +504,7 @@ La plantilla con los comentarios completos está en
 | **`FRONTEND_URL`** | URL pública con la subruta y **sin barra final**. Construye los enlaces de los correos y deriva el origen de CORS. Si queda en `localhost`, los enlaces de recuperación de contraseña no funcionan para nadie | Gerald |
 | `BD_HOST`, `BD_PUERTO`, `BD_NOMBRE` | Conexión a MySQL | La plantilla |
 | `BD_USUARIO` | `munidata_app`, nunca `root` | `preparar-base-datos.ps1` |
-| `BD_CONTRASENA` | La definida en el paso 2.2 | Gerald |
+| `BD_CONTRASENA` | La definida en el paso 3.2 | Gerald |
 | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | Firman los tokens. 64 bytes aleatorios. Cambiarlos invalida todas las sesiones activas | `desplegar.ps1`, automático |
 | `JWT_ACCESS_EXPIRATION`, `JWT_REFRESH_EXPIRATION` | Vida de cada token. La sesión tiene además un límite absoluto de 8 horas | La plantilla |
 | `BCRYPT_SALT_ROUNDS` | `12`. No lo baje: es el valor con el que se generaron los hash existentes | La plantilla |
@@ -411,7 +523,7 @@ el servicio las toma del registro de Windows, no del archivo.
 
 ---
 
-## 5. Actualizaciones posteriores
+## 6. Actualizaciones posteriores
 
 ```
 cd C:\munidata-repo
@@ -433,7 +545,7 @@ Aplicará solo los que falten, según la tabla `scripts_aplicados`.
 
 ---
 
-## 6. Rollback
+## 7. Rollback
 
 ```
 powershell -ExecutionPolicy Bypass -File .\despliegue\revertir.ps1 -RutaHtdocs "C:\Apache24\htdocs"
@@ -456,9 +568,9 @@ el comando exacto para hacerlo a mano si de verdad hace falta.
 
 ---
 
-## 7. Respaldos y restauración
+## 8. Respaldos y restauración
 
-### 7.1 Respaldo manual
+### 8.1 Respaldo manual
 
 ```
 powershell -ExecutionPolicy Bypass -File .\despliegue\respaldar.ps1
@@ -473,7 +585,7 @@ Genera en `C:\munidata\respaldos\<fecha-hora>`:
 
 Conserva los 14 más recientes y borra los anteriores.
 
-### 7.2 Restaurar la base de datos
+### 8.2 Restaurar la base de datos
 
 > **Destruye** todo lo registrado después de la fecha del volcado. No hay
 > forma de recuperarlo luego. Haga un respaldo del estado actual antes.
@@ -491,7 +603,7 @@ Reinicie el servicio después, para que el pool de conexiones se rehaga:
 nssm restart MuniData-API
 ```
 
-### 7.3 Restaurar los documentos
+### 8.3 Restaurar los documentos
 
 ```
 Expand-Archive -Path C:\munidata\respaldos\<fecha-hora>\documentos.zip -DestinationPath C:\munidata\storage\documentos -Force
@@ -505,19 +617,19 @@ controlado) o archivos huérfanos en disco.
 
 ---
 
-## 8. Prueba de humo funcional
+## 9. Prueba de humo funcional
 
 Después de la verificación automática, compruebe a mano estos nueve puntos
 desde un navegador. Es la única forma de validar el comportamiento real.
 
 1. **Inicio de sesión.** Abra
    `https://<host>/munipalmares/wp-munidata/` e inicie sesión con la cuenta
-   creada en el paso 2.6. Debe llegar al panel de Inicio con los
+   creada en el paso 3.6. Debe llegar al panel de Inicio con los
    indicadores.
 
 2. **Persistencia de la sesión.** Recargue la página con F5. **Debe seguir
    dentro.** Si lo devuelve al login, la cookie del refresh token no está
-   persistiendo: vaya a la sección 9.3.
+   persistiendo: vaya a la sección 10.3.
 
 3. **Carga de un documento.** Registre un documento con el asistente de
    tres pasos y suba un PDF. Debe guardarse en estado `BORRADOR`.
@@ -551,15 +663,15 @@ desde un navegador. Es la única forma de validar el comportamiento real.
 
 ---
 
-## 9. Solución de problemas comunes
+## 10. Solución de problemas comunes
 
-### 9.1 `502 Bad Gateway` de Apache
+### 10.1 `502 Bad Gateway` de Apache
 
 Apache no pudo hablar con el backend.
 
 ```
 Get-Service MuniData-API
-Get-NetTCPConnection -LocalPort 3000 -State Listen
+Get-NetTCPConnection -LocalPort 3100 -State Listen
 Get-Content C:\munidata\registros\api-error.log -Tail 40
 ```
 
@@ -570,7 +682,7 @@ Causas, en orden de frecuencia:
 - El puerto del `ProxyPass` no coincide con `PUERTO` de `.env.produccion`.
 - Falta `proxy_http_module`. Compruebe con `httpd -M`.
 
-### 9.2 `404` en rutas profundas
+### 10.2 `404` en rutas profundas
 
 La aplicación carga en la raíz, pero recargar en `/documentos/7` da 404.
 Apache no está aplicando el fallback del `.htaccess`.
@@ -588,7 +700,7 @@ Apache no está aplicando el fallback del `.htaccess`.
   Debe coincidir con `VITE_RUTA_BASE` de `frontend\.env.production`. Si la
   ruta de publicación es otra, hay que cambiar los dos y recompilar.
 
-### 9.3 La sesión no persiste al recargar
+### 10.3 La sesión no persiste al recargar
 
 Inicia sesión bien, pero F5 lo devuelve al login. La cookie del refresh
 token no está llegando de vuelta.
@@ -611,10 +723,10 @@ Otras causas:
 Para verlo en el navegador: F12 → Aplicación → Cookies. Debe existir
 `refreshToken` con `Path=/munipalmares/wp-munidata/api/auth`.
 
-### 9.4 Puerto ocupado
+### 10.4 Puerto ocupado
 
 ```
-Get-NetTCPConnection -LocalPort 3000 -State Listen | ForEach-Object { Get-Process -Id $_.OwningProcess }
+Get-NetTCPConnection -LocalPort 3100 -State Listen | ForEach-Object { Get-Process -Id $_.OwningProcess }
 ```
 
 Si es otro sistema de la VM, elija otro puerto. Hay que cambiarlo en tres
@@ -624,7 +736,7 @@ sitios a la vez:
 2. El `ProxyPass` de `munidata.conf`
 3. El parámetro `-Puerto` de `desplegar.ps1`
 
-### 9.5 Error de certificado
+### 10.5 Error de certificado
 
 Si el certificado es autofirmado, el navegador avisa. No es un problema del
 sistema: es el mismo certificado con el que ya se sirven los otros
@@ -634,7 +746,7 @@ sistemas.
 propósito, solo dentro de su propio proceso, para poder probar la
 aplicación sin que la validación lo detenga antes.
 
-### 9.6 El correo no sale
+### 10.6 El correo no sale
 
 La API responde `200` en recuperación de contraseña **aunque el envío
 falle**: la respuesta es genérica por diseño, para que nadie pueda
@@ -668,7 +780,7 @@ respuesta a una causa concreta. Códigos habituales:
   Test-NetConnection -ComputerName smtp.gmail.com -Port 587
   ```
 
-### 9.7 El servicio no arranca
+### 10.7 El servicio no arranca
 
 ```
 Get-Content C:\munidata\registros\api-error.log -Tail 60
@@ -688,9 +800,37 @@ valores, así que hágalo solo si es necesario y no comparta la salida):
 nssm get MuniData-API AppEnvironmentExtra
 ```
 
+### 10.8 «La carpeta de destino ya tiene contenido y NO lleva el marcador»
+
+`desplegar.ps1` o `revertir.ps1` se detienen antes de tocar nada. Es una
+protección, no un error: la carpeta de publicación tiene archivos y no
+lleva `.munidata-despliegue`, así que el script no puede saber si son
+nuestros o de otro sistema de este Apache.
+
+**Lo primero es mirar qué hay**, nunca forzar:
+
+```
+Get-ChildItem C:\Apache24\htdocs\munipalmares\wp-munidata -Force
+```
+
+- Si lo que ve es **WordPress u otro sistema**, se equivocó de ruta.
+  Repita con el valor correcto de `-RutaHtdocs` o `-RutaPublicaFrontend`.
+  No cree el marcador: lo borraría todo en la siguiente ejecución.
+- Si de verdad es **Muni Data** (por ejemplo porque alguien publicó a mano
+  antes de usar estos scripts), autorice el reemplazo creando el marcador:
+
+  ```
+  Set-Content -LiteralPath C:\Apache24\htdocs\munipalmares\wp-munidata\.munidata-despliegue -Value 'autorizado a mano'
+  ```
+
+  Y vuelva a ejecutar el script.
+
+**No borre `.munidata-despliegue`** de una carpeta ya desplegada: sin él,
+la siguiente actualización se detendrá igual.
+
 ---
 
-## 10. Notas de seguridad
+## 11. Notas de seguridad
 
 Decisiones de diseño del despliegue, alineadas con ISO/IEC 27001.
 

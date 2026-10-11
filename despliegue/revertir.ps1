@@ -57,7 +57,7 @@ param(
     [string] $RutaDatos = 'C:\munidata',
     [string] $RutaPublicaFrontend = 'munipalmares\wp-munidata',
     [string] $NombreServicio = 'MuniData-API',
-    [int]    $Puerto = 3000,
+    [int]    $Puerto = 3100,
     [string] $Respaldo = '',
     [string] $UrlPublica = '',
     [string] $RutaNssm = '',
@@ -87,6 +87,77 @@ function Escribir-Detalle {
 function Escribir-Simulado {
     param([Parameter(Mandatory = $true)][string] $Mensaje)
     Write-Host "    [SIMULACION] $Mensaje" -ForegroundColor DarkGray
+}
+
+# Archivo que marca una carpeta como publicada por este sistema. Sin el,
+# este script se niega a borrar nada. Su gemelo esta en desplegar.ps1,
+# que es quien lo escribe.
+$NOMBRE_MARCADOR = '.munidata-despliegue'
+
+function Confirmar-CarpetaDestinoPropia {
+    <#
+        Se niega a continuar si la carpeta de publicacion ya tiene
+        contenido que este sistema no puso.
+
+        Mismo motivo que en desplegar.ps1: en esta VM Apache sirve
+        WordPress y otros sistemas desde el mismo htdocs, y una reversion
+        apuntada a la carpeta equivocada la borraria entera. Solo se borra
+        lo que lleva nuestro marcador; una carpeta inexistente o vacia
+        tambien es segura, porque no hay nada que destruir.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $Ruta,
+        [switch] $Simulacion
+    )
+
+    if (-not (Test-Path -LiteralPath $Ruta)) {
+        Escribir-Detalle "No existe todavia; se creara: $Ruta"
+        return
+    }
+
+    # -Force para contar tambien los archivos ocultos: una carpeta con
+    # solo un .htaccess no esta vacia.
+    $contenido = @(Get-ChildItem -LiteralPath $Ruta -Force -ErrorAction SilentlyContinue)
+    if ($contenido.Count -eq 0) {
+        Escribir-Detalle "Existe y esta vacia; se puede restaurar: $Ruta"
+        return
+    }
+
+    if (Test-Path -LiteralPath (Join-Path $Ruta $NOMBRE_MARCADOR)) {
+        Escribir-Detalle ("Publicada por este sistema ({0} elementos, marcador presente)." -f $contenido.Count)
+        return
+    }
+
+    $mensaje = @"
+La carpeta de destino ya tiene contenido y NO lleva el marcador de este sistema:
+
+    $Ruta
+
+Contiene $($contenido.Count) elemento(s) y no se encontro '$NOMBRE_MARCADOR'.
+Eso significa que la publico algo que no es Muni Data, muy probablemente
+WordPress u otro de los sistemas que conviven en este Apache.
+
+No se toco nada.
+
+Que hacer:
+  - Compruebe que -RutaHtdocs y -RutaPublicaFrontend son los mismos
+    valores que uso en desplegar.ps1.
+  - Si esa carpeta de verdad es de Muni Data, revise su contenido y cree
+    el marcador para autorizar el reemplazo:
+
+        Set-Content -LiteralPath "$(Join-Path $Ruta $NOMBRE_MARCADOR)" -Value 'autorizado a mano'
+
+    Despues vuelva a ejecutar este script.
+"@
+
+    if ($Simulacion) {
+        Write-Host ''
+        Write-Host $mensaje -ForegroundColor Yellow
+        Write-Host '[SIMULACION] En una ejecucion real la reversion se detendria aqui.' -ForegroundColor Yellow
+        return
+    }
+
+    throw $mensaje
 }
 
 function Resolver-Ejecutable {
@@ -175,6 +246,9 @@ try {
     $hayFrontend = Test-Path -LiteralPath (Join-Path $origenFrontend 'index.html')
 
     if ($Simular) {
+        Escribir-Paso 'Comprobando la carpeta de destino del frontend'
+        Confirmar-CarpetaDestinoPropia -Ruta $rutaFrontendDestino -Simulacion
+
         Escribir-Paso 'Plan de reversion'
         Escribir-Simulado "detendria el servicio $NombreServicio"
         if ($hayBackend) {
@@ -184,7 +258,7 @@ try {
             Escribir-Simulado 'este respaldo no trae backend; no se tocaria'
         }
         if ($hayFrontend) {
-            Escribir-Simulado "reemplazaria $rutaFrontendDestino desde $origenFrontend"
+            Escribir-Simulado "reemplazaria $rutaFrontendDestino desde $origenFrontend, pero SOLO si lleva el marcador $NOMBRE_MARCADOR"
         } else {
             Escribir-Simulado 'este respaldo no trae frontend; no se tocaria'
         }
@@ -200,6 +274,11 @@ try {
     if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
         throw 'Este script necesita permisos de administrador. Abra PowerShell como administrador.'
     }
+
+    # Antes de detener el servicio o tocar un solo archivo: si la carpeta
+    # de destino es de otro sistema, hay que abortar sin haber hecho nada.
+    Escribir-Paso 'Comprobando la carpeta de destino del frontend'
+    Confirmar-CarpetaDestinoPropia -Ruta $rutaFrontendDestino
 
     $rutaNpm = Resolver-Ejecutable -Nombre 'npm.cmd'
     $rutaNssmResuelta = Resolver-Ejecutable -Nombre 'nssm.exe' -RutaExplicita $RutaNssm
@@ -261,15 +340,38 @@ try {
     } else {
         if (-not (Test-Path -LiteralPath $rutaFrontendDestino)) {
             $null = New-Item -ItemType Directory -Path $rutaFrontendDestino -Force
-        } else {
+            Escribir-Detalle 'Carpeta de destino creada.'
+        } elseif (Test-Path -LiteralPath (Join-Path $rutaFrontendDestino $NOMBRE_MARCADOR)) {
+            # Solo se llega aqui con el marcador presente. La comprobacion
+            # del inicio ya aborto en cualquier otro caso; esta segunda
+            # condicion es la red de seguridad para que un cambio futuro
+            # en el orden de los pasos no reintroduzca un borrado a
+            # ciegas.
             Get-ChildItem -LiteralPath $rutaFrontendDestino -Force | Remove-Item -Recurse -Force
+            Escribir-Detalle 'Contenido anterior de Muni Data eliminado (marcador presente).'
+        } else {
+            Escribir-Detalle 'Carpeta de destino vacia; se restaura directamente.'
         }
+
         Copy-Item -Path (Join-Path $origenFrontend '*') -Destination $rutaFrontendDestino -Recurse -Force
         # El comodin omite los archivos que empiezan por punto.
-        $htaccessOrigen = Join-Path $origenFrontend '.htaccess'
-        if (Test-Path -LiteralPath $htaccessOrigen) {
-            Copy-Item -LiteralPath $htaccessOrigen -Destination $rutaFrontendDestino -Force
+        foreach ($oculto in @('.htaccess', $NOMBRE_MARCADOR)) {
+            $origen = Join-Path $origenFrontend $oculto
+            if (Test-Path -LiteralPath $origen) {
+                Copy-Item -LiteralPath $origen -Destination $rutaFrontendDestino -Force
+            }
         }
+
+        # Si el respaldo no traia marcador (por ser anterior a esta
+        # proteccion), se escribe ahora: la carpeta acaba de quedar con
+        # contenido nuestro, y sin el la siguiente ejecucion abortaria.
+        if (-not (Test-Path -LiteralPath (Join-Path $rutaFrontendDestino $NOMBRE_MARCADOR))) {
+            Set-Content -LiteralPath (Join-Path $rutaFrontendDestino $NOMBRE_MARCADOR) `
+                -Value ("Carpeta restaurada por despliegue/revertir.ps1 el {0}." -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) `
+                -Encoding UTF8
+            Escribir-Detalle "Marcador $NOMBRE_MARCADOR escrito."
+        }
+
         Escribir-Detalle "Restaurado en $rutaFrontendDestino"
     }
 

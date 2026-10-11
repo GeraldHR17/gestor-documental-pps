@@ -356,11 +356,19 @@ try {
     # --------------------------------------------------------
     Escribir-Paso "Usuario de aplicacion $UsuarioAplicacion"
     Escribir-Detalle 'Se concede privilegio solo sobre esta base (minimo privilegio).'
+    Escribir-Detalle "Hosts permitidos: localhost y 127.0.0.1 unicamente, nunca '%'."
 
     # IF NOT EXISTS mantiene la idempotencia sin tocar la contrasena de un
-    # usuario que ya estuviera en uso. Se crea para 'localhost' y para
-    # '127.0.0.1' porque MySQL los trata como hosts distintos y el backend
-    # se conecta por el segundo.
+    # usuario que ya estuviera en uso.
+    #
+    # La lista de hosts es deliberadamente local: 'localhost' y
+    # '127.0.0.1', porque MySQL los trata como hosts distintos y el
+    # backend se conecta por el segundo. NUNCA se usa '%': en esta VM el
+    # servicio de MySQL escucha en 0.0.0.0 (lo dejo otro sistema, y no se
+    # modifica), de modo que un usuario con host '%' quedaria alcanzable
+    # desde la red con permisos sobre toda la base. Acotarlo al propio
+    # equipo es lo que mantiene la exposicion en cero sin tocar la
+    # configuracion compartida de MySQL.
     foreach ($hostUsuario in @('localhost', '127.0.0.1')) {
         $null = Invocar-Mysql -Sentencia ("CREATE USER IF NOT EXISTS '{0}'@'{1}' IDENTIFIED BY '{2}';" -f $UsuarioAplicacion, $hostUsuario, $textoApp)
         # ALTER USER para el caso de que ya existiera con otra contrasena:

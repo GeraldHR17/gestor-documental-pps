@@ -37,7 +37,7 @@
 param(
     [string] $RutaNssm = '',
     [string] $RutaHttpd = '',
-    [int]    $Puerto = 3000,
+    [int]    $Puerto = 3100,
     [string] $RutaDatos = 'C:\munidata',
     [int]    $EspacioMinimoGb = 5,
     [switch] $Simular
@@ -45,6 +45,14 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# ------------------------------------------------------------
+# Constantes
+# ------------------------------------------------------------
+# Version mayor de Node con la que se probo el sistema. No es un minimo:
+# backend/package.json declara ">=22", asi que 24 tambien cumple. Se usa
+# solo para avisar cuando la VM corre otra.
+$VERSION_NODE_PROBADA = 22
 
 # ------------------------------------------------------------
 # Resultados
@@ -90,6 +98,59 @@ function Buscar-Ejecutable {
     return $null
 }
 
+function Buscar-FueraDelPath {
+    <#
+        Busca un ejecutable en rutas conocidas cuando no esta en el PATH.
+
+        En esta VM eso es lo habitual: NSSM existe pero no esta en el
+        PATH, y el cliente de MySQL vive bajo "C:\Program Files\MySQL\...".
+        Devolver la ruta exacta ahorra tener que ir a buscarla a mano para
+        pasarla por parametro.
+    #>
+    param([Parameter(Mandatory = $true)][string[]] $Patrones)
+
+    foreach ($patron in $Patrones) {
+        $encontrados = @(Get-Item -Path $patron -ErrorAction SilentlyContinue |
+            Where-Object { -not $_.PSIsContainer } |
+            Sort-Object -Property FullName -Descending)
+        if ($encontrados.Count -gt 0) {
+            return $encontrados[0].FullName
+        }
+    }
+    return $null
+}
+
+function Buscar-NssmEnServicios {
+    <#
+        Deduce la ruta de nssm.exe a partir de los servicios que ya lo
+        usan.
+
+        Es el camino mas fiable en esta VM: los otros sistemas corren con
+        NSSM, asi que su ruta esta registrada en el PathName de cada
+        servicio, aunque nssm.exe no este en el PATH ni en una carpeta
+        predecible.
+    #>
+    try {
+        $servicios = @(Get-CimInstance -ClassName Win32_Service -ErrorAction Stop |
+            Where-Object { $_.PathName -and $_.PathName -match 'nssm' })
+
+        foreach ($servicio in $servicios) {
+            # El PathName viene entrecomillado y con argumentos:
+            #   "C:\herramientas\nssm.exe" ...
+            $coincide = [regex]::Match($servicio.PathName, '"?([A-Za-z]:\\[^"]*?nssm\.exe)"?')
+            if ($coincide.Success) {
+                $ruta = $coincide.Groups[1].Value
+                if (Test-Path -LiteralPath $ruta) {
+                    return [pscustomobject]@{ Ruta = $ruta; Servicio = $servicio.Name }
+                }
+            }
+        }
+    } catch {
+        return $null
+    }
+    return $null
+}
+
 function Obtener-Version {
     <#
         Ejecuta el comando y devuelve su primera linea de salida. Se
@@ -120,6 +181,20 @@ if ($Simular) {
 Write-Host ''
 
 # ------------------------------------------------------------
+# 0. Sesion de administrador
+# ------------------------------------------------------------
+# No lo necesita este script, que solo lee, pero si desplegar.ps1: crea un
+# servicio de Windows y escribe en HKLM. Mejor descubrirlo ahora que a
+# mitad del despliegue.
+$identidad = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = New-Object Security.Principal.WindowsPrincipal($identidad)
+if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Agregar-Resultado 'Sesion de administrador' 'OK' "Elevada ($($identidad.Name))."
+} else {
+    Agregar-Resultado 'Sesion de administrador' 'AVISO' "No elevada ($($identidad.Name)). desplegar.ps1 la necesita: abra PowerShell con 'Ejecutar como administrador'."
+}
+
+# ------------------------------------------------------------
 # 1. Node.js
 # ------------------------------------------------------------
 $rutaNode = Buscar-Ejecutable -Nombre 'node.exe'
@@ -138,6 +213,30 @@ if ($null -eq $rutaNode) {
         Agregar-Resultado 'Node.js' 'FALTA' "$version es demasiado antigua; se requiere 20 LTS o superior."
     } else {
         Agregar-Resultado 'Node.js' 'AVISO' "Presente en $rutaNode pero no se pudo leer la version."
+    }
+
+    # La version mayor se informa aparte. backend/package.json declara
+    # ">=22", asi que 24 y 26 tambien valen; se avisa cuando no es 22
+    # porque es la unica con la que se probo el sistema, no porque otra
+    # vaya a fallar.
+    if ($numero -ne 0 -and $numero -ne $VERSION_NODE_PROBADA) {
+        Agregar-Resultado 'Version mayor de Node' 'AVISO' "Es $numero; el sistema se probo con $VERSION_NODE_PROBADA. package.json pide >=22, asi que $numero cumple, pero conviene saberlo si algo se comporta distinto."
+    } elseif ($numero -ne 0) {
+        Agregar-Resultado 'Version mayor de Node' 'OK' "$numero, la misma con la que se probo el sistema."
+    }
+
+    # El servicio de Windows corre como LocalSystem, que no tiene perfil
+    # de usuario: un node.exe instalado bajo C:\Users\<alguien> puede
+    # quedar inaccesible para el servicio, o desaparecer si se borra ese
+    # perfil. El sintoma seria un servicio que no arranca con un error de
+    # ruta, difícil de relacionar con la causa.
+    if ($rutaNode -like 'C:\Users\*') {
+        $aviso = "node.exe esta dentro de un perfil de usuario ($rutaNode). "
+        $aviso += 'El servicio corre como LocalSystem y puede no tener acceso. '
+        $aviso += 'Conviene instalar Node para todos los usuarios, por ejemplo en C:\Program Files\nodejs.'
+        Agregar-Resultado 'Ubicacion de node.exe' 'AVISO' $aviso
+    } else {
+        Agregar-Resultado 'Ubicacion de node.exe' 'OK' "Fuera de un perfil de usuario: $rutaNode"
     }
 }
 
@@ -168,26 +267,79 @@ if ($null -eq $rutaGit) {
 # 4. NSSM
 # ------------------------------------------------------------
 $rutaNssmResuelta = Buscar-Ejecutable -Nombre 'nssm.exe' -RutaExplicita $RutaNssm
+
 if ($null -eq $rutaNssmResuelta) {
-    $mensaje = 'Descargue nssm desde https://nssm.cc/download, copie nssm.exe (carpeta win64) '
-    $mensaje += 'a una ruta estable y pase -RutaNssm, o agreguela al PATH.'
-    Agregar-Resultado 'NSSM' 'FALTA' $mensaje
+    # No esta en el PATH, lo habitual en esta VM. Se deduce de los
+    # servicios que ya usan NSSM, que es donde su ruta queda registrada.
+    $porServicio = Buscar-NssmEnServicios
+
+    if ($null -eq $porServicio) {
+        # Ultimo recurso: rutas donde suele copiarse a mano.
+        $porRuta = Buscar-FueraDelPath -Patrones @(
+            'C:\nssm\*\nssm.exe', 'C:\nssm\nssm.exe',
+            'C:\herramientas\nssm.exe', 'C:\Tools\nssm.exe',
+            'C:\Program Files\nssm\*\nssm.exe', 'C:\Program Files\nssm\nssm.exe'
+        )
+        if ($null -eq $porRuta) {
+            $mensaje = 'No esta en el PATH, ningun servicio lo referencia y no aparece en las rutas habituales. '
+            $mensaje += 'Localicelo con:  Get-ChildItem C:\ -Filter nssm.exe -Recurse -ErrorAction SilentlyContinue  '
+            $mensaje += 'y pase la ruta con -RutaNssm. Si no esta instalado, descarguelo de https://nssm.cc/download'
+            Agregar-Resultado 'NSSM' 'FALTA' $mensaje
+        } else {
+            Agregar-Resultado 'NSSM' 'OK' "Fuera del PATH, encontrado en $porRuta  ->  pase:  -RutaNssm `"$porRuta`""
+        }
+    } else {
+        $detalle = "Fuera del PATH. El servicio '$($porServicio.Servicio)' lo usa desde $($porServicio.Ruta)"
+        $detalle += "  ->  pase:  -RutaNssm `"$($porServicio.Ruta)`""
+        Agregar-Resultado 'NSSM' 'OK' $detalle
+    }
 } else {
-    Agregar-Resultado 'NSSM' 'OK' $rutaNssmResuelta
+    Agregar-Resultado 'NSSM' 'OK' "En el PATH: $rutaNssmResuelta"
 }
 
 # ------------------------------------------------------------
 # 5. Cliente de MySQL
 # ------------------------------------------------------------
+# En esta VM MySQL esta instalado como servicio pero su carpeta bin no
+# esta en el PATH, asi que no basta con mirar el PATH: se busca tambien
+# bajo "C:\Program Files\MySQL\*\bin". preparar-base-datos.ps1 y
+# respaldar.ps1 si exigen que esten en el PATH, de modo que lo que importa
+# es dejar escrita la carpeta exacta que hay que agregar.
+$carpetasBinMysql = @()
+
 foreach ($herramienta in @('mysql.exe', 'mysqldump.exe')) {
     $ruta = Buscar-Ejecutable -Nombre $herramienta
-    if ($null -eq $ruta) {
-        $mensaje = "No esta en el PATH. Suele estar en C:\Program Files\MySQL\MySQL Server 8.0\bin. "
-        $mensaje += 'Agregue esa carpeta al PATH del sistema.'
+
+    if ($null -ne $ruta) {
+        Agregar-Resultado $herramienta 'OK' "En el PATH: $ruta"
+        continue
+    }
+
+    $fuera = Buscar-FueraDelPath -Patrones @(
+        "C:\Program Files\MySQL\*\bin\$herramienta",
+        "C:\Program Files (x86)\MySQL\*\bin\$herramienta",
+        "C:\xampp\mysql\bin\$herramienta",
+        "C:\MariaDB*\bin\$herramienta"
+    )
+
+    if ($null -eq $fuera) {
+        $mensaje = 'No esta en el PATH ni en las rutas habituales. Localicelo con:  '
+        $mensaje += "Get-ChildItem 'C:\Program Files' -Filter $herramienta -Recurse -ErrorAction SilentlyContinue"
         Agregar-Resultado $herramienta 'FALTA' $mensaje
     } else {
-        Agregar-Resultado $herramienta 'OK' $ruta
+        $carpetaBin = Split-Path -Parent $fuera
+        $carpetasBinMysql += $carpetaBin
+        $mensaje = "Fuera del PATH, encontrado en $fuera. "
+        $mensaje += 'preparar-base-datos.ps1 y respaldar.ps1 lo necesitan en el PATH.'
+        Agregar-Resultado $herramienta 'AVISO' $mensaje
     }
+}
+
+if ($carpetasBinMysql.Count -gt 0) {
+    $carpeta = ($carpetasBinMysql | Sort-Object -Unique)[0]
+    $mensaje = "Agregue esta carpeta al PATH de la sesion antes de ejecutar los scripts de base de datos:  "
+    $mensaje += "`$env:Path += ';$carpeta'"
+    Agregar-Resultado 'PATH de MySQL' 'AVISO' $mensaje
 }
 
 # ------------------------------------------------------------

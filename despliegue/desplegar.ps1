@@ -26,8 +26,9 @@
     escribe en HKLM).
 
 .PARAMETER RutaHtdocs
-    Carpeta htdocs de Apache. Obligatoria: depende de la instalacion.
-    Ejemplos: C:\Apache24\htdocs, C:\xampp\htdocs
+    Carpeta htdocs de Apache. Obligatoria, y sin valor por defecto a
+    proposito: publicar en la carpeta equivocada sobreescribiria otro
+    sistema. En esta VM es C:\Apache24\htdocs.
 
 .PARAMETER RutaDatos
     Carpeta raiz de datos del sistema en la VM.
@@ -63,7 +64,7 @@ param(
     [string] $RutaDatos = 'C:\munidata',
     [string] $RutaPublicaFrontend = 'munipalmares\wp-munidata',
     [string] $NombreServicio = 'MuniData-API',
-    [int]    $Puerto = 3000,
+    [int]    $Puerto = 3100,
     [string] $RutaNssm = '',
     [switch] $OmitirVerificacion,
     [switch] $Simular
@@ -178,6 +179,106 @@ function Invocar-Comando {
     }
 }
 
+# Archivo que marca una carpeta como publicada por este sistema. Sin el,
+# los scripts se niegan a borrar nada.
+$NOMBRE_MARCADOR = '.munidata-despliegue'
+
+function Confirmar-CarpetaDestinoPropia {
+    <#
+        Se niega a continuar si la carpeta de publicacion ya tiene
+        contenido que este sistema no puso.
+
+        Hace falta porque en la VM Apache sirve WordPress y varios otros
+        sistemas desde el mismo htdocs. Un -RutaHtdocs mal escrito, o un
+        -RutaPublicaFrontend equivocado, apuntaria a la carpeta de otro
+        sistema, y el reemplazo limpio del paso 7 la borraria entera. El
+        respaldo previo no alcanzaria como consuelo: el otro sistema
+        quedaria caido hasta que alguien lo notara.
+
+        La regla es simple: solo se borra lo que lleva nuestro marcador.
+        Una carpeta inexistente o vacia tambien es segura, porque no hay
+        nada que destruir.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $Ruta,
+        [switch] $Simulacion
+    )
+
+    if (-not (Test-Path -LiteralPath $Ruta)) {
+        Escribir-Detalle "No existe todavia; se creara: $Ruta"
+        return
+    }
+
+    # -Force para contar tambien los archivos ocultos: una carpeta con
+    # solo un .htaccess no esta vacia.
+    $contenido = @(Get-ChildItem -LiteralPath $Ruta -Force -ErrorAction SilentlyContinue)
+    if ($contenido.Count -eq 0) {
+        Escribir-Detalle "Existe y esta vacia; se puede publicar: $Ruta"
+        return
+    }
+
+    if (Test-Path -LiteralPath (Join-Path $Ruta $NOMBRE_MARCADOR)) {
+        Escribir-Detalle ("Publicada por este sistema ({0} elementos, marcador presente)." -f $contenido.Count)
+        return
+    }
+
+    $mensaje = @"
+La carpeta de destino ya tiene contenido y NO lleva el marcador de este sistema:
+
+    $Ruta
+
+Contiene $($contenido.Count) elemento(s) y no se encontro '$NOMBRE_MARCADOR'.
+Eso significa que la publico algo que no es Muni Data, muy probablemente
+WordPress u otro de los sistemas que conviven en este Apache.
+
+No se toco nada.
+
+Que hacer:
+  - Si se equivoco de ruta, repita con el valor correcto de -RutaHtdocs
+    o de -RutaPublicaFrontend.
+  - Si esa carpeta de verdad es de Muni Data (por ejemplo porque se
+    publico a mano antes de usar estos scripts), revise su contenido y
+    cree el marcador para autorizar el reemplazo:
+
+        Set-Content -LiteralPath "$(Join-Path $Ruta $NOMBRE_MARCADOR)" -Value 'autorizado a mano'
+
+    Despues vuelva a ejecutar este script.
+"@
+
+    if ($Simulacion) {
+        Write-Host ''
+        Write-Host $mensaje -ForegroundColor Yellow
+        Write-Host '[SIMULACION] En una ejecucion real el despliegue se detendria aqui.' -ForegroundColor Yellow
+        return
+    }
+
+    throw $mensaje
+}
+
+function Nuevo-Marcador {
+    <#
+        Deja el marcador en la carpeta recien publicada.
+
+        Se escribe inmediatamente despues de copiar el frontend y no al
+        final del despliegue a proposito: en ese momento el contenido de
+        la carpeta ya es nuestro, y eso es justo lo que el marcador
+        afirma. Si se escribiera al final y el servicio no arrancara, la
+        siguiente ejecucion encontraria una carpeta con nuestros archivos
+        pero sin marcador, y se negaria a continuar sin motivo.
+    #>
+    param([Parameter(Mandatory = $true)][string] $Ruta)
+
+    $contenido = @(
+        'Carpeta publicada por despliegue/desplegar.ps1 (Muni Data).',
+        'Su presencia autoriza a los scripts a reemplazar el contenido de esta carpeta.',
+        'NO lo borre: sin el, desplegar.ps1 y revertir.ps1 se negaran a publicar aqui.',
+        '',
+        ("Ultimo despliegue: {0}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
+    ) -join "`r`n"
+
+    Set-Content -LiteralPath (Join-Path $Ruta $NOMBRE_MARCADOR) -Value $contenido -Encoding UTF8
+}
+
 function Nuevo-SecretoBase64 {
     <#
         64 bytes de aleatoriedad criptografica en base64. Se usa
@@ -227,11 +328,14 @@ Write-Host '============================================================'
 if ($RutaHtdocs -eq '') {
     Write-Host ''
     Write-Host 'ERROR: falta -RutaHtdocs.' -ForegroundColor Red
-    Write-Host '       Es la carpeta htdocs de Apache en esta VM, y no tiene un valor' -ForegroundColor Red
-    Write-Host '       fijo porque depende de como se instalo. Para averiguarla, busque' -ForegroundColor Red
-    Write-Host '       DocumentRoot en httpd.conf. Ejemplos habituales:' -ForegroundColor Red
+    Write-Host '       Es la carpeta htdocs de Apache. No tiene valor por defecto a' -ForegroundColor Red
+    Write-Host '       proposito: publicar en la carpeta equivocada sobreescribiria otro' -ForegroundColor Red
+    Write-Host '       sistema de la VM.' -ForegroundColor Red
+    Write-Host '' -ForegroundColor Red
+    Write-Host '       En esta VM, Apache esta en C:\Apache24, asi que use:' -ForegroundColor Red
     Write-Host '           -RutaHtdocs "C:\Apache24\htdocs"' -ForegroundColor Red
-    Write-Host '           -RutaHtdocs "C:\xampp\htdocs"' -ForegroundColor Red
+    Write-Host '' -ForegroundColor Red
+    Write-Host '       Para confirmarlo, busque DocumentRoot en C:\Apache24\conf\httpd.conf' -ForegroundColor Red
     exit 1
 }
 
@@ -278,7 +382,16 @@ try {
     }
 
     # --------------------------------------------------------
-    # 1. Carpetas de datos
+    # 1. Carpeta de destino del frontend
+    # --------------------------------------------------------
+    # Va antes de cualquier otra cosa: si la carpeta es de otro sistema,
+    # el despliegue debe abortar sin haber creado carpetas, compilado ni
+    # tocado el servicio.
+    Escribir-Paso 'Comprobando la carpeta de destino del frontend'
+    Confirmar-CarpetaDestinoPropia -Ruta $rutaFrontendDestino -Simulacion:$Simular
+
+    # --------------------------------------------------------
+    # 2. Carpetas de datos
     # --------------------------------------------------------
     Escribir-Paso 'Carpetas de datos'
     foreach ($carpeta in @($RutaDatos, $rutaConfig, $rutaBackendDestino, $rutaAlmacenamiento, $rutaRespaldos, $rutaRegistros)) {
@@ -293,7 +406,7 @@ try {
     }
 
     # --------------------------------------------------------
-    # 2. Archivo de entorno
+    # 3. Archivo de entorno
     # --------------------------------------------------------
     Escribir-Paso 'Archivo de variables de entorno'
 
@@ -347,7 +460,7 @@ try {
     }
 
     # --------------------------------------------------------
-    # 3. Validacion del archivo de entorno
+    # 4. Validacion del archivo de entorno
     # --------------------------------------------------------
     Escribir-Paso 'Validando las variables de entorno'
 
@@ -416,7 +529,7 @@ try {
     }
 
     # --------------------------------------------------------
-    # 4. Respaldo de lo que hay publicado
+    # 5. Respaldo de lo que hay publicado
     # --------------------------------------------------------
     Escribir-Paso 'Respaldo previo'
 
@@ -447,7 +560,12 @@ try {
         if (Test-Path -LiteralPath $rutaFrontendDestino) {
             $destino = Join-Path $rutaRespaldoActual 'frontend'
             $null = New-Item -ItemType Directory -Path $destino -Force
-            Copy-Item -Path (Join-Path $rutaFrontendDestino '*') -Destination $destino -Recurse -Force
+            # Get-ChildItem -Force en vez de un comodin: el comodin omite
+            # los archivos que empiezan por punto, y sin el .htaccess en
+            # el respaldo una reversion dejaria el SPA devolviendo 404 en
+            # las rutas profundas.
+            Get-ChildItem -LiteralPath $rutaFrontendDestino -Force |
+                Copy-Item -Destination $destino -Recurse -Force
             Escribir-Detalle "frontend -> $destino"
         }
 
@@ -457,7 +575,7 @@ try {
     }
 
     # --------------------------------------------------------
-    # 5. Compilacion del backend
+    # 6. Compilacion del backend
     # --------------------------------------------------------
     Escribir-Paso 'Compilando el backend'
     if ($Simular) {
@@ -473,7 +591,7 @@ try {
     }
 
     # --------------------------------------------------------
-    # 6. Publicacion del backend
+    # 7. Publicacion del backend
     # --------------------------------------------------------
     Escribir-Paso 'Publicando el backend'
     if ($Simular) {
@@ -498,13 +616,14 @@ try {
     }
 
     # --------------------------------------------------------
-    # 7. Compilacion y publicacion del frontend
+    # 8. Compilacion y publicacion del frontend
     # --------------------------------------------------------
     Escribir-Paso 'Compilando y publicando el frontend'
     if ($Simular) {
         Escribir-Simulado "npm ci        en $rutaFrontendRepo"
         Escribir-Simulado "npm run build en $rutaFrontendRepo  (lee frontend\.env.production)"
-        Escribir-Simulado "reemplazaria el contenido de $rutaFrontendDestino"
+        Escribir-Simulado "reemplazaria el contenido de $rutaFrontendDestino, pero SOLO si lleva el marcador $NOMBRE_MARCADOR"
+        Escribir-Simulado "y escribiria ese marcador tras publicar"
     } else {
         Invocar-Comando -Programa $rutaNpm -Argumentos @('ci') -DirectorioTrabajo $rutaFrontendRepo -Descripcion 'npm ci del frontend'
         Invocar-Comando -Programa $rutaNpm -Argumentos @('run', 'build') -DirectorioTrabajo $rutaFrontendRepo -Descripcion 'vite build'
@@ -521,22 +640,38 @@ try {
 
         if (-not (Test-Path -LiteralPath $rutaFrontendDestino)) {
             $null = New-Item -ItemType Directory -Path $rutaFrontendDestino -Force
-        } else {
+            Escribir-Detalle 'Carpeta de destino creada.'
+        } elseif (Test-Path -LiteralPath (Join-Path $rutaFrontendDestino $NOMBRE_MARCADOR)) {
             # Reemplazo limpio: si quedaran assets de la version anterior,
             # convivirian con los nuevos y la carpeta creceria sin fin.
-            # El respaldo del paso 4 ya se hizo.
+            # El respaldo del paso 5 ya se hizo.
+            #
+            # Solo se llega aqui con el marcador presente, es decir con la
+            # certeza de que lo que se borra lo publico este sistema. La
+            # comprobacion del paso 1 ya aborto en cualquier otro caso;
+            # esta segunda condicion es la red de seguridad para que un
+            # cambio futuro en el orden de los pasos no reintroduzca un
+            # borrado a ciegas.
             Get-ChildItem -LiteralPath $rutaFrontendDestino -Force | Remove-Item -Recurse -Force
+            Escribir-Detalle 'Contenido anterior de Muni Data eliminado (marcador presente).'
+        } else {
+            # Carpeta existente y vacia: no hay nada que borrar.
+            Escribir-Detalle 'Carpeta de destino vacia; se publica directamente.'
         }
 
         Copy-Item -Path (Join-Path $distFrontend '*') -Destination $rutaFrontendDestino -Recurse -Force
         # Copy-Item con comodin omite los archivos que empiezan por punto;
         # el .htaccess se copia aparte por eso.
         Copy-Item -LiteralPath (Join-Path $distFrontend '.htaccess') -Destination $rutaFrontendDestino -Force
+
+        Nuevo-Marcador -Ruta $rutaFrontendDestino
+
         Escribir-Detalle "Publicado en $rutaFrontendDestino"
+        Escribir-Detalle "Marcador $NOMBRE_MARCADOR escrito."
     }
 
     # --------------------------------------------------------
-    # 8. Servicio de Windows
+    # 9. Servicio de Windows
     # --------------------------------------------------------
     Escribir-Paso "Servicio de Windows $NombreServicio"
 
@@ -602,7 +737,7 @@ try {
     }
 
     # --------------------------------------------------------
-    # 9. Variables de entorno del servicio
+    # 10. Variables de entorno del servicio
     # --------------------------------------------------------
     Escribir-Paso 'Variables de entorno del servicio'
 
@@ -644,7 +779,7 @@ try {
     }
 
     # --------------------------------------------------------
-    # 10. Arranque
+    # 11. Arranque
     # --------------------------------------------------------
     Escribir-Paso 'Arrancando el servicio'
     if ($Simular) {
@@ -679,7 +814,7 @@ try {
     }
 
     # --------------------------------------------------------
-    # 11. Verificacion
+    # 12. Verificacion
     # --------------------------------------------------------
     $scriptVerificacion = Join-Path $rutaDespliegue 'verificar-despliegue.ps1'
 
@@ -707,7 +842,7 @@ try {
         Write-Host ''
         Write-Host 'Siguientes pasos:' -ForegroundColor Green
         Write-Host '  1. Incluir despliegue\apache\munidata.conf en la configuracion de Apache,' -ForegroundColor Green
-        Write-Host '     validar con "httpd -t" y reiniciar Apache (ver DESPLIEGUE.md, seccion 3).' -ForegroundColor Green
+        Write-Host '     validar con "httpd -t" y reiniciar Apache (ver DESPLIEGUE.md, seccion 4).' -ForegroundColor Green
         Write-Host '  2. Crear el administrador inicial:' -ForegroundColor Green
         Write-Host '     powershell -ExecutionPolicy Bypass -File .\despliegue\crear-administrador.ps1' -ForegroundColor Green
         Write-Host '  3. Programar los respaldos:' -ForegroundColor Green

@@ -39,7 +39,7 @@
 [CmdletBinding()]
 param(
     [string] $UrlPublica = '',
-    [int]    $Puerto = 3000,
+    [int]    $Puerto = 3100,
     [string] $NombreServicio = 'MuniData-API',
     [string] $RutaProfunda = 'documentos',
     [switch] $Simular
@@ -356,5 +356,5 @@ if ($fallos.Count -gt 0) {
 
 Write-Host ''
 Write-Host 'Todas las comprobaciones automaticas pasaron.' -ForegroundColor Green
-Write-Host 'Haga ahora la prueba de humo manual de DESPLIEGUE.md, seccion 8.' -ForegroundColor Green
+Write-Host 'Haga ahora la prueba de humo manual de DESPLIEGUE.md, seccion 9.' -ForegroundColor Green
 exit 0
