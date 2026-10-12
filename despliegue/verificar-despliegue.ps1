@@ -26,6 +26,11 @@
 .PARAMETER NombreServicio
     Nombre del servicio de Windows.
 
+.PARAMETER RutaDatos
+    Carpeta raiz de datos del sistema en la VM. De ella se deriva la
+    carpeta de registros, cuya cola se muestra cuando el puerto o /salud
+    fallan.
+
 .PARAMETER RutaProfunda
     Ruta interna del SPA que se usa para comprobar el .htaccess.
 
@@ -41,6 +46,7 @@ param(
     [string] $UrlPublica = '',
     [int]    $Puerto = 3100,
     [string] $NombreServicio = 'MuniData-API',
+    [string] $RutaDatos = 'C:\munidata',
     [string] $RutaProfunda = 'documentos',
     [switch] $Simular
 )
@@ -49,6 +55,10 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $resultados = New-Object System.Collections.ArrayList
+
+$rutaRegistros    = Join-Path $RutaDatos 'registros'
+$archivoLogError  = Join-Path $rutaRegistros 'api-error.log'
+$archivoLogSalida = Join-Path $rutaRegistros 'api-salida.log'
 
 function Agregar-Resultado {
     param(
@@ -63,6 +73,110 @@ function Agregar-Resultado {
         Detalle      = $Detalle
         QueRevisar   = $QueRevisar
     })
+}
+
+function Obtener-InicioDeLaAplicacion {
+    <#
+        Devuelve la hora a la que arranco el proceso de la aplicacion, o
+        $null si no hay ninguno.
+
+        Con NSSM el proceso del servicio es nssm.exe y node.exe es su
+        hijo, de modo que la hora que interesa es la del hijo: es cuando
+        empezo ESTE intento. Sirve para no confundir en el log los
+        errores de hoy con los que dejo un despliegue anterior, porque
+        api-error.log es acumulativo.
+    #>
+    param([Parameter(Mandatory = $true)][string] $Nombre)
+
+    try {
+        $filtro = "Name='{0}'" -f $Nombre.Replace("'", "''")
+        $servicio = Get-CimInstance -ClassName Win32_Service -Filter $filtro -ErrorAction Stop
+        if ($null -eq $servicio -or $null -eq $servicio.ProcessId -or [int]$servicio.ProcessId -le 0) {
+            return $null
+        }
+        $hijos = @(Get-CimInstance -ClassName Win32_Process -Filter ("ParentProcessId={0}" -f [int]$servicio.ProcessId) -ErrorAction Stop)
+        if ($hijos.Count -gt 0) {
+            # El ultimo en arrancar es el intento vigente.
+            return (@($hijos | Sort-Object -Property CreationDate -Descending)[0]).CreationDate
+        }
+        $proceso = Get-CimInstance -ClassName Win32_Process -Filter ("ProcessId={0}" -f [int]$servicio.ProcessId) -ErrorAction Stop
+        if ($null -ne $proceso) { return $proceso.CreationDate }
+        return $null
+    } catch {
+        return $null
+    }
+}
+
+function Mostrar-ColaRegistro {
+    <#
+        Muestra las ultimas lineas de un log del servicio, indicando la
+        hora de arranque de la aplicacion para que no se confundan las
+        lineas de este intento con las de intentos anteriores.
+
+        Se abre con FileStream y comparticion ReadWrite|Delete, no con
+        Get-Content, porque NSSM mantiene el archivo abierto para
+        escritura: con una comparticion mas estricta la lectura fallaria
+        justo cuando mas falta hace.
+
+        Los valores sensibles se tapan por patron. Este script no lee el
+        archivo de entorno a proposito: es una herramienta de
+        diagnostico que se debe poder ejecutar sin acceso a los secretos.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $Ruta,
+        [int] $Lineas = 30,
+        $HoraArranque = $null
+    )
+
+    Write-Host ''
+    Write-Host ("--- {0} (ultimas {1} lineas) ---" -f $Ruta, $Lineas) -ForegroundColor Yellow
+
+    if (-not (Test-Path -LiteralPath $Ruta)) {
+        Write-Host '    (no existe: el servicio nunca escribio en el)' -ForegroundColor Yellow
+        return
+    }
+
+    if ($null -eq $HoraArranque) {
+        Write-Host '    (la aplicacion no esta corriendo, asi que estas lineas son de intentos anteriores)' -ForegroundColor Yellow
+    } else {
+        Write-Host ("    (la aplicacion arranco a las {0}; lo anterior a esa hora es de intentos previos)" -f ([datetime]$HoraArranque).ToString('yyyy-MM-dd HH:mm:ss')) -ForegroundColor Yellow
+    }
+
+    $texto = ''
+    try {
+        $comparticion = ([System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete)
+        $flujo = New-Object System.IO.FileStream($Ruta, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, $comparticion)
+        try {
+            $lector = New-Object System.IO.StreamReader($flujo, [System.Text.Encoding]::UTF8, $true)
+            try {
+                $texto = $lector.ReadToEnd()
+            } finally {
+                $lector.Dispose()
+            }
+        } finally {
+            $flujo.Dispose()
+        }
+    } catch {
+        Write-Host ("    (no se pudo leer: {0})" -f $_.Exception.Message) -ForegroundColor Yellow
+        return
+    }
+
+    $texto = [regex]::Replace(
+        $texto,
+        '(?i)((?:BD_CONTRASENA|SMTP_PASS|JWT_[A-Z_]*SECRET|password|contrasena)\s*[=:]\s*)\S+',
+        '${1}***')
+
+    $todas = @($texto -split "`r?`n" | Where-Object { $_.Trim() -ne '' })
+    if ($todas.Count -eq 0) {
+        Write-Host '    (vacio)' -ForegroundColor Yellow
+        return
+    }
+
+    $desde = 0
+    if ($todas.Count -gt $Lineas) { $desde = $todas.Count - $Lineas }
+    foreach ($linea in $todas[$desde..($todas.Count - 1)]) {
+        Write-Host ("    {0}" -f $linea)
+    }
 }
 
 function Permitir-CertificadoNoConfiable {
@@ -196,6 +310,12 @@ if ($Simular) {
     Write-Host '[SIMULACION]   7. POST <URL publica>/api/auth/login con credenciales invalidas devuelve 401,' -ForegroundColor Yellow
     Write-Host '[SIMULACION]      y NO 404 ni 502, que indicarian proxy mal cableado.' -ForegroundColor Yellow
     Write-Host ''
+    Write-Host '[SIMULACION] Si fallaran la 2 o la 3, mostraria ademas las ultimas 30 lineas de' -ForegroundColor Yellow
+    Write-Host ("[SIMULACION]   {0}" -f $archivoLogError) -ForegroundColor Yellow
+    Write-Host ("[SIMULACION]   {0}" -f $archivoLogSalida) -ForegroundColor Yellow
+    Write-Host '[SIMULACION] con la hora de arranque de la aplicacion por delante, para no confundir' -ForegroundColor Yellow
+    Write-Host '[SIMULACION] estos errores con los que dejo un intento anterior, y tapando los secretos.' -ForegroundColor Yellow
+    Write-Host ''
     Write-Host '[SIMULACION] Ninguna comprobacion escribe datos. Terminado sin cambios.' -ForegroundColor Green
     exit 0
 }
@@ -211,15 +331,21 @@ if ($null -eq $servicio) {
 } elseif ($servicio.Status -eq 'Running') {
     Agregar-Resultado "Servicio $NombreServicio" 'OK' 'Running.'
 } else {
-    Agregar-Resultado "Servicio $NombreServicio" 'FALLO' "Estado: $($servicio.Status)." 'Arranquelo con "nssm start MuniData-API" y lea C:\munidata\registros\api-error.log'
+    Agregar-Resultado "Servicio $NombreServicio" 'FALLO' "Estado: $($servicio.Status)." ("Arranquelo con `"nssm start $NombreServicio`" y lea $archivoLogError")
 }
+
+# La cola del log se muestra una sola vez, al final, aunque fallen varias
+# comprobaciones: las tres primeras tienen la misma causa y repetir el
+# volcado solo enterraria la tabla de resultados.
+$mostrarColaDelLog = $false
 
 # ------------------------------------------------------------
 # 2. Puerto, y solo en loopback
 # ------------------------------------------------------------
 $conexiones = @(Get-NetTCPConnection -LocalPort $Puerto -State Listen -ErrorAction SilentlyContinue)
 if ($conexiones.Count -eq 0) {
-    Agregar-Resultado "Puerto $Puerto" 'FALLO' 'Nadie escucha.' 'El servicio no arranco. Lea C:\munidata\registros\api-error.log'
+    $mostrarColaDelLog = $true
+    Agregar-Resultado "Puerto $Puerto" 'FALLO' 'Nadie escucha.' ("El servicio no arranco. Lea $archivoLogError (su cola se imprime en esta misma salida)")
 } else {
     $direcciones = @($conexiones | ForEach-Object { $_.LocalAddress } | Sort-Object -Unique)
     $expuestas = @($direcciones | Where-Object { $_ -ne '127.0.0.1' -and $_ -ne '::1' })
@@ -238,10 +364,13 @@ $respuesta = Invocar-Web -Url ("http://127.0.0.1:{0}/salud" -f $Puerto)
 if ($respuesta.Codigo -eq 200 -and $respuesta.Contenido -match '"estado"\s*:\s*"ok"') {
     Agregar-Resultado 'GET /salud (directo)' 'OK' 'estado ok, base de datos ok.'
 } elseif ($respuesta.Codigo -eq 503) {
+    $mostrarColaDelLog = $true
     Agregar-Resultado 'GET /salud (directo)' 'FALLO' '503: la API responde pero no alcanza la base de datos.' 'Revise BD_* en .env.produccion y que el servicio de MySQL este corriendo.'
 } elseif ($respuesta.Codigo -eq 0) {
-    Agregar-Resultado 'GET /salud (directo)' 'FALLO' ("Sin respuesta: " + $respuesta.Error) 'El proceso no esta atendiendo. Lea C:\munidata\registros\api-error.log'
+    $mostrarColaDelLog = $true
+    Agregar-Resultado 'GET /salud (directo)' 'FALLO' ("Sin respuesta: " + $respuesta.Error) ("El proceso no esta atendiendo. Lea $archivoLogError (su cola se imprime en esta misma salida)")
 } else {
+    $mostrarColaDelLog = $true
     Agregar-Resultado 'GET /salud (directo)' 'FALLO' ("Codigo " + $respuesta.Codigo) 'Respuesta inesperada; revise el log del servicio.'
 }
 
@@ -340,6 +469,16 @@ $omitidas = @($resultados | Where-Object { $_.Estado -eq 'OMITIDA' })
 
 Write-Host '------------------------------------------------------------'
 Write-Host ("Comprobaciones: {0} total, {1} con fallo, {2} omitidas." -f $resultados.Count, $fallos.Count, $omitidas.Count)
+
+# Cuando lo que falla es el puerto o la API directa, la causa esta
+# siempre en el log del servicio: se muestra aqui para no obligar a ir a
+# buscarlo, con la hora de arranque por delante para no confundir estos
+# errores con los que dejo un intento anterior.
+if ($mostrarColaDelLog) {
+    $horaArranque = Obtener-InicioDeLaAplicacion -Nombre $NombreServicio
+    Mostrar-ColaRegistro -Ruta $archivoLogError  -Lineas 30 -HoraArranque $horaArranque
+    Mostrar-ColaRegistro -Ruta $archivoLogSalida -Lineas 30 -HoraArranque $horaArranque
+}
 
 if ($fallos.Count -gt 0) {
     Write-Host ''

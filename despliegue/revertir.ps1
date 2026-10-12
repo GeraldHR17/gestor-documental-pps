@@ -160,6 +160,73 @@ Que hacer:
     throw $mensaje
 }
 
+function Mostrar-ColaDelLog {
+    <#
+        Muestra las ultimas lineas que el log recibio a partir de un
+        desplazamiento en bytes, con los secretos tapados.
+
+        Se abre con FileStream y comparticion ReadWrite|Delete, no con
+        Get-Content, porque NSSM mantiene el archivo abierto para
+        escritura: con una comparticion mas estricta la lectura fallaria
+        justo cuando mas falta hace.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $Ruta,
+        [long] $DesdeByte = 0,
+        [int] $Lineas = 30
+    )
+
+    if (-not (Test-Path -LiteralPath $Ruta)) {
+        Write-Host '    (el log no existe: el servicio no llego a escribir nada)' -ForegroundColor Yellow
+        return
+    }
+
+    $texto = ''
+    $rotado = $false
+    try {
+        $comparticion = ([System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete)
+        $flujo = New-Object System.IO.FileStream($Ruta, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, $comparticion)
+        try {
+            $inicio = $DesdeByte
+            if ($flujo.Length -lt $DesdeByte) { $rotado = $true; $inicio = [long] 0 }
+            $null = $flujo.Seek($inicio, [System.IO.SeekOrigin]::Begin)
+            $lector = New-Object System.IO.StreamReader($flujo, [System.Text.Encoding]::UTF8, $false)
+            try {
+                $texto = $lector.ReadToEnd()
+            } finally {
+                $lector.Dispose()
+            }
+        } finally {
+            $flujo.Dispose()
+        }
+    } catch {
+        Write-Host ("    (no se pudo leer el log: {0})" -f $_.Exception.Message) -ForegroundColor Yellow
+        return
+    }
+
+    if ($rotado) {
+        Write-Host '    (el log roto o se vacio desde el arranque; se muestra desde el principio)' -ForegroundColor Yellow
+    }
+
+    $texto = [regex]::Replace(
+        $texto,
+        '(?i)((?:BD_CONTRASENA|SMTP_PASS|JWT_[A-Z_]*SECRET|password|contrasena)\s*[=:]\s*)\S+',
+        '${1}***')
+
+    $todas = @($texto -split "`r?`n" | Where-Object { $_.Trim() -ne '' })
+    if ($todas.Count -eq 0) {
+        Write-Host '    (ni una linea nueva desde el arranque: lo que hay en el log es de antes)' -ForegroundColor Yellow
+        return
+    }
+
+    $desde = 0
+    if ($todas.Count -gt $Lineas) { $desde = $todas.Count - $Lineas }
+    Write-Host ("    --- {0} (solo lo escrito en este intento) ---" -f $Ruta) -ForegroundColor Yellow
+    foreach ($linea in $todas[$desde..($todas.Count - 1)]) {
+        Write-Host ("    {0}" -f $linea)
+    }
+}
+
 function Resolver-Ejecutable {
     param(
         [Parameter(Mandatory = $true)][string] $Nombre,
@@ -261,7 +328,8 @@ try {
         Confirmar-CarpetaDestinoPropia -Ruta $rutaFrontendDestino -Simulacion
 
         Escribir-Paso 'Plan de reversion'
-        Escribir-Simulado "detendria el servicio $NombreServicio"
+        Escribir-Simulado "detendria el servicio $NombreServicio y confirmaria con Get-Service que quedo detenido"
+        Escribir-Simulado 'antes de tocar un solo archivo (si no se detiene, aborta sin restaurar nada)'
         if ($hayBackend) {
             Escribir-Simulado "reemplazaria $rutaBackendDestino\dist desde $origenBackend"
             Escribir-Simulado "ejecutaria npm ci --omit=dev en $rutaBackendDestino"
@@ -273,7 +341,9 @@ try {
         } else {
             Escribir-Simulado 'este respaldo no trae frontend; no se tocaria'
         }
-        Escribir-Simulado "arrancaria el servicio y ejecutaria verificar-despliegue.ps1"
+        Escribir-Simulado "arrancaria el servicio y esperaria hasta 60 s a que el puerto $Puerto escuche"
+        Escribir-Simulado 'y si no escuchara, mostraria solo las lineas que api-error.log recibiera en ese intento'
+        Escribir-Simulado 'despues ejecutaria verificar-despliegue.ps1'
         Escribir-Simulado 'NO restauraria la base de datos (se imprime el comando para hacerlo a mano)'
         Write-Host ''
         Write-Host '[SIMULACION] Terminado sin cambios.' -ForegroundColor Green
@@ -303,7 +373,35 @@ try {
         Escribir-Detalle 'El servicio no existe; se continua con la restauracion de archivos.'
     } elseif ($servicio.Status -eq 'Running') {
         & $rutaNssmResuelta 'stop' $NombreServicio | Out-Null
-        Escribir-Detalle 'Detenido.'
+        $codigoParada = $LASTEXITCODE
+
+        # No basta con lanzar el comando: hay que confirmar con
+        # Get-Service que el proceso solto los archivos. Si siguiera
+        # corriendo, el Remove-Item del dist de abajo fallaria por
+        # archivo en uso, y la reversion se quedaria a medias con el
+        # backend antiguo ya borrado en parte.
+        #
+        # El estado se consulta con Get-Service y no con "nssm status":
+        # nssm es una aplicacion Unicode y su salida, al capturarla,
+        # llega con un NUL entre cada caracter, de modo que compararla
+        # con 'SERVICE_STOPPED' no coincidiria nunca.
+        $limiteParada = (Get-Date).AddSeconds(30)
+        $detenido = $false
+        while ((Get-Date) -lt $limiteParada) {
+            $actual = Get-Service -Name $NombreServicio -ErrorAction SilentlyContinue
+            if ($null -eq $actual -or $actual.Status -eq 'Stopped') { $detenido = $true; break }
+            Start-Sleep -Seconds 2
+        }
+
+        if (-not $detenido) {
+            $estadoFinal = (Get-Service -Name $NombreServicio -ErrorAction SilentlyContinue)
+            $texto = 'desconocido'
+            if ($null -ne $estadoFinal) { $texto = [string] $estadoFinal.Status }
+            throw ("El servicio no se detuvo en 30 segundos (estado: {0}, nssm stop devolvio {1}). " -f $texto, $codigoParada) +
+                  'No se restaura nada: con el proceso en pie, reemplazar dist dejaria la instalacion a medias. ' +
+                  ("Detengalo a mano con: Stop-Service {0} -Force" -f $NombreServicio)
+        }
+        Escribir-Detalle 'Detenido y confirmado por Get-Service.'
     } else {
         Escribir-Detalle "Ya estaba detenido (estado: $($servicio.Status))."
     }
@@ -391,22 +489,52 @@ try {
     # --------------------------------------------------------
     Escribir-Paso 'Arrancando el servicio'
     if ($null -ne (Get-Service -Name $NombreServicio -ErrorAction SilentlyContinue)) {
-        & $rutaNssmResuelta 'start' $NombreServicio | Out-Null
+        # Se anota el tamano del log antes de arrancar para poder mostrar
+        # despues solo lo que escriba este intento: api-error.log es
+        # acumulativo y conserva los errores que llevaron a revertir,
+        # que son justo los que no hay que volver a leer aqui.
+        $archivoLogError = Join-Path $RutaDatos 'registros\api-error.log'
+        $tamanoLogPrevio = [long] 0
+        if (Test-Path -LiteralPath $archivoLogError) {
+            try { $tamanoLogPrevio = [long] (Get-Item -LiteralPath $archivoLogError -Force).Length } catch { $tamanoLogPrevio = [long] 0 }
+        }
+        $instanteArranque = Get-Date
 
-        $limite = (Get-Date).AddSeconds(45)
+        & $rutaNssmResuelta 'start' $NombreServicio | Out-Null
+        $codigoArranque = $LASTEXITCODE
+        if ($codigoArranque -ne 0) {
+            Write-Host ("    AVISO: nssm start devolvio {0}." -f $codigoArranque) -ForegroundColor Yellow
+        }
+
+        # Se acepta 0.0.0.0 ademas de 127.0.0.1 porque un socket en
+        # 0.0.0.0 tambien atiende el loopback; que escuche SOLO en
+        # loopback lo juzga verificar-despliegue.ps1.
+        $limite = (Get-Date).AddSeconds(60)
         $escuchando = $false
-        while ((Get-Date) -lt $limite) {
-            if ($null -ne (Get-NetTCPConnection -LocalPort $Puerto -State Listen -ErrorAction SilentlyContinue)) {
-                $escuchando = $true
-                break
+        $direcciones = @()
+        while ($true) {
+            $conexiones = @(Get-NetTCPConnection -LocalPort $Puerto -State Listen -ErrorAction SilentlyContinue)
+            if ($conexiones.Count -gt 0) {
+                $direcciones = @($conexiones | ForEach-Object { [string] $_.LocalAddress } | Sort-Object -Unique)
+                $utiles = @($direcciones | Where-Object { $_ -eq '127.0.0.1' -or $_ -eq '0.0.0.0' -or $_ -eq '::' -or $_ -eq '::1' })
+                if ($utiles.Count -gt 0) { $escuchando = $true; break }
             }
+            if ((Get-Date) -ge $limite) { break }
             Start-Sleep -Seconds 2
         }
+
         if ($escuchando) {
-            Escribir-Detalle "Escuchando en el puerto $Puerto."
+            Escribir-Detalle ("Escuchando en el puerto {0} ({1})." -f $Puerto, ($direcciones -join ', '))
         } else {
-            Write-Host "    El servicio no empezo a escuchar en 45 segundos." -ForegroundColor Red
-            Write-Host ("    Revise: Get-Content '{0}' -Tail 40" -f (Join-Path $RutaDatos 'registros\api-error.log')) -ForegroundColor Red
+            Write-Host ''
+            Write-Host "    El servicio no empezo a escuchar en 60 segundos." -ForegroundColor Red
+            Write-Host ("    Arranque solicitado a las {0}; lo que sigue es posterior a esa hora." -f $instanteArranque.ToString('HH:mm:ss')) -ForegroundColor Red
+            $estadoAhora = Get-Service -Name $NombreServicio -ErrorAction SilentlyContinue
+            if ($null -ne $estadoAhora) {
+                Write-Host ("    Estado del servicio: {0}" -f $estadoAhora.Status) -ForegroundColor Red
+            }
+            Mostrar-ColaDelLog -Ruta $archivoLogError -DesdeByte $tamanoLogPrevio -Lineas 30
+            Write-Host ("    Log completo en: {0}" -f $archivoLogError) -ForegroundColor Red
         }
     } else {
         Escribir-Detalle 'No hay servicio que arrancar.'
@@ -417,7 +545,7 @@ try {
     # --------------------------------------------------------
     Escribir-Paso 'Verificacion'
     $scriptVerificacion = Join-Path $rutaDespliegue 'verificar-despliegue.ps1'
-    $argumentos = @('-ExecutionPolicy', 'Bypass', '-NoProfile', '-File', $scriptVerificacion, '-Puerto', $Puerto, '-NombreServicio', $NombreServicio)
+    $argumentos = @('-ExecutionPolicy', 'Bypass', '-NoProfile', '-File', $scriptVerificacion, '-Puerto', $Puerto, '-NombreServicio', $NombreServicio, '-RutaDatos', $RutaDatos)
     if ($UrlPublica -ne '') {
         $argumentos += @('-UrlPublica', $UrlPublica)
     }

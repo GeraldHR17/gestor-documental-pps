@@ -15,8 +15,11 @@
          alli solo las dependencias de produccion.
       5. Compila el frontend y lo publica en la carpeta de Apache.
       6. Registra o actualiza el servicio de Windows con NSSM.
-      7. Escribe las variables de entorno del servicio.
-      8. Arranca o reinicia el servicio.
+      7. Escribe las variables de entorno del servicio en el registro y
+         comprueba, releyendolo, que quedaron todas con su valor exacto.
+      8. Arranca o reinicia el servicio y espera a que el puerto escuche.
+         Si no escucha, muestra el estado, los reinicios y la cola de los
+         log de este intento, y termina con error.
       9. Ejecuta verificar-despliegue.ps1.
 
     Se puede volver a ejecutar para actualizar: los pasos son
@@ -329,6 +332,397 @@ function Leer-ArchivoEntorno {
         $variables[$nombre] = $valor
     }
     return $variables
+}
+
+# ------------------------------------------------------------
+# Lectura y escritura de AppEnvironmentExtra en el registro
+# ------------------------------------------------------------
+# Variables cuyo valor se puede imprimir sin riesgo en un diagnostico.
+# Cualquier otra se trata como secreta: de ella se nombra la variable,
+# nunca el contenido.
+$VARIABLES_PUBLICAS = @('NODE_ENV', 'PUERTO', 'HOST_ESCUCHA', 'BD_HOST', 'BD_PUERTO', 'BD_NOMBRE')
+
+# Margen de arranque del backend: abre el pool de MySQL, mapea las rutas
+# y registra los trabajos programados. 60 segundos con sondeos cada 2
+# cubren el arranque en frio de la VM con holgura.
+$SEGUNDOS_ESPERA_PUERTO = 60
+$SEGUNDOS_ENTRE_SONDEOS = 2
+
+function Obtener-TipoDeValor {
+    <#
+        Devuelve el tipo del valor del registro ('MultiString',
+        'String'...) o $null si ese valor no existe.
+
+        Importa el tipo y no solo el contenido: NSSM solo interpreta
+        AppEnvironmentExtra como lista de variables si es REG_MULTI_SZ.
+        Si quedara como REG_SZ, el servicio arrancaria sin ninguna
+        variable y el sintoma seria un fallo de conexion a la base de
+        datos, que no apunta a ningun sitio.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $Clave,
+        [Parameter(Mandatory = $true)][string] $Nombre
+    )
+
+    try {
+        $item = Get-Item -LiteralPath $Clave -ErrorAction Stop
+        if (@($item.GetValueNames()) -notcontains $Nombre) { return $null }
+        return [string] $item.GetValueKind($Nombre)
+    } catch {
+        return $null
+    }
+}
+
+function Obtener-EntradasDeEntorno {
+    <#
+        Devuelve siempre un [string[]] (vacio si el valor no existe) con
+        las entradas "NOMBRE=valor" guardadas en el registro.
+
+        Se lee del registro y NO de la salida de "nssm get": nssm es una
+        aplicacion Unicode y, cuando su salida se captura en una variable
+        en vez de ir a la consola, PowerShell recibe los bytes UTF-16 y
+        los decodifica de a uno, asi que "NODE_ENV=" llega como
+        "N\0O\0D\0E\0_\0E\0N\0V\0=\0". Comparar ese texto fallaba para
+        TODAS las variables aunque estuvieran perfectamente escritas, y
+        detenia el despliegue justo antes de arrancar el servicio.
+
+        El registro es ademas la fuente autentica: es de donde el
+        servicio toma estas variables.
+
+        OJO al usarla: PowerShell desenvuelve los arreglos vacios al
+        devolverlos, asi que cuando el valor no existe quien llama recibe
+        $null y no un arreglo. Hay que envolver la llamada en @() antes
+        de mirar .Count, que es justamente lo que rompia el script con
+        las salidas vacias de mysql.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $Clave,
+        [Parameter(Mandatory = $true)][string] $Nombre
+    )
+
+    try {
+        $propiedad = Get-ItemProperty -Path $Clave -Name $Nombre -ErrorAction Stop
+    } catch {
+        return [string[]] @()
+    }
+    if ($null -eq $propiedad) { return [string[]] @() }
+
+    $valor = $propiedad.$Nombre
+    if ($null -eq $valor) { return [string[]] @() }
+    return [string[]] @($valor | ForEach-Object { if ($null -eq $_) { '' } else { [string] $_ } })
+}
+
+function Comparar-EntradasDeEntorno {
+    <#
+        Compara lo que se queria escribir con lo que de verdad quedo en
+        el registro, por nombre Y por valor exacto, y distingue los dos
+        fallos posibles: la variable no se escribio, o se escribio con
+        otro valor.
+
+        De las variables sensibles solo se devuelve el nombre.
+    #>
+    param(
+        [Parameter(Mandatory = $true)] $Esperadas,
+        [string[]] $Escritas = @(),
+        [string[]] $Publicas = @()
+    )
+
+    $porNombre = @{}
+    foreach ($entrada in $Escritas) {
+        $texto = [string] $entrada
+        if ($texto -eq '') { continue }
+        # Se parte en el PRIMER '=' unicamente: los secretos en base64
+        # terminan en '=' y cualquier valor puede contener el signo.
+        $posicion = $texto.IndexOf('=')
+        if ($posicion -lt 1) { continue }
+        $porNombre[$texto.Substring(0, $posicion)] = $texto.Substring($posicion + 1)
+    }
+
+    $ausentes = @()
+    $distintas = @()
+    foreach ($nombre in $Esperadas.Keys) {
+        if (-not $porNombre.ContainsKey($nombre)) {
+            $ausentes += $nombre
+            continue
+        }
+        # -cne: comparacion exacta y sensible a mayusculas. Un valor que
+        # difiera solo en el caso tambien es un valor equivocado.
+        if ($porNombre[$nombre] -cne $Esperadas[$nombre]) {
+            if ($Publicas -contains $nombre) {
+                $distintas += ("{0} (se esperaba '{1}' y en el registro hay '{2}')" -f $nombre, $Esperadas[$nombre], $porNombre[$nombre])
+            } else {
+                $distintas += ("{0} (el valor no coincide; no se imprime porque es sensible)" -f $nombre)
+            }
+        }
+    }
+
+    return [pscustomobject]@{ Ausentes = @($ausentes); Distintas = @($distintas) }
+}
+
+function Restaurar-EntradasDeEntorno {
+    <#
+        Devuelve AppEnvironmentExtra a como estaba.
+
+        Se usa cuando la escritura no se pudo verificar: el valor se
+        reemplaza entero, de modo que un fallo a medias dejaria al
+        servicio sin ninguna variable, y al arrancar el backend se
+        quedaria sin datos de conexion ni secretos. Es preferible
+        dejarlo con las variables anteriores, que al menos funcionaban.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $Clave,
+        [Parameter(Mandatory = $true)][string] $Nombre,
+        [string[]] $Anteriores = @(),
+        [bool] $Habia = $false
+    )
+
+    try {
+        if ($Habia -and $Anteriores.Count -gt 0) {
+            $null = New-ItemProperty -Path $Clave -Name $Nombre -PropertyType MultiString -Value ([string[]] $Anteriores) -Force
+            return ("se restauro el valor anterior, con {0} variables" -f $Anteriores.Count)
+        }
+        Remove-ItemProperty -Path $Clave -Name $Nombre -ErrorAction SilentlyContinue
+        return 'no habia valor previo, asi que se quito el que se acababa de escribir'
+    } catch {
+        return ("ATENCION: no se pudo restaurar el valor anterior: {0}" -f $_.Exception.Message)
+    }
+}
+
+# ------------------------------------------------------------
+# Diagnostico del arranque
+# ------------------------------------------------------------
+function Obtener-TamanoArchivo {
+    <#
+        Tamano en bytes, o 0 si el archivo no existe.
+
+        Se usa para anotar hasta donde llegaba cada log ANTES de arrancar
+        el servicio: si el arranque falla se muestran solo las lineas que
+        escribio este intento. api-error.log es acumulativo y conserva
+        los errores de intentos anteriores, que despistan mas de lo que
+        ayudan.
+    #>
+    param([Parameter(Mandatory = $true)][string] $Ruta)
+
+    if (-not (Test-Path -LiteralPath $Ruta)) { return [long] 0 }
+    try {
+        return [long] (Get-Item -LiteralPath $Ruta -Force).Length
+    } catch {
+        return [long] 0
+    }
+}
+
+function Leer-TextoDesde {
+    <#
+        Devuelve el texto de un archivo a partir de un desplazamiento en
+        bytes.
+
+        Se abre con FileStream y comparticion ReadWrite|Delete, no con
+        Get-Content, porque el servicio mantiene el log abierto para
+        escritura: con una comparticion mas estricta la lectura fallaria
+        con "el archivo esta siendo usado por otro proceso" justo cuando
+        mas falta hace leerlo.
+
+        Si el archivo mide menos que el desplazamiento es que roto (NSSM
+        rota a los 10 MB) o se vacio: se lee entero y se avisa.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $Ruta,
+        [long] $DesdeByte = 0
+    )
+
+    $resultado = [pscustomobject]@{ Texto = ''; Rotado = $false; Existe = $false; Error = '' }
+    if (-not (Test-Path -LiteralPath $Ruta)) { return $resultado }
+    $resultado.Existe = $true
+
+    try {
+        $comparticion = ([System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete)
+        $flujo = New-Object System.IO.FileStream($Ruta, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, $comparticion)
+        try {
+            $inicio = $DesdeByte
+            if ($flujo.Length -lt $DesdeByte) {
+                $resultado.Rotado = $true
+                $inicio = [long] 0
+            }
+            $null = $flujo.Seek($inicio, [System.IO.SeekOrigin]::Begin)
+            # Sin deteccion de BOM: se empieza a leer en medio del
+            # archivo y unos bytes que se le parecieran se perderian.
+            $lector = New-Object System.IO.StreamReader($flujo, [System.Text.Encoding]::UTF8, $false)
+            try {
+                $resultado.Texto = $lector.ReadToEnd()
+            } finally {
+                $lector.Dispose()
+            }
+        } finally {
+            $flujo.Dispose()
+        }
+    } catch {
+        $resultado.Error = $_.Exception.Message
+    }
+    return $resultado
+}
+
+function Ocultar-Secretos {
+    <#
+        Reemplaza por *** los valores sensibles antes de mostrar un log.
+
+        Dos capas: los valores literales que se le pasan (los del
+        archivo de entorno, que es la fuente real de los secretos) y,
+        como red de seguridad por si alguno llegara de otro sitio, los
+        patrones "NOMBRE=algo" de las variables sensibles.
+    #>
+    param(
+        [string] $Texto = '',
+        [string[]] $ValoresLiterales = @()
+    )
+
+    if ([string]::IsNullOrEmpty($Texto)) { return '' }
+    $resultado = $Texto
+
+    foreach ($valor in $ValoresLiterales) {
+        # Por debajo de 8 caracteres el reemplazo literal haria mas dano
+        # que bien: un valor corto coincide con cualquier palabra del log
+        # y lo dejaria ilegible.
+        if ($null -ne $valor -and $valor.Length -ge 8) {
+            $resultado = $resultado.Replace($valor, '***')
+        }
+    }
+
+    return [regex]::Replace(
+        $resultado,
+        '(?i)((?:BD_CONTRASENA|SMTP_PASS|JWT_[A-Z_]*SECRET|password|contrasena)\s*[=:]\s*)\S+',
+        '${1}***')
+}
+
+function Mostrar-ColaRegistro {
+    <#
+        Muestra las ultimas lineas que un log recibio DESPUES del
+        desplazamiento indicado, con los secretos ocultos.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $Ruta,
+        [long] $DesdeByte = 0,
+        [int] $Lineas = 30,
+        [string[]] $ValoresAOcultar = @()
+    )
+
+    Write-Host ''
+    Write-Host ("--- {0} (solo lo escrito en este intento) ---" -f $Ruta) -ForegroundColor Yellow
+
+    $lectura = Leer-TextoDesde -Ruta $Ruta -DesdeByte $DesdeByte
+    if (-not $lectura.Existe) {
+        Write-Host '    (el archivo no existe: el servicio no llego a escribir nada)' -ForegroundColor Yellow
+        return
+    }
+    if ($lectura.Error -ne '') {
+        Write-Host ("    (no se pudo leer: {0})" -f $lectura.Error) -ForegroundColor Yellow
+        return
+    }
+    if ($lectura.Rotado) {
+        Write-Host '    (el archivo roto o se vacio desde el arranque; se muestra desde el principio)' -ForegroundColor Yellow
+    }
+
+    $texto = Ocultar-Secretos -Texto $lectura.Texto -ValoresLiterales $ValoresAOcultar
+    $todas = @($texto -split "`r?`n" | Where-Object { $_.Trim() -ne '' })
+    if ($todas.Count -eq 0) {
+        Write-Host '    (ni una linea nueva desde el arranque: lo que hay en el archivo es de intentos anteriores)' -ForegroundColor Yellow
+        return
+    }
+
+    $desde = 0
+    if ($todas.Count -gt $Lineas) { $desde = $todas.Count - $Lineas }
+    foreach ($linea in $todas[$desde..($todas.Count - 1)]) {
+        Write-Host ("    {0}" -f $linea)
+    }
+    if ($desde -gt 0) {
+        Write-Host ("    (ultimas {0} de {1} lineas nuevas)" -f $Lineas, $todas.Count) -ForegroundColor Yellow
+    }
+}
+
+function Obtener-ProcesosDelServicio {
+    <#
+        Devuelve el PID del proceso del servicio y los de sus hijos.
+
+        La distincion hace falta porque con NSSM el proceso del servicio
+        es nssm.exe y node.exe es su hijo: si la aplicacion se cae y NSSM
+        la relanza (AppExit Default Restart), el PID del servicio no
+        cambia y el del hijo si. Ver como cambia el hijo entre sondeos es
+        lo que delata un bucle de reinicios, que desde fuera se ve igual
+        que un arranque lento.
+    #>
+    param([Parameter(Mandatory = $true)][string] $Nombre)
+
+    $resultado = [pscustomobject]@{ Servicio = 0; Hijos = @() }
+
+    try {
+        $filtro = "Name='{0}'" -f $Nombre.Replace("'", "''")
+        $servicio = Get-CimInstance -ClassName Win32_Service -Filter $filtro -ErrorAction Stop
+        if ($null -ne $servicio -and $null -ne $servicio.ProcessId) {
+            $resultado.Servicio = [int] $servicio.ProcessId
+        }
+    } catch {
+        return $resultado
+    }
+
+    if ($resultado.Servicio -gt 0) {
+        try {
+            $hijos = @(Get-CimInstance -ClassName Win32_Process -Filter ("ParentProcessId={0}" -f $resultado.Servicio) -ErrorAction Stop)
+            $resultado.Hijos = @($hijos | ForEach-Object { [int] $_.ProcessId } | Sort-Object)
+        } catch {
+            $resultado.Hijos = @()
+        }
+    }
+    return $resultado
+}
+
+function Esperar-PuertoEscuchando {
+    <#
+        Sondea, hasta agotar el plazo, a que algo escuche en el puerto, y
+        va anotando el PID de la aplicacion para delatar un bucle de
+        reinicios.
+
+        Se aceptan 127.0.0.1 y 0.0.0.0: un socket en 0.0.0.0 tambien
+        atiende el loopback, de modo que el servicio funciona, pero queda
+        accesible desde fuera de la VM y eso hay que decirlo. La
+        comprobacion de que escuche SOLO en loopback es de
+        verificar-despliegue.ps1.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][int] $Puerto,
+        [Parameter(Mandatory = $true)][string] $NombreDelServicio,
+        [int] $Segundos = 60,
+        [int] $Intervalo = 2
+    )
+
+    $limite = (Get-Date).AddSeconds($Segundos)
+    $pidsVistos = New-Object System.Collections.ArrayList
+    $direcciones = @()
+    $escuchando = $false
+
+    while ($true) {
+        $procesos = Obtener-ProcesosDelServicio -Nombre $NombreDelServicio
+        foreach ($identificador in $procesos.Hijos) {
+            if (-not $pidsVistos.Contains($identificador)) { $null = $pidsVistos.Add($identificador) }
+        }
+
+        $conexiones = @(Get-NetTCPConnection -LocalPort $Puerto -State Listen -ErrorAction SilentlyContinue)
+        if ($conexiones.Count -gt 0) {
+            $direcciones = @($conexiones | ForEach-Object { [string] $_.LocalAddress } | Sort-Object -Unique)
+            $utiles = @($direcciones | Where-Object { $_ -eq '127.0.0.1' -or $_ -eq '0.0.0.0' -or $_ -eq '::' -or $_ -eq '::1' })
+            if ($utiles.Count -gt 0) {
+                $escuchando = $true
+                break
+            }
+        }
+
+        if ((Get-Date) -ge $limite) { break }
+        Start-Sleep -Seconds $Intervalo
+    }
+
+    return [pscustomobject]@{
+        Escuchando  = $escuchando
+        Direcciones = @($direcciones)
+        PidsVistos  = @($pidsVistos)
+    }
 }
 
 # ------------------------------------------------------------
@@ -792,55 +1186,92 @@ try {
     if ($Simular) {
         Escribir-Simulado "escribiria $($entradas.Count) variables en $claveRegistro\AppEnvironmentExtra (REG_MULTI_SZ)"
         Escribir-Simulado ("nombres: {0}" -f (($variables.Keys) -join ', '))
-        Escribir-Simulado 'y comprobaria releyendo ese valor del registro, sin imprimir los valores'
+        Escribir-Simulado 'y comprobaria releyendo ese valor del registro: tipo REG_MULTI_SZ, y cada'
+        Escribir-Simulado 'variable por nombre y por valor exacto, sin imprimir los valores sensibles'
     } else {
         if (-not (Test-Path -LiteralPath $claveRegistro)) {
             $null = New-Item -Path $claveRegistro -Force
         }
-        $null = New-ItemProperty -Path $claveRegistro -Name 'AppEnvironmentExtra' -PropertyType MultiString -Value $entradas -Force
 
-        # Verificacion: se comparan los NOMBRES, nunca los valores, y se
-        # releen del registro, NO de la salida de "nssm get".
-        #
-        # nssm es una aplicacion Unicode: cuando su salida se captura en
-        # una variable en vez de ir a la consola, PowerShell recibe los
-        # bytes UTF-16 y los decodifica de a uno, asi que "NODE_ENV="
-        # llega como "N\0O\0D\0E\0_\0E\0N\0V\0=\0" y la comparacion de
-        # texto falla para TODAS las variables aunque esten perfectamente
-        # escritas. Eso daba un falso negativo que detenia el despliegue
-        # justo antes de arrancar el servicio.
-        #
-        # El registro es ademas la fuente autentica: es de donde el
-        # servicio toma estas variables, de modo que releerlo comprueba lo
-        # que de verdad importa.
-        $propiedad = Get-ItemProperty -Path $claveRegistro -Name 'AppEnvironmentExtra' -ErrorAction SilentlyContinue
-        $nombresEscritos = @()
-        if ($null -ne $propiedad) {
-            $nombresEscritos = @($propiedad.AppEnvironmentExtra | ForEach-Object {
-                $entrada = [string] $_
-                $posicion = $entrada.IndexOf('=')
-                if ($posicion -gt 0) { $entrada.Substring(0, $posicion) }
-            })
+        # El valor se reemplaza entero, asi que antes se guarda el que
+        # hay: si la escritura no se puede verificar, se devuelve el
+        # anterior en vez de dejar al servicio con un valor a medias.
+        $tipoAnterior = Obtener-TipoDeValor -Clave $claveRegistro -Nombre 'AppEnvironmentExtra'
+        $habiaValor = ($null -ne $tipoAnterior)
+        # @() porque sin valor previo la funcion devuelve $null y .Count
+        # sobre $null detiene el script.
+        $entradasAnteriores = @(Obtener-EntradasDeEntorno -Clave $claveRegistro -Nombre 'AppEnvironmentExtra')
+        if ($habiaValor) {
+            Escribir-Detalle ("Habia un valor anterior con {0} variables; se guarda por si hay que devolverlo." -f $entradasAnteriores.Count)
         }
 
-        $faltantes = @($variables.Keys | Where-Object { $nombresEscritos -notcontains $_ })
-        if ($faltantes.Count -gt 0) {
-            $aviso = 'El servicio no recibio estas variables: ' + ($faltantes -join ', ') + [Environment]::NewLine
-            $aviso += '       Revise el valor AppEnvironmentExtra de esta clave (sin imprimir los valores):' + [Environment]::NewLine
+        try {
+            $null = New-ItemProperty -Path $claveRegistro -Name 'AppEnvironmentExtra' `
+                -PropertyType MultiString -Value ([string[]] $entradas) -Force
+        } catch {
+            throw ("No se pudo escribir AppEnvironmentExtra en {0}: {1}" -f $claveRegistro, $_.Exception.Message)
+        }
+
+        # Verificacion releyendo el registro, NO la salida de "nssm get"
+        # (ver Obtener-EntradasDeEntorno). Se comprueban el tipo del
+        # valor y cada variable por nombre y por valor exacto.
+        $problemas = @()
+
+        $tipoEscrito = Obtener-TipoDeValor -Clave $claveRegistro -Nombre 'AppEnvironmentExtra'
+        if ($null -eq $tipoEscrito) {
+            $problemas += 'el valor AppEnvironmentExtra no existe despues de escribirlo'
+        } elseif ($tipoEscrito -ne 'MultiString') {
+            $problemas += ("AppEnvironmentExtra quedo como {0} y NSSM solo interpreta REG_MULTI_SZ" -f $tipoEscrito)
+        }
+
+        $entradasEscritas = @(Obtener-EntradasDeEntorno -Clave $claveRegistro -Nombre 'AppEnvironmentExtra')
+        $comparacion = Comparar-EntradasDeEntorno -Esperadas $variables -Escritas $entradasEscritas -Publicas $VARIABLES_PUBLICAS
+
+        if ($comparacion.Ausentes.Count -gt 0) {
+            $problemas += ("no se escribieron estas variables: " + ($comparacion.Ausentes -join ', '))
+        }
+        if ($comparacion.Distintas.Count -gt 0) {
+            $problemas += ("se escribieron con otro valor: " + ($comparacion.Distintas -join '; '))
+        }
+
+        if ($problemas.Count -gt 0) {
+            $resultadoRestauracion = Restaurar-EntradasDeEntorno -Clave $claveRegistro -Nombre 'AppEnvironmentExtra' `
+                -Anteriores $entradasAnteriores -Habia $habiaValor
+
+            $aviso = 'Las variables del servicio no quedaron como debian.' + [Environment]::NewLine
+            foreach ($problema in $problemas) {
+                $aviso += ("         - {0}" -f $problema) + [Environment]::NewLine
+            }
+            $aviso += ("       Para no dejar el servicio sin configuracion: {0}." -f $resultadoRestauracion) + [Environment]::NewLine
+            $aviso += '       Revise los NOMBRES guardados en esta clave (no imprime ningun valor):' + [Environment]::NewLine
             $aviso += ("           (Get-ItemProperty '{0}' -Name AppEnvironmentExtra).AppEnvironmentExtra | ForEach-Object {{ (`$_ -split '=',2)[0] }}" -f $claveRegistro)
             throw $aviso
         }
-        Escribir-Detalle ("{0} variables cargadas y verificadas en el registro (nombres comprobados, valores no impresos)." -f $entradas.Count)
+
+        Escribir-Detalle ("{0} variables escritas y verificadas en el registro: REG_MULTI_SZ, nombres y valores exactos (los valores no se imprimen)." -f $entradas.Count)
     }
 
     # --------------------------------------------------------
     # 11. Arranque
     # --------------------------------------------------------
     Escribir-Paso 'Arrancando el servicio'
+
+    $archivoLogError  = Join-Path $rutaRegistros 'api-error.log'
+    $archivoLogSalida = Join-Path $rutaRegistros 'api-salida.log'
+
     if ($Simular) {
         Escribir-Simulado "nssm restart $NombreServicio"
-        Escribir-Simulado 'esperaria a que el puerto quede escuchando'
+        Escribir-Simulado ("esperaria hasta {0} segundos, sondeando cada {1}, a que el puerto {2} escuche en 127.0.0.1" -f $SEGUNDOS_ESPERA_PUERTO, $SEGUNDOS_ENTRE_SONDEOS, $Puerto)
+        Escribir-Simulado 'y si no escuchara mostraria el estado del servicio, los PID vistos (para delatar un'
+        Escribir-Simulado 'bucle de reinicios) y las ultimas 30 lineas que CADA log recibiera en este intento'
     } else {
+        # Se anota el tamano de los log ANTES de arrancar para mostrar
+        # despues solo las lineas de este intento: api-error.log es
+        # acumulativo y conserva errores de dias anteriores.
+        $tamanoLogErrorPrevio  = Obtener-TamanoArchivo -Ruta $archivoLogError
+        $tamanoLogSalidaPrevio = Obtener-TamanoArchivo -Ruta $archivoLogSalida
+        $instanteArranque = Get-Date
+
         $estado = (Get-Service -Name $NombreServicio).Status
         if ($estado -eq 'Running') {
             Invocar-Comando -Programa $rutaNssmResuelta -Argumentos @('restart', $NombreServicio) -Descripcion 'nssm restart'
@@ -848,24 +1279,68 @@ try {
             Invocar-Comando -Programa $rutaNssmResuelta -Argumentos @('start', $NombreServicio) -Descripcion 'nssm start'
         }
 
-        # El backend tarda en abrir conexiones a MySQL y mapear rutas; se
-        # espera activamente en vez de un Start-Sleep fijo.
-        $limite = (Get-Date).AddSeconds(45)
-        $escuchando = $false
-        while ((Get-Date) -lt $limite) {
-            $conexion = Get-NetTCPConnection -LocalPort $Puerto -State Listen -ErrorAction SilentlyContinue
-            if ($null -ne $conexion) { $escuchando = $true; break }
-            Start-Sleep -Seconds 2
+        Escribir-Detalle ("Arranque solicitado a las {0}. Esperando a que el puerto {1} escuche..." -f $instanteArranque.ToString('HH:mm:ss'), $Puerto)
+
+        # El backend tarda en abrir el pool de MySQL y mapear rutas; se
+        # espera activamente en vez de con un Start-Sleep fijo.
+        $sondeo = Esperar-PuertoEscuchando -Puerto $Puerto -NombreDelServicio $NombreServicio `
+            -Segundos $SEGUNDOS_ESPERA_PUERTO -Intervalo $SEGUNDOS_ENTRE_SONDEOS
+
+        # Los valores sensibles del archivo de entorno se pasan al visor
+        # del log para que no asomen en la salida ni por accidente.
+        $valoresSensibles = @(
+            $variables.Keys |
+                Where-Object { $VARIABLES_PUBLICAS -notcontains $_ } |
+                ForEach-Object { [string] $variables[$_] }
+        )
+
+        if (-not $sondeo.Escuchando) {
+            Write-Host ''
+            Write-Host ("El servicio no empezo a escuchar en el puerto {0} en {1} segundos." -f $Puerto, $SEGUNDOS_ESPERA_PUERTO) -ForegroundColor Red
+            Write-Host ("Arranque solicitado a las {0}: todo lo que sigue es posterior a esa hora." -f $instanteArranque.ToString('HH:mm:ss')) -ForegroundColor Red
+
+            $servicioAhora = Get-Service -Name $NombreServicio -ErrorAction SilentlyContinue
+            if ($null -eq $servicioAhora) {
+                Write-Host 'El servicio ya no existe.' -ForegroundColor Red
+            } else {
+                Write-Host ("Estado del servicio: {0}" -f $servicioAhora.Status) -ForegroundColor Red
+            }
+
+            $procesosAhora = Obtener-ProcesosDelServicio -Nombre $NombreServicio
+            Write-Host ("PID del proceso del servicio (nssm.exe): {0}" -f $procesosAhora.Servicio) -ForegroundColor Red
+
+            if ($sondeo.PidsVistos.Count -gt 1) {
+                Write-Host ("BUCLE DE REINICIOS: la aplicacion arranco {0} veces durante la espera (PID {1})." -f $sondeo.PidsVistos.Count, ($sondeo.PidsVistos -join ', ')) -ForegroundColor Red
+                Write-Host '       NSSM la relanza cada 5 segundos porque se cae al arrancar. La causa' -ForegroundColor Red
+                Write-Host '       esta en las primeras lineas del log, no en las ultimas.' -ForegroundColor Red
+            } elseif ($sondeo.PidsVistos.Count -eq 1) {
+                Write-Host ("PID de la aplicacion: {0}. No se reinicio, asi que sigue arrancando o esta colgada." -f $sondeo.PidsVistos[0]) -ForegroundColor Red
+            } else {
+                Write-Host 'La aplicacion no arranco ni una vez: NSSM no llego a tener proceso hijo.' -ForegroundColor Red
+                Write-Host '       Compruebe la ruta de node.exe y de dist\main.js en la configuracion del servicio.' -ForegroundColor Red
+            }
+
+            Mostrar-ColaRegistro -Ruta $archivoLogError  -DesdeByte $tamanoLogErrorPrevio  -Lineas 30 -ValoresAOcultar $valoresSensibles
+            Mostrar-ColaRegistro -Ruta $archivoLogSalida -DesdeByte $tamanoLogSalidaPrevio -Lineas 30 -ValoresAOcultar $valoresSensibles
+
+            throw ("El servicio no quedo escuchando en el puerto {0}." -f $Puerto)
         }
 
-        if (-not $escuchando) {
+        Escribir-Detalle ("Escuchando en el puerto {0} ({1})." -f $Puerto, ($sondeo.Direcciones -join ', '))
+
+        if (@($sondeo.Direcciones | Where-Object { $_ -eq '127.0.0.1' }).Count -eq 0) {
             Write-Host ''
-            Write-Host "El servicio no empezo a escuchar en el puerto $Puerto en 45 segundos." -ForegroundColor Red
-            Write-Host "Revise el log de errores:" -ForegroundColor Red
-            Write-Host ("    Get-Content '{0}' -Tail 40" -f (Join-Path $rutaRegistros 'api-error.log')) -ForegroundColor Red
-            throw 'El servicio no quedo escuchando.'
+            Write-Host ("AVISO: el puerto {0} no escucha en 127.0.0.1 sino en {1}." -f $Puerto, ($sondeo.Direcciones -join ', ')) -ForegroundColor Yellow
+            Write-Host '       La API responde, pero queda accesible sin pasar por Apache.' -ForegroundColor Yellow
+            Write-Host '       Compruebe HOST_ESCUCHA=127.0.0.1 en el archivo de entorno.' -ForegroundColor Yellow
         }
-        Escribir-Detalle "Escuchando en el puerto $Puerto."
+
+        if ($sondeo.PidsVistos.Count -gt 1) {
+            Write-Host ''
+            Write-Host ("AVISO: la aplicacion arranco {0} veces antes de quedar escuchando (PID {1})." -f $sondeo.PidsVistos.Count, ($sondeo.PidsVistos -join ', ')) -ForegroundColor Yellow
+            Write-Host '       Quedo en pie, pero algo la tumbo en los primeros intentos.' -ForegroundColor Yellow
+            Mostrar-ColaRegistro -Ruta $archivoLogError -DesdeByte $tamanoLogErrorPrevio -Lineas 30 -ValoresAOcultar $valoresSensibles
+        }
     }
 
     # --------------------------------------------------------
@@ -881,7 +1356,9 @@ try {
     } else {
         Escribir-Paso 'Verificacion del despliegue'
         $urlPublica = $variables['FRONTEND_URL'].TrimEnd('/')
-        & powershell.exe -ExecutionPolicy Bypass -NoProfile -File $scriptVerificacion -UrlPublica $urlPublica -Puerto $Puerto -NombreServicio $NombreServicio
+        # -RutaDatos para que, si falla el puerto o /salud, pueda mostrar
+        # la cola del log del servicio sin tener la ruta fija en el codigo.
+        & powershell.exe -ExecutionPolicy Bypass -NoProfile -File $scriptVerificacion -UrlPublica $urlPublica -Puerto $Puerto -NombreServicio $NombreServicio -RutaDatos $RutaDatos
         if ($LASTEXITCODE -ne 0) {
             Write-Host ''
             Write-Host 'El despliegue termino pero la verificacion encontro problemas (ver tabla arriba).' -ForegroundColor Yellow

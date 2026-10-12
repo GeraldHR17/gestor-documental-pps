@@ -151,6 +151,27 @@ function Buscar-NssmEnServicios {
     return $null
 }
 
+function Normalizar-SalidaDeComando {
+    <#
+        Quita los caracteres nulos de la salida capturada de un programa
+        externo.
+
+        Hace falta porque un programa compilado como aplicacion Unicode
+        (nssm.exe es el caso de esta VM) escribe UTF-16 en la salida
+        estandar: en consola se ve bien, pero al capturarla en una
+        variable PowerShell decodifica esos bytes de a uno y cada
+        caracter llega seguido de un NUL, de modo que buscar cualquier
+        texto en ella falla siempre. node, npm, git, mysql y httpd son
+        aplicaciones ANSI y no tienen ese problema, pero normalizar aqui
+        cuesta nada y evita que la comprobacion mienta si alguno de ellos
+        cambia o se sustituye por un envoltorio.
+    #>
+    param([string] $Texto = '')
+
+    if ([string]::IsNullOrEmpty($Texto)) { return '' }
+    return $Texto.Replace([string][char]0, '')
+}
+
 function Obtener-Version {
     <#
         Ejecuta el comando y devuelve su primera linea de salida. Se
@@ -167,7 +188,7 @@ function Obtener-Version {
         # ([string[]]$null)[0] no se puede indexar. Se normaliza a un
         # arreglo de cadenas: cada elemento se convierte con [string]
         # porque con 2>&1 pueden llegar ErrorRecord, que no tienen Trim().
-        $lineas = @($salida | ForEach-Object { if ($null -eq $_) { '' } else { [string] $_ } })
+        $lineas = @($salida | ForEach-Object { if ($null -eq $_) { '' } else { Normalizar-SalidaDeComando -Texto ([string] $_) } })
         if ($lineas.Count -eq 0) { return '' }
         return $lineas[0].Trim()
     } catch {
@@ -378,7 +399,7 @@ if ($null -eq $rutaHttpdResuelta) {
     Agregar-Resultado 'Modulos de Apache' 'AVISO' $mensaje
 } else {
     try {
-        $salidaModulos = & $rutaHttpdResuelta '-M' 2>&1 | Out-String
+        $salidaModulos = Normalizar-SalidaDeComando -Texto (& $rutaHttpdResuelta '-M' 2>&1 | Out-String)
         $faltantes = @()
         foreach ($modulo in $modulosRequeridos) {
             if ($salidaModulos -notmatch [regex]::Escape($modulo)) {
