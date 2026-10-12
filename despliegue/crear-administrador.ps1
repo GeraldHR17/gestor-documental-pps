@@ -56,10 +56,52 @@ function Convertir-ASecreto {
     param([Parameter(Mandatory = $true)][System.Security.SecureString] $Segura)
     $puntero = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Segura)
     try {
-        return [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($puntero)
+        $texto = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($puntero)
+        if ($null -eq $texto) { return '' }
+        return $texto
     } finally {
         [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($puntero)
     }
+}
+
+function Leer-LineasDeArchivo {
+    <#
+        Devuelve las lineas de un archivo de texto decodificado segun su
+        marca de orden de bytes, sin el BOM y sin el \r del final de
+        linea.
+
+        No se usa Get-Content -Encoding UTF8 porque fija la codificacion:
+        el .env.produccion se edita a mano en la VM y el Bloc de notas de
+        Windows Server 2016 puede guardarlo como UTF-8 con BOM, como
+        "Unicode" (UTF-16) o como ANSI. Leido con la codificacion
+        equivocada, un archivo correcto parece no tener ninguna variable
+        y este script se detendria diciendo que falta BD_HOST.
+
+        Es la misma funcion que usa desplegar.ps1: cada script del
+        despliegue se ejecuta por separado y no comparte modulo.
+    #>
+    param([Parameter(Mandatory = $true)][string] $Ruta)
+
+    $bytes = [System.IO.File]::ReadAllBytes($Ruta)
+    if ($bytes.Length -eq 0) { return [string[]] @('') }
+
+    $texto = ''
+    if ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE) {
+        $texto = [System.Text.Encoding]::Unicode.GetString($bytes, 2, $bytes.Length - 2)
+    } elseif ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFE -and $bytes[1] -eq 0xFF) {
+        $texto = [System.Text.Encoding]::BigEndianUnicode.GetString($bytes, 2, $bytes.Length - 2)
+    } elseif ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        $texto = [System.Text.Encoding]::UTF8.GetString($bytes, 3, $bytes.Length - 3)
+    } else {
+        try {
+            $utf8Estricto = New-Object System.Text.UTF8Encoding($false, $true)
+            $texto = $utf8Estricto.GetString($bytes)
+        } catch {
+            $texto = [System.Text.Encoding]::Default.GetString($bytes)
+        }
+    }
+
+    return [string[]] @($texto -split "`r?`n")
 }
 
 Write-Host ''
@@ -149,8 +191,11 @@ try {
     # del .env.produccion y se pasan al proceso hijo, igual que hace el
     # servicio.
     $variablesEntorno = @{}
-    foreach ($linea in (Get-Content -LiteralPath $RutaEntorno -Encoding UTF8)) {
-        $textoLinea = $linea.Trim()
+    foreach ($linea in (Leer-LineasDeArchivo -Ruta $RutaEntorno)) {
+        # TrimStart del BOM antes del Trim: U+FEFF no cuenta como espacio
+        # en blanco, asi que Trim() no lo quita, y delante del nombre de
+        # la primera variable la vuelve irreconocible.
+        $textoLinea = $linea.TrimStart([char]0xFEFF).Trim()
         if ($textoLinea -eq '' -or $textoLinea.StartsWith('#')) { continue }
         $posicion = $textoLinea.IndexOf('=')
         if ($posicion -lt 1) { continue }
@@ -174,7 +219,13 @@ try {
     # forma en Windows PowerShell de pasar un secreto a un proceso hijo
     # sin que aparezca en la linea de comandos.
     $previas = @{}
+    # Se restauran TODAS las variables que se definan, no solo las
+    # ADMIN_*: en el entorno del proceso tambien entran BD_CONTRASENA,
+    # SMTP_PASS y los secretos JWT del archivo de produccion, y antes se
+    # quedaban ahi al terminar, de modo que cualquier cosa que se lanzara
+    # despues desde esa misma consola los heredaba.
     $definidas = @('ADMIN_CORREO', 'ADMIN_NOMBRE', 'ADMIN_CONTRASENA', 'ADMIN_ROL', 'ADMIN_IDENTIFICACION')
+    $definidas += @($variablesEntorno.Keys | Where-Object { $definidas -notcontains $_ })
 
     try {
         foreach ($clave in $definidas) {

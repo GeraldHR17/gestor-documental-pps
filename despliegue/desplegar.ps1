@@ -313,6 +313,78 @@ function Nuevo-SecretoBase64 {
     return [Convert]::ToBase64String($bytes)
 }
 
+function Reemplazar-Variable {
+    <#
+        Reemplaza la linea "NOMBRE=..." de un .env por un valor nuevo.
+
+        El patron va anclado con (?m)^ a proposito: sin ancla,
+        'PUERTO=.*' tambien casa dentro de "BD_PUERTO=3306" y el archivo
+        generado salia con BD_PUERTO apuntando al puerto del backend, de
+        modo que el servicio no encontraba MySQL. Pasa con cualquier
+        variable cuyo nombre sea el final de otro.
+
+        Si el nombre no aparece en la plantilla se corta: seguir
+        significaria escribir un archivo de entorno sin esa variable (sin
+        los secretos JWT, por ejemplo) y descubrirlo mucho despues.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $Contenido,
+        [Parameter(Mandatory = $true)][string] $Nombre,
+        [Parameter(Mandatory = $true)][string] $Valor
+    )
+
+    $patron = '(?m)^' + [regex]::Escape($Nombre) + '=.*'
+    if ($Contenido -notmatch $patron) {
+        throw ("La plantilla del archivo de entorno no tiene ninguna linea que empiece por '{0}='. No se genera un archivo incompleto." -f $Nombre)
+    }
+
+    # En el texto de reemplazo el '$' es un metacaracter ($1, $&...), asi
+    # que se duplica para que viaje literal. Los secretos en base64 no
+    # lo llevan, pero una ruta o una contrasena si podrian.
+    $reemplazo = ("{0}={1}" -f $Nombre, $Valor).Replace('$', '$$')
+    return ($Contenido -replace $patron, $reemplazo)
+}
+
+function Leer-LineasDeArchivo {
+    <#
+        Devuelve las lineas de un archivo de texto decodificado segun su
+        marca de orden de bytes, sin el BOM y sin el \r del final de
+        linea.
+
+        No se usa Get-Content -Encoding UTF8 porque fija la codificacion:
+        el .env.produccion se edita a mano en la VM y el Bloc de notas de
+        Windows Server 2016 puede guardarlo como UTF-8 con BOM, como
+        "Unicode" (UTF-16) o como ANSI. Leido con la codificacion
+        equivocada, un archivo correcto parece no tener ninguna variable.
+    #>
+    param([Parameter(Mandatory = $true)][string] $Ruta)
+
+    $bytes = [System.IO.File]::ReadAllBytes($Ruta)
+    if ($bytes.Length -eq 0) { return [string[]] @('') }
+
+    $texto = ''
+    if ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE) {
+        $texto = [System.Text.Encoding]::Unicode.GetString($bytes, 2, $bytes.Length - 2)
+    } elseif ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFE -and $bytes[1] -eq 0xFF) {
+        $texto = [System.Text.Encoding]::BigEndianUnicode.GetString($bytes, 2, $bytes.Length - 2)
+    } elseif ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        $texto = [System.Text.Encoding]::UTF8.GetString($bytes, 3, $bytes.Length - 3)
+    } else {
+        try {
+            # Estricta: lanza si los bytes no son UTF-8 valido, en vez de
+            # dejar caracteres de reemplazo dentro de una contrasena.
+            $utf8Estricto = New-Object System.Text.UTF8Encoding($false, $true)
+            $texto = $utf8Estricto.GetString($bytes)
+        } catch {
+            $texto = [System.Text.Encoding]::Default.GetString($bytes)
+        }
+    }
+
+    # El \r se quita aqui y no en cada uso: pegado al final del valor de
+    # la ultima variable viajaria al servicio como parte de ella.
+    return [string[]] @($texto -split "`r?`n")
+}
+
 function Leer-ArchivoEntorno {
     <#
         Devuelve una tabla ordenada con las variables del .env. Se ignoran
@@ -322,8 +394,13 @@ function Leer-ArchivoEntorno {
     param([Parameter(Mandatory = $true)][string] $Ruta)
 
     $variables = [ordered]@{}
-    foreach ($linea in (Get-Content -LiteralPath $Ruta -Encoding UTF8)) {
-        $texto = $linea.Trim()
+    foreach ($linea in (Leer-LineasDeArchivo -Ruta $Ruta)) {
+        # TrimStart del BOM antes del Trim: el caracter U+FEFF no cuenta
+        # como espacio en blanco, de modo que Trim() no lo quita, y
+        # pegado delante del nombre de la primera variable la vuelve
+        # irreconocible (un "NODE_ENV" con un caracter invisible delante
+        # no es NODE_ENV).
+        $texto = $linea.TrimStart([char]0xFEFF).Trim()
         if ($texto -eq '' -or $texto.StartsWith('#')) { continue }
         $posicion = $texto.IndexOf('=')
         if ($posicion -lt 1) { continue }
@@ -838,10 +915,14 @@ try {
 
             # Los secretos se generan aqui y no se piden: son valores que
             # nadie debe elegir a mano ni recordar.
-            $contenido = $contenido -replace 'JWT_ACCESS_SECRET=.*', ("JWT_ACCESS_SECRET=" + (Nuevo-SecretoBase64))
-            $contenido = $contenido -replace 'JWT_REFRESH_SECRET=.*', ("JWT_REFRESH_SECRET=" + (Nuevo-SecretoBase64))
-            $contenido = $contenido -replace 'RUTA_ALMACENAMIENTO=.*', ("RUTA_ALMACENAMIENTO=" + $rutaAlmacenamiento)
-            $contenido = $contenido -replace 'PUERTO=.*', ("PUERTO=" + $Puerto)
+            #
+            # Las cuatro sustituciones van ancladas al principio de linea
+            # (ver Reemplazar-Variable): sin ancla, la de PUERTO casaba
+            # tambien dentro de BD_PUERTO.
+            $contenido = Reemplazar-Variable -Contenido $contenido -Nombre 'JWT_ACCESS_SECRET'   -Valor (Nuevo-SecretoBase64)
+            $contenido = Reemplazar-Variable -Contenido $contenido -Nombre 'JWT_REFRESH_SECRET'  -Valor (Nuevo-SecretoBase64)
+            $contenido = Reemplazar-Variable -Contenido $contenido -Nombre 'RUTA_ALMACENAMIENTO' -Valor $rutaAlmacenamiento
+            $contenido = Reemplazar-Variable -Contenido $contenido -Nombre 'PUERTO'              -Valor ([string] $Puerto)
 
             [System.IO.File]::WriteAllText($archivoEntorno, $contenido, (New-Object System.Text.UTF8Encoding($false)))
 
