@@ -792,26 +792,45 @@ try {
     if ($Simular) {
         Escribir-Simulado "escribiria $($entradas.Count) variables en $claveRegistro\AppEnvironmentExtra (REG_MULTI_SZ)"
         Escribir-Simulado ("nombres: {0}" -f (($variables.Keys) -join ', '))
-        Escribir-Simulado 'y comprobaria con "nssm get AppEnvironmentExtra" sin imprimir los valores'
+        Escribir-Simulado 'y comprobaria releyendo ese valor del registro, sin imprimir los valores'
     } else {
         if (-not (Test-Path -LiteralPath $claveRegistro)) {
             $null = New-Item -Path $claveRegistro -Force
         }
         $null = New-ItemProperty -Path $claveRegistro -Name 'AppEnvironmentExtra' -PropertyType MultiString -Value $entradas -Force
 
-        # Verificacion: se comparan los NOMBRES, nunca los valores.
-        $comprobacion = & $rutaNssmResuelta 'get' $NombreServicio 'AppEnvironmentExtra' 2>&1
-        $texto = ($comprobacion | Out-String)
-        $faltantes = @()
-        foreach ($nombre in $variables.Keys) {
-            if ($texto -notmatch ([regex]::Escape($nombre) + '=')) {
-                $faltantes += $nombre
-            }
+        # Verificacion: se comparan los NOMBRES, nunca los valores, y se
+        # releen del registro, NO de la salida de "nssm get".
+        #
+        # nssm es una aplicacion Unicode: cuando su salida se captura en
+        # una variable en vez de ir a la consola, PowerShell recibe los
+        # bytes UTF-16 y los decodifica de a uno, asi que "NODE_ENV="
+        # llega como "N\0O\0D\0E\0_\0E\0N\0V\0=\0" y la comparacion de
+        # texto falla para TODAS las variables aunque esten perfectamente
+        # escritas. Eso daba un falso negativo que detenia el despliegue
+        # justo antes de arrancar el servicio.
+        #
+        # El registro es ademas la fuente autentica: es de donde el
+        # servicio toma estas variables, de modo que releerlo comprueba lo
+        # que de verdad importa.
+        $propiedad = Get-ItemProperty -Path $claveRegistro -Name 'AppEnvironmentExtra' -ErrorAction SilentlyContinue
+        $nombresEscritos = @()
+        if ($null -ne $propiedad) {
+            $nombresEscritos = @($propiedad.AppEnvironmentExtra | ForEach-Object {
+                $entrada = [string] $_
+                $posicion = $entrada.IndexOf('=')
+                if ($posicion -gt 0) { $entrada.Substring(0, $posicion) }
+            })
         }
+
+        $faltantes = @($variables.Keys | Where-Object { $nombresEscritos -notcontains $_ })
         if ($faltantes.Count -gt 0) {
-            throw ("El servicio no recibio estas variables: " + ($faltantes -join ', '))
+            $aviso = 'El servicio no recibio estas variables: ' + ($faltantes -join ', ') + [Environment]::NewLine
+            $aviso += '       Revise el valor AppEnvironmentExtra de esta clave (sin imprimir los valores):' + [Environment]::NewLine
+            $aviso += ("           (Get-ItemProperty '{0}' -Name AppEnvironmentExtra).AppEnvironmentExtra | ForEach-Object {{ (`$_ -split '=',2)[0] }}" -f $claveRegistro)
+            throw $aviso
         }
-        Escribir-Detalle ("{0} variables cargadas y verificadas (nombres comprobados, valores no impresos)." -f $entradas.Count)
+        Escribir-Detalle ("{0} variables cargadas y verificadas en el registro (nombres comprobados, valores no impresos)." -f $entradas.Count)
     }
 
     # --------------------------------------------------------
