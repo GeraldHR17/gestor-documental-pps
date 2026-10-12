@@ -170,7 +170,18 @@ function Resolver-Ejecutable {
         return (Resolve-Path -LiteralPath $RutaExplicita).Path
     }
     $comando = Get-Command -Name $Nombre -ErrorAction SilentlyContinue
-    if ($null -eq $comando) { throw "No se encontro $Nombre en el PATH." }
+    if ($null -eq $comando) {
+        # Mismo caso que en desplegar.ps1: en esta VM nssm.exe esta
+        # instalado pero fuera del PATH, asi que el mensaje tiene que
+        # nombrar el parametro que existe para eso.
+        if ($Nombre -eq 'nssm.exe') {
+            $aviso = 'No se encontro nssm.exe en el PATH, pero puede estar instalado fuera de el.' + [Environment]::NewLine
+            $aviso += '       Ejecute verificar-requisitos.ps1 para obtener la ruta y repita este' + [Environment]::NewLine
+            $aviso += '       comando agregando:  -RutaNssm "C:\ruta\a\nssm.exe"'
+            throw $aviso
+        }
+        throw "No se encontro $Nombre en el PATH."
+    }
     return $comando.Source
 }
 

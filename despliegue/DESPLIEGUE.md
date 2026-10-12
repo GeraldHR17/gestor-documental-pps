@@ -304,12 +304,25 @@ En esta VM, Apache está instalado en `C:\Apache24`, así que `htdocs` es
 Select-String -Path C:\Apache24\conf\httpd.conf -Pattern '^\s*DocumentRoot'
 ```
 
-**Abra PowerShell como administrador** (crea un servicio y escribe en el
-registro) y ejecute:
+**En esta VM `nssm.exe` está instalado pero NO en el `PATH`**, así que hay
+que pasar su ruta con `-RutaNssm`. La obtiene del paso 2.5: cuando
+`verificar-requisitos.ps1` lo localiza, imprime el parámetro ya armado
+(`-> pase: -RutaNssm "..."`). Si no lo localizó:
 
 ```
-powershell -ExecutionPolicy Bypass -File .\despliegue\desplegar.ps1 -RutaHtdocs "C:\Apache24\htdocs"
+Get-ChildItem C:\ -Filter nssm.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
 ```
+
+**Abra PowerShell como administrador** (crea un servicio y escribe en el
+registro) y ejecute, con la ruta real de NSSM:
+
+```
+powershell -ExecutionPolicy Bypass -File .\despliegue\desplegar.ps1 -RutaHtdocs "C:\Apache24\htdocs" -RutaNssm "C:\ruta\a\nssm.exe"
+```
+
+El script comprueba las herramientas **antes** de crear nada, así que si
+falta `-RutaNssm` se detiene en el primer paso y no deja ningún archivo a
+medias: no hay nada que limpiar, solo repita el comando completo.
 
 La primera vez el script crea `C:\munidata\config\.env.produccion`, genera
 los secretos JWT y **se detiene con código 2**, pidiéndole que complete el
@@ -344,10 +357,10 @@ comillas viajan como parte del valor.
 
 ### 3.5 Ejecutar el despliegue de verdad
 
-El mismo comando del paso 3.3:
+El mismo comando del paso 3.3, con el mismo `-RutaNssm`:
 
 ```
-powershell -ExecutionPolicy Bypass -File .\despliegue\desplegar.ps1 -RutaHtdocs "C:\Apache24\htdocs"
+powershell -ExecutionPolicy Bypass -File .\despliegue\desplegar.ps1 -RutaHtdocs "C:\Apache24\htdocs" -RutaNssm "C:\ruta\a\nssm.exe"
 ```
 
 Ahora sí recorre todo: valida las variables, respalda lo que haya
@@ -547,8 +560,11 @@ Aplicará solo los que falten, según la tabla `scripts_aplicados`.
 
 ## 7. Rollback
 
+Necesita el mismo `-RutaNssm` que el despliegue, porque también detiene y
+arranca el servicio:
+
 ```
-powershell -ExecutionPolicy Bypass -File .\despliegue\revertir.ps1 -RutaHtdocs "C:\Apache24\htdocs"
+powershell -ExecutionPolicy Bypass -File .\despliegue\revertir.ps1 -RutaHtdocs "C:\Apache24\htdocs" -RutaNssm "C:\ruta\a\nssm.exe"
 ```
 
 Detiene el servicio, restaura el backend y el frontend del último respaldo
@@ -558,7 +574,7 @@ servicio y verifica.
 Para volver a un respaldo concreto, páselo por su marca de tiempo:
 
 ```
-powershell -ExecutionPolicy Bypass -File .\despliegue\revertir.ps1 -RutaHtdocs "C:\Apache24\htdocs" -Respaldo "20261009-154234"
+powershell -ExecutionPolicy Bypass -File .\despliegue\revertir.ps1 -RutaHtdocs "C:\Apache24\htdocs" -RutaNssm "C:\ruta\a\nssm.exe" -Respaldo "20261009-154234"
 ```
 
 **La base de datos no se restaura automáticamente**, y es deliberado:
@@ -827,6 +843,32 @@ Get-ChildItem C:\Apache24\htdocs\munipalmares\wp-munidata -Force
 
 **No borre `.munidata-despliegue`** de una carpeta ya desplegada: sin él,
 la siguiente actualización se detendrá igual.
+
+### 10.9 `No se encontro nssm.exe en el PATH`
+
+Pasa en el primer paso de `desplegar.ps1` o `revertir.ps1`, antes de que
+toquen nada. En esta VM es lo esperado: NSSM está instalado —lo usan otros
+sistemas— pero su carpeta no está en el `PATH`. No hay que instalar nada
+ni modificar el `PATH` del servidor: se le pasa la ruta.
+
+Para obtenerla:
+
+```
+powershell -ExecutionPolicy Bypass -File .\despliegue\verificar-requisitos.ps1
+```
+
+Si lo localiza, imprime el parámetro ya armado. Lo busca en el `PATH`, en
+las carpetas habituales y en el `PathName` de los servicios que ya corren
+con NSSM, que es lo más fiable aquí. Si aun así no aparece:
+
+```
+Get-ChildItem C:\ -Filter nssm.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+```
+
+Y repita el comando agregando `-RutaNssm "C:\ruta\a\nssm.exe"`. Si de
+verdad no está instalado, descárguelo de <https://nssm.cc/download> y
+descomprímalo en una carpeta fija del servidor (por ejemplo
+`C:\herramientas`).
 
 ---
 

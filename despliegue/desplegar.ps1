@@ -147,6 +147,20 @@ function Resolver-Ejecutable {
     if ($ToleranteEnSimulacion) {
         return "(no encontrado en el PATH: $Nombre)"
     }
+
+    # Para NSSM el mensaje nombra el parametro: en esta VM lo habitual es
+    # que nssm.exe este instalado pero fuera del PATH, asi que "no se
+    # encontro en el PATH" sin mas haria pensar que falta instalarlo.
+    if ($Nombre -eq 'nssm.exe') {
+        $mensaje = 'No se encontro nssm.exe en el PATH, pero puede estar instalado fuera de el.' + [Environment]::NewLine
+        $mensaje += '       Ejecute verificar-requisitos.ps1: si lo localiza, imprime la ruta exacta' + [Environment]::NewLine
+        $mensaje += '       lista para copiar. Luego repita este comando agregando:' + [Environment]::NewLine
+        $mensaje += '           -RutaNssm "C:\ruta\a\nssm.exe"' + [Environment]::NewLine
+        $mensaje += '       Para buscarlo a mano:' + [Environment]::NewLine
+        $mensaje += '           Get-ChildItem C:\ -Filter nssm.exe -Recurse -ErrorAction SilentlyContinue'
+        throw $mensaje
+    }
+
     throw "No se encontro $Nombre en el PATH. Ejecute verificar-requisitos.ps1."
 }
 
