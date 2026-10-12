@@ -163,8 +163,13 @@ function Obtener-Version {
     )
     try {
         $salida = & $Ruta @Argumentos 2>&1
-        if ($null -eq $salida) { return '' }
-        return ([string[]]$salida)[0].Trim()
+        # Un comando que no imprime nada deja $salida en $null, y
+        # ([string[]]$null)[0] no se puede indexar. Se normaliza a un
+        # arreglo de cadenas: cada elemento se convierte con [string]
+        # porque con 2>&1 pueden llegar ErrorRecord, que no tienen Trim().
+        $lineas = @($salida | ForEach-Object { if ($null -eq $_) { '' } else { [string] $_ } })
+        if ($lineas.Count -eq 0) { return '' }
+        return $lineas[0].Trim()
     } catch {
         return ''
     }

@@ -112,10 +112,48 @@ function Convertir-ASecreto {
     param([Parameter(Mandatory = $true)][System.Security.SecureString] $Segura)
     $puntero = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Segura)
     try {
-        return [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($puntero)
+        $texto = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($puntero)
+        # Una cadena vacia puede volver como $null. Se normaliza a '' para
+        # que quien la reciba pueda medirla o compararla sin comprobar.
+        if ($null -eq $texto) { return '' }
+        return $texto
     } finally {
         [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($puntero)
     }
+}
+
+function Convertir-ALineas {
+    <#
+        Normaliza la salida de un comando externo a un arreglo de cadenas.
+
+        Es la pieza que evita el fallo "No se puede llamar a un metodo en
+        una expresion con valor NULL": cuando mysql.exe no devuelve
+        ninguna fila, PowerShell deja la variable en $null, y envolverla
+        en @() produce un arreglo de un elemento nulo, no un arreglo
+        vacio. Al llamar .Trim() sobre ese elemento el script se caia.
+
+        Devuelve siempre un arreglo, posiblemente vacio, de cadenas no
+        nulas. Tambien convierte los ErrorRecord que aparecen al redirigir
+        con 2>&1, que tampoco tienen .Trim().
+
+        Se descartan los avisos del propio cliente ("mysql: [Warning] ..."
+        o "Warning: World-writable config file ... is ignored"): van por
+        la salida de error, los recoge el 2>&1 y no son filas de la
+        consulta, asi que colarse en la primera posicion falsearia
+        cualquier lectura.
+    #>
+    param([object] $Salida)
+
+    if ($null -eq $Salida) { return @() }
+
+    $lineas = New-Object System.Collections.ArrayList
+    foreach ($elemento in @($Salida)) {
+        if ($null -eq $elemento) { continue }
+        $texto = [string] $elemento
+        if ($texto -match '^\s*(mysql(dump)?:\s*)?\[?Warning\]?[:\s]') { continue }
+        $null = $lineas.Add($texto)
+    }
+    return ([string[]] $lineas.ToArray())
 }
 
 function Nuevo-ArchivoOpciones {
@@ -136,10 +174,20 @@ function Nuevo-ArchivoOpciones {
 
     $ruta = Join-Path $env:TEMP ("munidata-mysql-{0}.cnf" -f ([guid]::NewGuid().ToString('N')))
 
+    # Usuario y contrasena van entre comillas dobles: el analizador de
+    # archivos de opciones de MySQL trata '#' como inicio de comentario y
+    # corta el resto de la linea, de modo que una contrasena como
+    # "Palmares#2026" llegaria al servidor como "Palmares" y el error
+    # seria un "Access denied" desconcertante, con la contrasena
+    # correcta escrita. Dentro de las comillas la barra invertida es el
+    # caracter de escape, asi que hay que duplicarla.
+    $usuarioEscapado = $Usuario.Replace('\', '\\').Replace('"', '\"')
+    $contrasenaEscapada = $Contrasena.Replace('\', '\\').Replace('"', '\"')
+
     $contenido = @(
         '[client]',
-        ("user={0}" -f $Usuario),
-        ("password={0}" -f $Contrasena),
+        ("user=`"{0}`"" -f $usuarioEscapado),
+        ("password=`"{0}`"" -f $contrasenaEscapada),
         ("host={0}" -f $ServidorMysql),
         ("port={0}" -f $PuertoMysql)
     ) -join "`r`n"
@@ -148,16 +196,37 @@ function Nuevo-ArchivoOpciones {
     # interpreta; se escribe en ASCII, suficiente para estos valores.
     [System.IO.File]::WriteAllText($ruta, $contenido, [System.Text.Encoding]::ASCII)
 
-    & icacls.exe $ruta /inheritance:r /grant:r "$($env:USERNAME):(R,W)" /grant:r 'Administrators:(F)' | Out-Null
+    # El grupo de administradores se nombra por su SID conocido
+    # (S-1-5-32-544) y no por "Administrators": en un Windows en espanol
+    # ese nombre no existe (es "Administradores"), icacls falla con el
+    # codigo 1332 y NO aplica ninguna de las dos concesiones, ni siquiera
+    # /inheritance:r, de modo que el archivo con la contrasena
+    # administrativa se quedaria con los permisos heredados de %TEMP%.
+    # Al usuario actual se le da (M) y no (R,W) porque el borrado del
+    # final necesita el permiso de eliminacion, que (W) no incluye.
+    $salidaIcacls = & icacls.exe $ruta /inheritance:r /grant:r "$($env:USERNAME):(M)" /grant:r '*S-1-5-32-544:(F)' 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ''
+        Write-Host 'AVISO: no se pudieron restringir los permisos del archivo de credenciales temporal.' -ForegroundColor Yellow
+        Write-Host ("       icacls devolvio {0}: {1}" -f $LASTEXITCODE, ((Convertir-ALineas $salidaIcacls) -join ' ')) -ForegroundColor Yellow
+        Write-Host '       El archivo se borra igual al terminar, pero revise los permisos de su carpeta temporal.' -ForegroundColor Yellow
+    }
 
     return $ruta
 }
 
 function Invocar-Mysql {
     <#
-        Ejecuta una sentencia y devuelve la salida en texto. -N quita la
-        fila de encabezados y -B usa separador por tabulaciones, que es lo
-        comodo para leer desde PowerShell.
+        Ejecuta una sentencia y devuelve sus filas como cadenas. -N quita
+        la fila de encabezados y -B usa separador por tabulaciones, que es
+        lo comodo para leer desde PowerShell.
+
+        Devuelve cero filas cuando la consulta no encuentra nada. Como
+        PowerShell desenvuelve los arreglos al devolverlos, quien llame a
+        esta funcion y vaya a indexar o contar debe envolver la llamada en
+        @(...): sin eso, una sola fila llega como cadena y $salida[0]
+        entrega su primer caracter en lugar de la fila. Para leer un valor
+        unico es preferible Obtener-ValorMysql u Obtener-ConteoMysql.
     #>
     param(
         [Parameter(Mandatory = $true)][string] $Sentencia,
@@ -171,9 +240,46 @@ function Invocar-Mysql {
 
     $salida = & mysql.exe @argumentos 2>&1
     if ($LASTEXITCODE -ne 0) {
-        throw "MySQL devolvio error al ejecutar una sentencia: $($salida -join ' ')"
+        throw "MySQL devolvio error al ejecutar una sentencia: $((Convertir-ALineas $salida) -join ' ')"
     }
-    return ([string[]]$salida)
+    return (Convertir-ALineas $salida)
+}
+
+function Obtener-ValorMysql {
+    <#
+        Lee el primer campo de la primera fila de una consulta y lo
+        devuelve recortado. Si la consulta no devuelve filas entrega ''.
+
+        Esta es la forma correcta de preguntar "existe esto": la consulta
+        que no encuentra nada no devuelve una cadena vacia, no devuelve
+        nada, y eso es lo que antes llegaba como $null al codigo que
+        llamaba .Trim().
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $Sentencia,
+        [string] $Base = ''
+    )
+
+    $filas = @(Invocar-Mysql -Sentencia $Sentencia -Base $Base)
+    if ($filas.Count -eq 0) { return '' }
+    return $filas[0].Trim()
+}
+
+function Obtener-ConteoMysql {
+    <#
+        Igual que Obtener-ValorMysql pero para un COUNT(*): devuelve un
+        entero. Si no hay filas, o el valor no es numerico (NULL, un
+        aviso), devuelve 0 en vez de reventar en la conversion.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $Sentencia,
+        [string] $Base = ''
+    )
+
+    $valor = Obtener-ValorMysql -Sentencia $Sentencia -Base $Base
+    $numero = 0
+    if ([int]::TryParse($valor, [ref] $numero)) { return $numero }
+    return 0
 }
 
 function Invocar-ArchivoSql {
@@ -192,8 +298,10 @@ function Invocar-ArchivoSql {
         [Parameter(Mandatory = $true)][string] $Base
     )
 
-    $lineas = Get-Content -LiteralPath $Ruta -Encoding UTF8
-    $filtradas = $lineas | Where-Object { $_ -notmatch '^\s*USE\s+[`\w]+\s*;' }
+    # @() alrededor de Get-Content: un archivo vacio devuelve $null, y
+    # entonces el filtro recibiria un unico elemento nulo.
+    $lineas = @(Get-Content -LiteralPath $Ruta -Encoding UTF8)
+    $filtradas = @($lineas | Where-Object { $null -ne $_ -and $_ -notmatch '^\s*USE\s+[`\w]+\s*;' })
     $contenido = $filtradas -join "`r`n"
 
     $temporal = Join-Path $env:TEMP ("munidata-sql-{0}.sql" -f ([guid]::NewGuid().ToString('N')))
@@ -202,9 +310,9 @@ function Invocar-ArchivoSql {
 
         $salida = & mysql.exe "--defaults-extra-file=$archivoOpciones" '--default-character-set=utf8mb4' '--database' $Base '-e' "source $($temporal -replace '\\', '/')" 2>&1
         if ($LASTEXITCODE -ne 0) {
-            throw "Fallo al aplicar $(Split-Path -Leaf $Ruta): $($salida -join ' ')"
+            throw "Fallo al aplicar $(Split-Path -Leaf $Ruta): $((Convertir-ALineas $salida) -join ' ')"
         }
-        return ([string[]]$salida)
+        return (Convertir-ALineas $salida)
     } finally {
         if (Test-Path -LiteralPath $temporal) {
             Remove-Item -LiteralPath $temporal -Force -ErrorAction SilentlyContinue
@@ -287,6 +395,15 @@ try {
         throw 'La contrasena administrativa no puede estar vacia.'
     }
 
+    # El archivo de opciones se escribe en ASCII, porque es lo que lee el
+    # cliente de MySQL sin ambiguedad de pagina de codigos. Una letra
+    # acentuada se convertiria en '?' y el servidor rechazaria la
+    # conexion sin explicar por que, asi que se avisa aqui.
+    $textoAdmin = Convertir-ASecreto -Segura $contrasenaAdmin
+    if ($textoAdmin -match '[^\x20-\x7E]') {
+        throw 'La contrasena administrativa tiene caracteres fuera del ASCII imprimible (acentos, ene u otros). El cliente de MySQL no puede recibirla por archivo de opciones.'
+    }
+
     $contrasenaApp = Read-Host -Prompt ("Contrasena NUEVA para el usuario {0}" -f $UsuarioAplicacion) -AsSecureString
     $contrasenaAppConfirmada = Read-Host -Prompt 'Reptala para confirmar' -AsSecureString
 
@@ -304,21 +421,23 @@ try {
         throw "La contrasena del usuario de aplicacion no debe contener comillas simples ni barras invertidas."
     }
 
-    $archivoOpciones = Nuevo-ArchivoOpciones -Usuario $UsuarioAdministrador -Contrasena (Convertir-ASecreto -Segura $contrasenaAdmin)
+    $archivoOpciones = Nuevo-ArchivoOpciones -Usuario $UsuarioAdministrador -Contrasena $textoAdmin
 
     # --------------------------------------------------------
     # Conexion
     # --------------------------------------------------------
     Escribir-Paso 'Comprobando la conexion con MySQL'
-    $version = (Invocar-Mysql -Sentencia 'SELECT VERSION();')[0]
+    $version = Obtener-ValorMysql -Sentencia 'SELECT VERSION();'
     Escribir-Detalle "Conectado. Version del servidor: $version"
 
     # --------------------------------------------------------
     # Base de datos
     # --------------------------------------------------------
     Escribir-Paso "Base de datos $BaseDatos"
-    $existe = @(Invocar-Mysql -Sentencia ("SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = '{0}';" -f $BaseDatos))
-    $baseYaExistia = ($existe.Count -gt 0 -and $existe[0].Trim() -ne '')
+    # Si la base no existe la consulta no devuelve ninguna fila, no una
+    # fila vacia; Obtener-ValorMysql traduce eso a ''.
+    $esquemaEncontrado = Obtener-ValorMysql -Sentencia ("SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = '{0}';" -f $BaseDatos)
+    $baseYaExistia = ($esquemaEncontrado -ne '')
 
     if ($baseYaExistia) {
         Escribir-Detalle 'Ya existe; no se recrea.'
@@ -331,9 +450,7 @@ try {
     # Respaldo previo
     # --------------------------------------------------------
     if ($baseYaExistia) {
-        $tablas = @(Invocar-Mysql -Sentencia ("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = '{0}';" -f $BaseDatos))
-        $cantidadTablas = 0
-        if ($tablas.Count -gt 0) { $cantidadTablas = [int]($tablas[0].Trim()) }
+        $cantidadTablas = Obtener-ConteoMysql -Sentencia ("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = '{0}';" -f $BaseDatos)
 
         if ($cantidadTablas -gt 0) {
             Escribir-Paso "Respaldo previo ($cantidadTablas tablas existentes)"
@@ -343,7 +460,11 @@ try {
             $marca = Get-Date -Format 'yyyyMMdd-HHmmss'
             $archivoVolcado = Join-Path $RutaRespaldos ("previo-a-scripts-{0}.sql" -f $marca)
 
-            & mysqldump.exe "--defaults-extra-file=$archivoOpciones" '--single-transaction' '--default-character-set=utf8mb4' $BaseDatos --result-file=$archivoVolcado
+            # --no-tablespaces evita la consulta a INFORMATION_SCHEMA.FILES,
+            # que exige el privilegio global PROCESS: el usuario
+            # administrativo de MySQL en la VM no tiene por que tenerlo, y
+            # para tablas InnoDB esa informacion no hace falta al restaurar.
+            & mysqldump.exe "--defaults-extra-file=$archivoOpciones" '--single-transaction' '--default-character-set=utf8mb4' '--no-tablespaces' $BaseDatos --result-file=$archivoVolcado
             if ($LASTEXITCODE -ne 0) {
                 throw "mysqldump fallo; no se continua sin respaldo previo."
             }
@@ -400,11 +521,15 @@ CREATE TABLE IF NOT EXISTS ``$TABLA_CONTROL`` (
     # que se poblo por otra via (por ejemplo restaurando un volcado de
     # desarrollo). Aplicar los scripts encima fallaria a medias y dejaria
     # la base en un estado incierto, asi que se detiene.
-    $aplicadosPrevios = @(Invocar-Mysql -Sentencia ("SELECT nombre_script FROM ``{0}``;" -f $TABLA_CONTROL) -Base $BaseDatos | Where-Object { $_.Trim() -ne '' })
+    # La tabla acaba de crearse vacia en una instalacion nueva: la
+    # consulta no devuelve filas y el filtro recibiria un elemento nulo
+    # si no se envolviera la llamada en @(...).
+    $filasControl = @(Invocar-Mysql -Sentencia ("SELECT nombre_script FROM ``{0}``;" -f $TABLA_CONTROL) -Base $BaseDatos)
+    $aplicadosPrevios = @($filasControl | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
 
     if ($aplicadosPrevios.Count -eq 0) {
-        $tieneUsuarios = @(Invocar-Mysql -Sentencia ("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = '{0}' AND TABLE_NAME = 'usuarios';" -f $BaseDatos))
-        if ($tieneUsuarios.Count -gt 0 -and [int]($tieneUsuarios[0].Trim()) -gt 0) {
+        $tablasUsuarios = Obtener-ConteoMysql -Sentencia ("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = '{0}' AND TABLE_NAME = 'usuarios';" -f $BaseDatos)
+        if ($tablasUsuarios -gt 0) {
             throw @"
 La base $BaseDatos ya contiene el esquema (existe la tabla 'usuarios') pero no hay
 registro de los scripts aplicados. No se puede saber que falta aplicar sin
@@ -451,18 +576,28 @@ Que hacer:
     # Resumen
     # --------------------------------------------------------
     Escribir-Paso 'Resultado'
-    $conteos = Invocar-Mysql -Sentencia 'SELECT (SELECT COUNT(*) FROM roles), (SELECT COUNT(*) FROM permisos), (SELECT COUNT(*) FROM categorias_itsp), (SELECT COUNT(*) FROM tipos_documento), (SELECT COUNT(*) FROM usuarios);' -Base $BaseDatos
-    $partes = $conteos[0] -split "`t"
+    # Un COUNT(*) por tabla en vez de una sola consulta con cinco
+    # subconsultas y un -split por tabulaciones: cada lectura es
+    # independiente y no hay indices que puedan quedar fuera de rango si
+    # una columna falta. La tabla es tipos_documentos, en plural, como la
+    # crea 01-esquema.sql; el nombre en singular hacia fallar este paso
+    # final con "Table 'tipos_documento' doesn't exist" cuando todo lo
+    # demas ya habia salido bien.
+    $totalRoles = Obtener-ConteoMysql -Sentencia 'SELECT COUNT(*) FROM roles;' -Base $BaseDatos
+    $totalPermisos = Obtener-ConteoMysql -Sentencia 'SELECT COUNT(*) FROM permisos;' -Base $BaseDatos
+    $totalCategorias = Obtener-ConteoMysql -Sentencia 'SELECT COUNT(*) FROM categorias_itsp;' -Base $BaseDatos
+    $totalTipos = Obtener-ConteoMysql -Sentencia 'SELECT COUNT(*) FROM tipos_documentos;' -Base $BaseDatos
+    $totalUsuarios = Obtener-ConteoMysql -Sentencia 'SELECT COUNT(*) FROM usuarios;' -Base $BaseDatos
 
     Write-Host ("  Scripts aplicados ahora : {0}" -f $aplicados)
     Write-Host ("  Scripts ya aplicados    : {0}" -f $omitidos)
-    Write-Host ("  Roles                   : {0}" -f $partes[0])
-    Write-Host ("  Permisos                : {0}" -f $partes[1])
-    Write-Host ("  Categorias ITSP         : {0}" -f $partes[2])
-    Write-Host ("  Tipos de documento      : {0}" -f $partes[3])
-    Write-Host ("  Usuarios                : {0}" -f $partes[4])
+    Write-Host ("  Roles                   : {0}" -f $totalRoles)
+    Write-Host ("  Permisos                : {0}" -f $totalPermisos)
+    Write-Host ("  Categorias ITSP         : {0}" -f $totalCategorias)
+    Write-Host ("  Tipos de documento      : {0}" -f $totalTipos)
+    Write-Host ("  Usuarios                : {0}" -f $totalUsuarios)
 
-    if ([int]($partes[4].Trim()) -eq 0) {
+    if ($totalUsuarios -eq 0) {
         Write-Host ''
         Write-Host 'No hay ningun usuario todavia, como corresponde.' -ForegroundColor Yellow
         Write-Host 'Cree el administrador inicial DESPUES de desplegar el backend, con:' -ForegroundColor Yellow
@@ -483,6 +618,16 @@ Que hacer:
     # borra siempre, tambien si el script fallo a mitad.
     if ($null -ne $archivoOpciones -and (Test-Path -LiteralPath $archivoOpciones)) {
         Remove-Item -LiteralPath $archivoOpciones -Force -ErrorAction SilentlyContinue
-        Write-Host '(archivo de credenciales temporal eliminado)'
+        # Se comprueba en vez de anunciarlo sin mas: el mensaje anterior se
+        # imprimia aunque el borrado hubiera fallado, y ese archivo tiene
+        # la contrasena administrativa de MySQL.
+        if (Test-Path -LiteralPath $archivoOpciones) {
+            Write-Host ''
+            Write-Host 'AVISO: no se pudo borrar el archivo de credenciales temporal:' -ForegroundColor Yellow
+            Write-Host ("       {0}" -f $archivoOpciones) -ForegroundColor Yellow
+            Write-Host '       Contiene la contrasena administrativa de MySQL. Borrelo a mano.' -ForegroundColor Yellow
+        } else {
+            Write-Host '(archivo de credenciales temporal eliminado)'
+        }
     }
 }

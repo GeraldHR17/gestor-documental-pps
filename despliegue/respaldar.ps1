@@ -107,10 +107,27 @@ function Nuevo-ArchivoOpciones {
         [Parameter(Mandatory = $true)][string] $Ruta,
         [Parameter(Mandatory = $true)][string] $Contrasena
     )
+    # El archivo se escribe en ASCII, que es lo que el cliente de MySQL
+    # lee sin ambiguedad de pagina de codigos; una letra acentuada se
+    # convertiria en '?' y el servidor rechazaria la conexion sin decir
+    # por que.
+    if ($Contrasena -match '[^\x20-\x7E]') {
+        throw 'La contrasena tiene caracteres fuera del ASCII imprimible (acentos, ene u otros). El cliente de MySQL no puede recibirla por archivo de opciones.'
+    }
+
+    # Usuario y contrasena entre comillas dobles: el analizador de
+    # archivos de opciones de MySQL corta la linea en el primer '#', de
+    # modo que una contrasena como "Palmares#2026" llegaria al servidor
+    # como "Palmares" y mysqldump fallaria con un "Access denied"
+    # inexplicable. Dentro de las comillas la barra invertida es escape,
+    # asi que se duplica.
+    $usuarioEscapado = $UsuarioMysql.Replace('\', '\\').Replace('"', '\"')
+    $contrasenaEscapada = $Contrasena.Replace('\', '\\').Replace('"', '\"')
+
     $contenido = @(
         '[client]',
-        ("user={0}" -f $UsuarioMysql),
-        ("password={0}" -f $Contrasena),
+        ("user=`"{0}`"" -f $usuarioEscapado),
+        ("password=`"{0}`"" -f $contrasenaEscapada),
         ("host={0}" -f $ServidorMysql),
         ("port={0}" -f $PuertoMysql)
     ) -join "`r`n"
@@ -121,7 +138,25 @@ function Nuevo-ArchivoOpciones {
     }
 
     [System.IO.File]::WriteAllText($Ruta, $contenido, [System.Text.Encoding]::ASCII)
-    & icacls.exe $Ruta /inheritance:r /grant:r 'Administrators:(F)' /grant:r 'SYSTEM:(R)' | Out-Null
+
+    # Administradores y SYSTEM por SID conocido (S-1-5-32-544 y
+    # S-1-5-18): en un Windows en espanol los nombres "Administrators" y
+    # "SYSTEM" no resuelven, icacls falla con el codigo 1332 y no aplica
+    # ninguna concesion ni el /inheritance:r, de modo que este archivo
+    # con la contrasena de MySQL se quedaria con los permisos heredados.
+    # Al usuario que ejecuta el script se le concede (M): es quien acaba
+    # de escribir el archivo y quien tiene que leerlo en la misma corrida
+    # para pasarselo a mysqldump, y borrarlo al terminar. Sin esa
+    # concesion, una corrida sin elevacion crea un archivo que ni el
+    # propio proceso puede volver a abrir, porque la pertenencia a
+    # Administradores no esta en el testigo de un proceso no elevado.
+    $salidaIcacls = & icacls.exe $Ruta /inheritance:r /grant:r "$($env:USERNAME):(M)" /grant:r '*S-1-5-32-544:(F)' /grant:r '*S-1-5-18:(R)' 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ''
+        Write-Host ("AVISO: no se pudieron restringir los permisos de {0}" -f $Ruta) -ForegroundColor Yellow
+        Write-Host ("       icacls devolvio {0}: {1}" -f $LASTEXITCODE, (($salidaIcacls | Out-String).Trim())) -ForegroundColor Yellow
+        Write-Host '       Ese archivo contiene la contrasena de MySQL: revise sus permisos a mano.' -ForegroundColor Yellow
+    }
 }
 
 Write-Host ''
@@ -152,14 +187,14 @@ if ($RegistrarTarea) {
         Write-Host '    [SIMULACION]   Usuario : SYSTEM, con privilegios maximos' -ForegroundColor DarkGray
         Write-Host ("    [SIMULACION]   Accion  : powershell.exe {0}" -f $comando) -ForegroundColor DarkGray
         Write-Host ("    [SIMULACION] y pediria la contrasena de {0} para guardarla en {1}" -f $UsuarioMysql, $ArchivoCredenciales) -ForegroundColor DarkGray
-        Write-Host '    [SIMULACION] (permisos restringidos a Administradores y SYSTEM)' -ForegroundColor DarkGray
+        Write-Host '    [SIMULACION] (permisos restringidos al usuario actual, Administradores y SYSTEM)' -ForegroundColor DarkGray
     } else {
         if (-not (Test-Path -LiteralPath $ArchivoCredenciales)) {
             Escribir-Detalle 'La tarea corre sin nadie delante, asi que necesita la contrasena guardada.'
             $segura = Read-Host -Prompt ("Contrasena de {0} en MySQL" -f $UsuarioMysql) -AsSecureString
             if ($segura.Length -eq 0) { throw 'La contrasena no puede estar vacia.' }
             Nuevo-ArchivoOpciones -Ruta $ArchivoCredenciales -Contrasena (Convertir-ASecreto -Segura $segura)
-            Escribir-Detalle "Credenciales guardadas en $ArchivoCredenciales (solo Administradores y SYSTEM)."
+            Escribir-Detalle "Credenciales guardadas en $ArchivoCredenciales (solo el usuario actual, Administradores y SYSTEM)."
         } else {
             Escribir-Detalle "Se reutiliza el archivo de credenciales existente."
         }
@@ -235,8 +270,25 @@ try {
     # --single-transaction toma una instantanea coherente sin bloquear las
     # tablas, asi que el sistema sigue funcionando durante el respaldo
     # (solo valido con InnoDB, que es el motor de todas las tablas).
+    # --no-tablespaces y sin --events a proposito, no por descuido:
+    #
+    #   - mysqldump 8.0 consulta INFORMATION_SCHEMA.FILES, que exige el
+    #     privilegio global PROCESS. Darselo al usuario de la aplicacion
+    #     significaria dejarle ver las consultas de los otros sistemas
+    #     que comparten este MySQL en la VM. --no-tablespaces se salta
+    #     ese paso, que para tablas InnoDB en el espacio general no
+    #     aporta nada al restaurar.
+    #   - "show events" exige el privilegio EVENT sobre la base, que
+    #     tampoco se concede. El esquema no define ningun evento.
+    #
+    # Con los privilegios que concede preparar-base-datos.ps1 (SELECT,
+    # INSERT, UPDATE, DELETE) este volcado sale completo: tablas, datos y
+    # rutinas. El esquema no tiene eventos ni disparadores; si algun dia
+    # se agregan, habra que conceder EVENT y TRIGGER sobre la base y
+    # volver a poner --events, porque si no el respaldo los omitiria en
+    # silencio.
     $archivoSql = Join-Path $destino 'base-datos.sql'
-    & mysqldump.exe "--defaults-extra-file=$opcionesEnUso" '--single-transaction' '--default-character-set=utf8mb4' '--routines' '--events' $BaseDatos --result-file=$archivoSql
+    & mysqldump.exe "--defaults-extra-file=$opcionesEnUso" '--single-transaction' '--default-character-set=utf8mb4' '--no-tablespaces' '--routines' $BaseDatos --result-file=$archivoSql
     if ($LASTEXITCODE -ne 0) {
         throw 'mysqldump fallo; el respaldo no es valido.'
     }
@@ -323,7 +375,16 @@ try {
     Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 } finally {
+    # Ese archivo tiene la contrasena de MySQL. Si el borrado no sale, hay
+    # que decirlo: antes se descartaba el error en silencio y el archivo
+    # podia quedarse en la carpeta temporal sin que nadie se enterara.
     if ($null -ne $credencialesTemporales -and (Test-Path -LiteralPath $credencialesTemporales)) {
         Remove-Item -LiteralPath $credencialesTemporales -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $credencialesTemporales) {
+            Write-Host ''
+            Write-Host 'AVISO: no se pudo borrar el archivo de credenciales temporal:' -ForegroundColor Yellow
+            Write-Host ("       {0}" -f $credencialesTemporales) -ForegroundColor Yellow
+            Write-Host '       Contiene la contrasena de MySQL. Borrelo a mano.' -ForegroundColor Yellow
+        }
     }
 }

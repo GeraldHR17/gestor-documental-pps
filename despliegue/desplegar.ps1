@@ -420,7 +420,13 @@ try {
             Escribir-Simulado 'generaria JWT_ACCESS_SECRET y JWT_REFRESH_SECRET (64 bytes aleatorios en base64)'
             Escribir-Simulado 'y SE DETENDRIA para que usted complete BD_* y SMTP_*'
         } else {
+            # -Raw devuelve $null si la plantilla esta vacia, y entonces
+            # los -replace de abajo producirian una cadena vacia y se
+            # escribiria un .env sin ninguna variable.
             $contenido = Get-Content -LiteralPath $plantillaEntorno -Encoding UTF8 -Raw
+            if ([string]::IsNullOrWhiteSpace($contenido)) {
+                throw "La plantilla $plantillaEntorno esta vacia; no se puede generar el archivo de entorno."
+            }
 
             # Los secretos se generan aqui y no se piden: son valores que
             # nadie debe elegir a mano ni recordar.
@@ -434,7 +440,23 @@ try {
             # El archivo guarda la contrasena de la base y la del correo:
             # se quita la herencia de permisos y se deja solo para
             # administradores y para la cuenta del servicio (SYSTEM).
-            & icacls.exe $archivoEntorno /inheritance:r /grant:r 'Administrators:(F)' /grant:r 'SYSTEM:(R)' | Out-Null
+            #
+            # Se nombran por SID conocido (S-1-5-32-544 y S-1-5-18) y no
+            # por "Administrators"/"SYSTEM": en un Windows en espanol esos
+            # nombres no existen, icacls falla con el codigo 1332 y no
+            # aplica NINGUNA de las concesiones, ni siquiera
+            # /inheritance:r, dejando el archivo de secretos con los
+            # permisos heredados de la carpeta. Se comprueba el resultado
+            # porque antes se descartaba con Out-Null y el fallo pasaba
+            # inadvertido.
+            $salidaIcacls = & icacls.exe $archivoEntorno /inheritance:r /grant:r '*S-1-5-32-544:(F)' /grant:r '*S-1-5-18:(R)' 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host ''
+                Write-Host ("AVISO: no se pudieron restringir los permisos de {0}" -f $archivoEntorno) -ForegroundColor Yellow
+                Write-Host ("       icacls devolvio {0}: {1}" -f $LASTEXITCODE, (($salidaIcacls | Out-String).Trim())) -ForegroundColor Yellow
+                Write-Host '       Ese archivo contiene las contrasenas de la base y del correo:' -ForegroundColor Yellow
+                Write-Host '       revise sus permisos a mano antes de continuar.' -ForegroundColor Yellow
+            }
 
             Write-Host ''
             Write-Host '------------------------------------------------------------' -ForegroundColor Yellow
