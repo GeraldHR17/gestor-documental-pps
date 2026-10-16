@@ -245,20 +245,25 @@ primero que hay que leer.
 ### 3.1 Obtener el código
 
 ```
-cd C:\munidata-repo
-git clone https://github.com/GeraldHR17/gestor-documental-pps.git .
+New-Item -ItemType Directory -Path C:\munidata -Force
+cd C:\munidata
+git clone https://github.com/GeraldHR17/gestor-documental-pps.git
+cd gestor-documental-pps
 ```
 
 Si el repositorio ya está clonado:
 
 ```
-cd C:\munidata-repo
+cd C:\munidata\gestor-documental-pps
 git pull
 ```
 
-> La carpeta del repositorio es independiente de `C:\munidata`. El
-> repositorio es código fuente; `C:\munidata` guarda lo que se ejecuta y
-> los datos.
+> El repositorio queda en `C:\munidata\gestor-documental-pps`, dentro de
+> la carpeta de datos pero separado de ella: el repositorio es código
+> fuente, y `C:\munidata\backend`, `C:\munidata\config`,
+> `C:\munidata\storage`, `C:\munidata\registros` y
+> `C:\munidata\respaldos` guardan lo que se ejecuta y los datos. Los
+> scripts de despliegue no tocan nunca la carpeta del repositorio.
 
 ### 3.2 Preparar la base de datos
 
@@ -402,6 +407,17 @@ Crea la tarea `MuniData-Respaldo-Diario`, que corre todos los días a las
 guardarla en un archivo de opciones con permisos restringidos: una tarea
 programada no puede escribirla cada noche.
 
+El script resuelve la ruta absoluta de `mysqldump.exe` y la deja escrita en
+la línea de comandos de la tarea. Esto importa: `SYSTEM` solo ve el PATH de
+máquina, y en esta VM `C:\Program Files\MySQL\MySQL Server 8.0\bin` no está
+en el PATH, así que una tarea que invocara `mysqldump.exe` a secas fallaría
+todas las noches. Si no logra encontrarlo, el script se detiene y lo dice;
+en ese caso pase la ruta a mano:
+
+```
+powershell -ExecutionPolicy Bypass -File .\despliegue\respaldar.ps1 -RegistrarTarea -RutaMysqldump "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqldump.exe"
+```
+
 Compruebe que funciona ejecutándola ahora mismo:
 
 ```
@@ -450,6 +466,14 @@ del `<VirtualHost *:443>` que ya sirve HTTPS**:
 ```
 Include conf/extra/munidata.conf
 ```
+
+> **Solo en el `<VirtualHost *:443>`.** El sistema funciona únicamente por
+> HTTPS: el puerto 80 sigue sirviendo el frontend de WordPress y los
+> archivos estáticos, pero no la API. Si el `Include` se pusiera también
+> en el `<VirtualHost *:80>`, la aplicación cargaría por HTTP y el inicio
+> de sesión fallaría sin mensaje claro, porque la cookie del refresh token
+> sale con `secure` y el navegador no la devuelve sobre HTTP (véase 10.3).
+> Use siempre `https://` en `FRONTEND_URL` y al abrir la aplicación.
 
 ### 4.4 Validar y reiniciar
 
@@ -539,7 +563,7 @@ el servicio las toma del registro de Windows, no del archivo.
 ## 6. Actualizaciones posteriores
 
 ```
-cd C:\munidata-repo
+cd C:\munidata\gestor-documental-pps
 git pull
 powershell -ExecutionPolicy Bypass -File .\despliegue\desplegar.ps1 -RutaHtdocs "C:\Apache24\htdocs"
 ```
@@ -601,6 +625,15 @@ Genera en `C:\munidata\respaldos\<fecha-hora>`:
 
 Conserva los 14 más recientes y borra los anteriores.
 
+Mientras se genera, la carpeta se llama `<fecha-hora>.parcial` y solo se
+renombra cuando el respaldo termina bien. Si encuentra una carpeta con ese
+sufijo, ese respaldo **falló**: mírelo, averigüe por qué y bórrelo. La
+rotación no las cuenta a propósito, para que una racha de noches fallidas
+no desplace a los respaldos que sí sirven.
+
+Si `mysqldump.exe` no está en el PATH, pase su ruta con `-RutaMysqldump`
+(véase 3.7).
+
 ### 8.2 Restaurar la base de datos
 
 > **Destruye** todo lo registrado después de la fecha del volcado. No hay
@@ -612,6 +645,24 @@ node -e "const z=require('zlib'),f=require('fs');f.writeFileSync('restaurar.sql'
 mysql -u munidata_app -p munidata < restaurar.sql
 del restaurar.sql
 ```
+
+Dos avisos sobre esa penúltima línea, por si la ejecuta en una consola de
+PowerShell y no en `cmd`:
+
+- PowerShell 5.1 **no tiene** el operador `<`; responde que está reservado
+  para un uso futuro. Hay que pasar por `cmd`.
+- `mysql.exe` tampoco está en el PATH de esta VM, igual que `mysqldump.exe`
+  (véase 3.7), así que va por su ruta completa.
+
+Con las dos cosas juntas:
+
+```
+cmd /c '"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u munidata_app -p munidata < restaurar.sql'
+```
+
+Las comillas **simples** de fuera son necesarias: hacen que PowerShell
+entregue toda la línea a `cmd` sin interpretarla, y es `cmd` el que aplica
+la redirección.
 
 Reinicie el servicio después, para que el pool de conexiones se rehaga:
 
@@ -697,6 +748,23 @@ Causas, en orden de frecuencia:
   dice por qué; lo más común es que no alcanza MySQL.
 - El puerto del `ProxyPass` no coincide con `PUERTO` de `.env.produccion`.
 - Falta `proxy_http_module`. Compruebe con `httpd -M`.
+
+Si el log del backend no dice nada, el problema está del lado de Apache.
+Sus registros están en `C:\Apache24\logs` y en esta VM se llaman
+`error_log` y `access_log`, **sin punto ni extensión**, que no es el
+nombre habitual de una instalación de Apache en Windows:
+
+```
+Get-Content C:\Apache24\logs\error_log -Tail 40
+Get-Content C:\Apache24\logs\access_log -Tail 40
+```
+
+Son los registros compartidos con WordPress y los demás sistemas de la
+VM, así que conviene filtrar por la ruta de Muni Data:
+
+```
+Select-String -Path C:\Apache24\logs\error_log -Pattern 'wp-munidata|munidata' | Select-Object -Last 20
+```
 
 ### 10.2 `404` en rutas profundas
 
@@ -893,9 +961,12 @@ tablas ni siquiera por error. Nunca se usa `root`.
 hacia la API es el proxy de Apache, que además impone un límite de 40 MiB
 por petición.
 
-**HTTPS y cookies** (A.10.1, A.14.1). TLS lo termina Apache. La cookie del
-refresh token es `httpOnly`, `secure` y `sameSite=strict`, y el access token
-nunca se guarda en `localStorage`. La sesión expira de forma absoluta a las
+**HTTPS y cookies** (A.10.1, A.14.1). TLS lo termina Apache, y el sistema
+funciona solo por HTTPS: la API se publica únicamente desde el
+`<VirtualHost *:443>`. El puerto 80 sigue sirviendo el frontend y el resto
+del sitio, pero no la API, de modo que no existe ninguna ruta en claro
+hacia ella. La cookie del refresh token es `httpOnly`, `secure` y
+`sameSite=strict`, y el access token nunca se guarda en `localStorage`. La sesión expira de forma absoluta a las
 8 horas, y la rotación del refresh hereda la fecha original en vez de
 reiniciar el plazo.
 
@@ -906,11 +977,24 @@ middleware estático. El único acceso es
 registra la descarga en la bitácora.
 
 **Trazabilidad** (A.12.4). Toda acción relevante queda en `bitacora_logs`,
-sin contraseñas ni tokens en claro. **Atención:** la retención es de 3 meses
-y el borrado es **físico, sin respaldo previo**. Si la institución necesita
-conservar el histórico más allá de esa ventana —lo habitual en auditoría—
-hay que exportar el tramo antes de que la purga lo elimine. Está pendiente
-de decisión.
+sin contraseñas ni tokens en claro. **La retención es de 3 meses y el
+borrado es físico y definitivo:** la purga corre el día 1 de cada mes a las
+03:00 y elimina de la tabla todo lo anterior a esa ventana, sin exportar
+nada antes. No queda copia en ningún otro sitio.
+
+El supervisor decidió que, cuando se necesite conservar un tramo del
+histórico más allá de los 3 meses, él mismo hará el respaldo antes de que
+la purga lo elimine. Conviene tenerlo presente al cerrar cada mes.
+
+Los respaldos diarios de la base de datos **no sustituyen** a ese archivo.
+Conservan 14 días, así que durante las dos semanas siguientes a una purga
+todavía se puede recuperar lo borrado restaurando un respaldo en un
+entorno aparte; pasado ese plazo el último respaldo que lo contenía ya
+rotó y la pérdida es definitiva. Un archivo de la bitácora hay que
+guardarlo aparte y a propósito.
+
+Para cambiar la ventana, `BITACORA_RETENCION_MESES` en `.env.produccion`;
+con el valor `0` la purga queda deshabilitada y la tabla crece sin límite.
 
 **Respaldos** (A.12.3). Diarios y automáticos, con 14 días de retención,
 cubriendo base de datos y documentos. Un respaldo que nunca se probó no es
