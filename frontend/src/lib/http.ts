@@ -9,6 +9,7 @@
 
 import axios, { type AxiosRequestConfig } from 'axios';
 import { obtenerAccessToken, establecerAccessToken, limpiarAccessToken } from './tokenStore';
+import { rutaConBase } from './rutas';
 
 interface PeticionConReintento extends AxiosRequestConfig {
   _reintentado?: boolean;
@@ -99,8 +100,19 @@ clienteHttp.interceptors.response.use(
       // La renovación falló: la sesión expiró (8 horas absolutas) o fue
       // revocada. Se sale de forma controlada al login, con un motivo que
       // esa pantalla muestra como aviso y no como error crudo.
+      //
+      // La ruta pasa por `rutaConBase` y no se escribe a mano: en
+      // producción la aplicación vive bajo /munipalmares/wp-munidata/, de
+      // modo que un '/login' literal lleva a una URL que no existe y la
+      // persona ve el error del servidor en vez del formulario.
+      //
+      // Se usa BASE_URL y no el router a propósito: importar el router
+      // aquí cerraría un ciclo (http -> router -> useAutenticacion ->
+      // auth.service -> http). Además conviene que esta salida sea una
+      // navegación dura: recarga la aplicación y no deja estado en
+      // memoria de la sesión que acaba de caerse.
       limpiarAccessToken();
-      window.location.href = '/login?motivo=sesion-expirada';
+      window.location.href = rutaConBase('login?motivo=sesion-expirada');
       return Promise.reject(errorRenovacion);
     }
   },
