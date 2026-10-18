@@ -10,6 +10,71 @@ Documento para validación con el Product Owner. Versión 1 — 18 de octubre de
 
 ---
 
+# Resumen para el Product Owner
+
+*Esta página se puede leer sola. El resto del documento es el detalle técnico.*
+
+## Qué verá el ciudadano
+
+En la portada de la municipalidad aparecerá un menú **Transparencia** con cuatro
+opciones, que son las cuatro secciones del índice de transparencia:
+Información institucional, Rendición de cuentas, Participación ciudadana y Datos
+abiertos de gobierno.
+
+Al entrar en una, verá un recuadro por cada subsección, con su nombre y cuántos
+documentos tiene. Al elegir una subsección, verá la lista de sus documentos, del
+más reciente al más antiguo, y de cada uno: el título, el tipo, la dependencia,
+la fecha en que se publicó, cuántas páginas tiene y sus etiquetas.
+
+Cada documento tendrá dos botones: **Ver**, que abre el PDF en una pestaña
+nueva, y **Descargar**. Todo esto **sin cuenta y sin contraseña**, desde una
+computadora o desde el teléfono.
+
+Los nombres de las secciones y subsecciones son los que ya están cargados en el
+sistema, y solo se publican los documentos que la municipalidad ya marcó como
+publicados. Nada aparece por error: un documento en borrador o retirado es
+invisible para el público.
+
+## Qué NO incluye esta entrega
+
+- **No habrá buscador ni filtros.** Se navega por secciones.
+- **No se guarda quién visita el portal**, ni cuántas veces ni desde dónde.
+- **El PDF no se ve dentro de la página**: se abre en una pestaña aparte.
+- **No se pueden hacer trámites ni enviar formularios** desde aquí.
+- **"Participación ciudadana" aparecerá, pero todavía sin contenido**: mostrará
+  un aviso de "Contenido próximamente". Su contenido lo agregará usted más
+  adelante, editando la página, sin que nadie tenga que tocar el programa.
+
+## Lo que necesitamos que usted decida
+
+Cinco decisiones. Si no hay respuesta, se aplica la opción marcada como
+*por defecto* y se puede cambiar después.
+
+| | Decisión | Por defecto si no hay respuesta |
+|---|---|---|
+| **1** | En "Participación ciudadana" el sistema tiene cargada una subsección llamada "Información", que nunca tendrá documentos. ¿La mostramos igual, o dejamos solo el aviso de "Contenido próximamente"? | Solo el aviso. Un recuadro que siempre lleva a una página vacía hace perder el tiempo a quien lo abre. |
+| **2** | El contenido futuro de "Participación ciudadana", ¿serán los formularios del Observatorio de Datos? Y si es así, ¿los ponemos dentro de la misma página o como un enlace aparte? | Dentro de la misma página, encima del bloque de documentos, igual que ya está puesto el Observatorio en la portada. |
+| **3** | A partir de esta entrega, cuando un funcionario marca un documento como "publicado", **queda visible en Internet para cualquiera**, no solo para la municipalidad. ¿Las personas con ese permiso lo tienen claro? | Agregamos una advertencia escrita en el instructivo, y proponemos agregarla también a la pantalla de publicación más adelante. |
+| **4** | **La más importante y la más urgente.** Hay que revisar los documentos que ya están publicados, para asegurarse de que ni los PDF ni sus títulos, descripciones o etiquetas contengan datos personales que no deban ser públicos. ¿Quién lo hace y para cuándo? | Esta revisión **tiene que estar terminada antes de que instalemos la parte pública en el servidor, al final de la primera semana**. No es algo que se pueda dejar para el final: en cuanto se instala, el contenido queda accesible desde Internet aunque el menú todavía no exista. Si no está lista, posponemos la instalación. |
+| **5** | El panel de Muni Data será **claro** sobre la portada, que es oscura. El Observatorio de Datos, que ya está en esa misma portada, es oscuro. Quedarán dos bloques de aspecto distinto. ¿Lo aceptamos? | Sí, claro. Antes de cerrarlo le mostraremos una página de prueba con los dos a la vista, para que lo decida viéndolo y no imaginándolo. |
+
+## Plazos
+
+Tres semanas. Al final de la **primera** la parte invisible ya estará
+funcionando en el servidor; al final de la **segunda** usted podrá ver el portal
+completo funcionando, con una dirección que le pasaremos, **sin que nadie haya
+tocado todavía la página de la municipalidad**. La **tercera** semana es para
+integrarlo en el menú de la portada.
+
+Para ese último paso hace falta alguien con permisos de administración en
+WordPress. **Todavía no sabemos quién es**, y es lo único de todo el proyecto
+que no depende de nosotros, así que conviene resolverlo cuanto antes. Si no se
+consigue el acceso, le entregaremos instrucciones para que lo haga la persona
+que sí lo tenga: son cuatro páginas y un menú, y no requiere conocimientos
+técnicos.
+
+---
+
 ## Índice
 
 | | Sección |
@@ -143,7 +208,7 @@ de las fases anteriores.
 | RFP-05 | Cada documento del listado muestra: título, tipo de documento (como etiqueta), dependencia, fecha de publicación, número de páginas y sus etiquetas. |
 | RFP-06 | Cada documento ofrece dos acciones: **Ver** (abre el PDF en una pestaña nueva) y **Descargar**. |
 | RFP-07 | Una subsección sin documentos publicados muestra el mensaje "Sin documentos publicados" y no una lista vacía ni un error. |
-| RFP-08 | La sección "Participación ciudadana" se muestra como las demás y presenta el marcador "Contenido próximamente". |
+| RFP-08 | La sección "Participación ciudadana" aparece en la portada como las demás, y al abrirla muestra **únicamente** el marcador "Contenido próximamente": ningún recuadro de subsección, aunque la base tenga una (6.2). Ver P-1 y 11.4. |
 | RFP-09 | Hay una ruta raíz `/vista` que muestra las 4 secciones; la usan la página de prueba y cualquier enlace que no apunte a una sección concreta. |
 | RFP-10 | Existe navegación de retorno dentro del iframe (de subsección a sección, y de sección a la raíz) mediante migas de pan. |
 | RFP-11 | Los tres niveles son direccionables: una URL de subsección abierta directamente, o recargada con F5, muestra esa subsección. |
@@ -155,7 +220,7 @@ de las fases anteriores.
 
 | # | Requisito | Cómo se mide |
 |---|---|---|
-| RNFP-01 | La vista pública no consume ni emite credenciales de sesión. | En las herramientas del navegador, ninguna petición de `/vista` lleva cookie ni cabecera `Authorization`, y no hay ningún `POST /auth/refresh`. |
+| RNFP-01 | La vista pública no consume ni emite credenciales de sesión. | En las herramientas del navegador: ninguna petición del portal lleva la cookie `refreshToken` ni cabecera `Authorization`, y no hay ningún `POST /auth/refresh`. En el servidor: el controlador público **no lee cookies** ni las usa para nada. Ver la nota de 9.3 sobre por qué `withCredentials: false` no basta por sí solo. |
 | RNFP-02 | El listado de una subsección responde en menos de 1 s con hasta 200 documentos. | Medición en la VM con los datos reales. |
 | RNFP-03 | La vista es usable en móvil (ancho de 360 px) dentro del iframe, sin scroll horizontal. | Prueba manual en iPhone y Android. |
 | RNFP-04 | Accesibilidad WCAG 2.1 nivel AA en las tres vistas. | Lista de verificación de 14.3. |
@@ -296,6 +361,26 @@ Las secciones y subsecciones se direccionan por su **`codigo` en minúsculas**
 Que el código no sea bonito importa poco: la URL va dentro de un iframe y el
 ciudadano no la ve.
 
+**La búsqueda por `codigo` no distingue mayúsculas, y no hay que escribir nada
+para conseguirlo.** La columna usa la colación `utf8mb4_0900_ai_ci`
+—comprobado contra la base—, que es insensible a mayúsculas y a acentos, de
+modo que `WHERE codigo = 'itsp-01'` encuentra la fila `ITSP-01` sin ningún
+`LOWER()` ni conversión previa. En la práctica: `/vista/itsp-01`,
+`/vista/ITSP-01` y `/vista/Itsp-01` llevan todas a la misma sección.
+
+Dos consecuencias que conviene tener presentes:
+
+- **No se normaliza el código en el servidor**, porque sería trabajo inútil que
+  además daría a entender que la comparación es sensible cuando no lo es.
+- **Los enlaces del portal se generan siempre en minúsculas**, para que la URL
+  sea una sola y no tres. Que las otras funcionen es tolerancia ante un enlace
+  escrito a mano, no una invitación a mezclar.
+
+> Si algún día la base se migrara a una colación binaria o sensible (`_bin`,
+> `_cs`), esto dejaría de funcionar en silencio: `/vista/itsp-01` empezaría a
+> dar 404. Es improbable, pero es exactamente la clase de cambio que nadie
+> relaciona con el portal, así que queda anotado aquí.
+
 Los **documentos** sí se direccionan por `id` numérico, porque no tienen otra
 clave estable publicable. Consecuencia aceptada y documentada en 12.3.
 
@@ -337,8 +422,22 @@ Todos: método `GET`, sin autenticación (`@Publico()`), sin cookies, respuesta
 
 Solo categorías con `estado = 'ACTIVO'`. Orden: por `orden` y, a igualdad, por
 `nombre`. `cantidadDocumentos` cuenta únicamente documentos `PUBLICADO`; en una
-raíz es la suma de sus subsecciones más los documentos colgados directamente de
-ella.
+raíz es la suma de sus subsecciones **más los documentos colgados directamente
+de ella**.
+
+> **Esa última parte no es defensiva: un documento sí puede estar en una raíz.**
+> Se comprobó en el código. `DocumentosService.verificarClasificacion` valida
+> que la categoría exista, esté `ACTIVO` y no sea la excluida, **pero no exige
+> que sea una subsección**; y en el frontend, `idCategoriaEfectiva` de
+> `DocumentoRegistroView` cae a la raíz cuando esa raíz no tiene subsecciones.
+> Hoy las cuatro raíces tienen subsecciones, así que el formulario siempre pide
+> una, pero por la API se puede clasificar en la raíz directamente, y bastaría
+> con desactivar las subsecciones de una raíz para que el formulario también lo
+> hiciera.
+>
+> De ahí sale el endpoint de documentos de sección que viene a continuación: sin
+> él, un documento en una raíz quedaría **contado pero inalcanzable**, que es
+> peor que no contarlo. Con él, todo lo que el portal cuenta se puede abrir.
 
 ---
 
@@ -351,6 +450,22 @@ Una sección y sus subsecciones. Es lo que carga la página de una sección.
 **404** si el código no existe, si la categoría no es raíz
 (`id_categoria_padre IS NOT NULL`) o si su estado no es `ACTIVO`. Los tres casos
 devuelven exactamente la misma respuesta.
+
+---
+
+#### `GET /publico/secciones/:codigoSeccion/documentos`
+
+Documentos publicados colgados **directamente de la raíz**, no de sus
+subsecciones. Mismos parámetros, misma envoltura y mismo orden que el listado
+de subsección.
+
+Existe por lo explicado arriba: el modelo permite clasificar en una raíz, de
+modo que sin este endpoint esos documentos se contarían en el árbol y no habría
+forma de abrirlos. La vista de sección lo consume **solo si
+`cantidadDocumentos` de la raíz supera la suma de sus subsecciones**, y en ese
+caso pinta un bloque "Documentos de esta sección" bajo los recuadros. Con los
+datos de hoy ese bloque no aparecerá nunca; está para que el portal no mienta
+el día que aparezca un documento así.
 
 ---
 
@@ -433,9 +548,9 @@ cuanto alguien añade un campo a la entidad.
 | Campo | Motivo |
 |---|---|
 | `estado` | Si solo sale lo publicado, el campo es ruido que invita a filtrar en el cliente. |
-| `idUsuarioCreador`, `nombreUsuarioCreador` | Nombres de funcionarios. Dato personal innecesario para el ciudadano (Ley N.º 8968, principio de finalidad). |
+| `idUsuarioCreador`, `nombreUsuarioCreador` | Nombres de funcionarios. Dato personal innecesario para el ciudadano (principio de finalidad de la Ley N.º 8968; ver la advertencia de 12.8 sobre las citas normativas). |
 | `rutaArchivo`, `nombreArchivoSistema` | Revelan la disposición del almacenamiento y el UUID del archivo en disco. |
-| `hashArchivo`, `algoritmoHash` | Dato de integridad interno. Se usa como `ETag` (12.4) pero no se publica como campo. |
+| `hashArchivo`, `algoritmoHash` | Dato de integridad interno. **No se publica como campo del DTO**, pero el valor sí sale al navegador en la cabecera `ETag` de la respuesta del PDF (12.4). Es deliberado y no es una fuga: un SHA-256 del contenido no revela nada que quien ya puede descargar el archivo no pueda calcular por su cuenta. |
 | `idCategoriaItsp`, `idTipoDocumento`, `idDependencia` | Identificadores internos; el público recibe nombres. |
 | `fechaCreacion`, `fechaActualizacion` | Revelan el ritmo de trabajo interno sin aportar nada. |
 | `cantidadVersiones`, `versiones[]`, `numeroVersion` | El público ve un documento, no su historial. |
@@ -516,7 +631,7 @@ pasar: un enlace roto del portal acaba en la portada pública y nunca en el logi
 ```ts
 const clienteHttpPublico = axios.create({
   baseURL: URL_BASE_API,   // la misma de http.ts, relativa
-  withCredentials: false,  // nada de cookies: no hay sesión que llevar
+  withCredentials: false,  // no añade credenciales; ver la nota de abajo
 });
 // Sin interceptores: sin Authorization, sin renovación, sin redirección al login.
 ```
@@ -527,13 +642,36 @@ renovar. Dentro del iframe eso sacaría al ciudadano del portal sin explicación
 Un cliente sin interceptores no puede hacer eso **por construcción**, que es más
 fiable que recordar pasar la bandera.
 
+> **`withCredentials: false` no impide que viajen cookies, y conviene no
+> confundirse con eso.** Esa opción solo gobierna las peticiones de **otro
+> origen**; en una petición del **mismo origen** —que es el caso aquí, porque
+> Apache sirve el frontend y la API bajo el mismo host— el navegador envía
+> igualmente toda cookie cuyo `Path` y `Domain` encajen con la URL pedida.
+>
+> Lo que de verdad mantiene la cookie de sesión fuera del portal es su
+> **`Path`**: `refreshToken` se emite con `path: '/auth'`, que bajo el proxy se
+> traduce en `/munipalmares/wp-munidata/api/auth`, y las rutas públicas cuelgan
+> de `/api/publico`, así que el navegador no la adjunta. `withCredentials:
+> false` se deja de todas formas porque documenta la intención y porque no
+> cuesta nada.
+>
+> **Cuidado con el resto del host.** WordPress comparte host con Muni Data, y
+> cualquier cookie suya con `Path=/` o `Path=/munipalmares/` **sí** llega a las
+> peticiones del portal. Por eso el requisito no se enuncia como "no llegan
+> cookies" —que no está en nuestra mano— sino como: **no llega la cookie
+> `refreshToken`, no se envía `Authorization`, y el controlador público no lee
+> ninguna cookie ni le da ningún significado a lo que llegue.** Es una
+> propiedad del servidor, verificable leyendo el código, y no depende de lo que
+> otro sistema del mismo host decida poner en el navegador.
+
 ### 9.4 Capas, siguiendo el patrón del repositorio
 
 ```
 src/types/portalPublico.types.ts        SeccionPublicaDto, SubseccionPublicaDto,
                                         DocumentoPublicoDto, ListaPaginadaDocumentosPublicos
 src/services/portalPublico.service.ts   obtenerSecciones, obtenerSeccion,
-                                        listarDocumentos, urlVisualizar, urlDescargar
+                                        listarDocumentosDeSubseccion, listarDocumentosDeSeccion,
+                                        urlVisualizar, urlDescargar
 src/composables/usePortalPublico.ts     estado reactivo: cargando, error, datos
 src/views/PortalSeccionesView.vue
 src/views/PortalSeccionView.vue
@@ -669,7 +807,25 @@ adelante creyendo que es un olvido.
 - un bloque "Contenido próximamente", con un texto breve del estilo: *"Esta
   sección está en preparación. Próximamente encontrará aquí información y
   formularios de participación ciudadana."*;
-- la subsección que existe en el seed, como un recuadro más (ver P-1).
+- **y nada más: ningún recuadro de subsección**, aunque la base tenga
+  `ITSP-03-01` ("Información"). Ver P-1.
+
+> **Por qué se oculta ese recuadro y no se sigue la regla general.** En
+> cualquier otra sección, D-12 manda: los recuadros los dicta la base. Aquí la
+> regla produciría un recuadro que lleva a una página que **siempre** dirá "Sin
+> documentos publicados", porque D-11 impide que esa sección reciba documentos.
+> El ciudadano haría clic esperando contenido y se encontraría con un aviso de
+> vacío, después de haber leído ya el de "Contenido próximamente". Es la única
+> excepción a D-12 en todo el portal y está acotada a `ITSP-03`.
+>
+> **Cómo se implementa sin esparcir el caso especial:** la sección sigue
+> trayendo sus subsecciones en la respuesta de la API —el backend no inventa
+> excepciones— y es la vista de sección la que, cuando el código de la sección
+> es el de la categoría excluida, pinta el marcador en lugar de la rejilla de
+> recuadros. Reutiliza la constante que ya existe
+> (`CODIGO_CATEGORIA_RAIZ_EXCLUIDA`), de modo que no aparece un segundo sitio
+> donde "ITSP-03" esté escrito a mano. El día que la sección deba comportarse
+> como las demás, se quita esa condición y ya.
 
 **Cómo recibirá contenido, sin tocar código:** la página de WordPress de esa
 sección es un documento editable. Quien administre WordPress puede añadir
@@ -713,7 +869,7 @@ cualquier parámetro, tantas veces como quiera. Todo lo demás se deduce de ahí
 
 ### 12.2 Superficie expuesta
 
-El módulo público expone **cinco rutas de lectura** y ninguna de escritura. No
+El módulo público expone **seis rutas de lectura** y ninguna de escritura. No
 hay `POST`, `PATCH` ni `DELETE`. No recibe cuerpo de petición. Sus únicas
 entradas son dos códigos de categoría y dos enteros de paginación, todos
 validados por `ValidationPipe` con `whitelist: true`, que ya está activo
@@ -733,7 +889,7 @@ globalmente y descarta cualquier propiedad no declarada en el DTO.
   no estuviera a la vista. Se acepta conscientemente; una clave pública opaca
   exigiría una columna nueva y no cabe en el plazo.
 - **No se devuelven mensajes distintos ni códigos distintos** según el motivo, y
-  conviene vigilar también el **tiempo de respuesta**: las cinco rutas resuelven
+  conviene vigilar también el **tiempo de respuesta**: las seis rutas resuelven
   con una consulta indexada, así que no hay una diferencia medible entre "no
   existe" y "existe pero no es público".
 
@@ -753,8 +909,32 @@ ponerse sus propias cabeceras.
 | `Content-Disposition` | `inline` (ver) / `attachment` (descargar) | D-8. Con `filename` en ASCII y `filename*` en UTF-8, como ya hace el controlador interno. |
 | `Content-Length` | tamaño de la versión | Permite barra de progreso y evita descargas truncadas silenciosas. |
 | `Cache-Control` | `public, max-age=0, must-revalidate` | Permite guardar la copia, pero obliga a revalidar en cada uso: así, retirar un documento surte efecto de inmediato (11.2) sin renunciar al ahorro de ancho de banda. |
-| `ETag` | `"<hash_archivo>"` | El SHA-256 de la versión **ya está en la base**. La revalidación cuesta un 304 sin cuerpo. |
+| `ETag` | `"<hash_archivo>"` | El SHA-256 de la versión **ya está en la base**, así que no hay que calcular nada. Ver abajo quién atiende la revalidación. |
 | `X-Robots-Tag` | *(sin decidir)* | Ver P-5. |
+
+**Quién implementa la revalidación.** Conviene decirlo porque es fácil suponer
+que alguien se encarga y que no sea nadie:
+
+- **Express no compara `If-None-Match` por su cuenta cuando la respuesta es un
+  `StreamableFile`.** Su `ETag` automático solo actúa sobre cuerpos que él mismo
+  serializa; al devolver un flujo con la cabecera puesta a mano, no hay
+  comparación y siempre se envía el PDF completo.
+- **Apache tampoco lo resuelve:** actúa como proxy inverso y reenvía la
+  respuesta del backend tal cual.
+
+Así que lo hace **el controlador público, explícitamente**, y es una línea antes
+de abrir el archivo: si la cabecera `If-None-Match` de la petición coincide con
+el `hash_archivo` de la versión vigente, se responde **304 sin cuerpo** y no se
+llega a tocar el disco. El orden importa: primero se resuelve el documento y su
+versión —con todas las comprobaciones de visibilidad de 11.1, que un 304 no
+puede saltarse—, después se compara el `ETag`, y solo si no coincide se abre el
+archivo.
+
+> **Si esto no se implementa, hay que quitar el `ETag`.** Una cabecera `ETag`
+> que nadie compara no ahorra nada y hace creer que sí. Entre las dos opciones,
+> implementarla es media hora de trabajo y evita reenviar documentos de decenas
+> de megabytes en cada visita; dejarla sin implementar y anunciada es la única
+> combinación inaceptable.
 
 **Nombre con el que se descarga.** La propuesta es construirlo desde el **título
 del documento** saneado (`Informe de labores 2025.pdf`) y no desde
@@ -807,18 +987,44 @@ duplica la lógica ni se abre ningún archivo por ruta recibida del cliente.
 
 ### 12.8 ISO/IEC 27001 y Ley N.º 8968
 
-| Control | Cómo queda |
+> ### Las referencias de esta sección están **por verificar**
+>
+> Lo que sigue describe cómo queda el sistema, y eso sí está comprobado contra
+> el código. Lo que **no** está comprobado son las etiquetas normativas con que
+> se agrupa:
+>
+> - **Los códigos `A.x.y` corresponden al Anexo A de ISO/IEC 27001:2013**, que
+>   es la numeración que ya venía usando `despliegue/DESPLIEGUE.md` en este
+>   proyecto; se mantiene por coherencia. **La edición vigente es ISO/IEC
+>   27001:2022**, cuyo Anexo A reorganiza los controles en cuatro temas
+>   (`A.5` a `A.8`) con una numeración distinta. Si el informe de la PPS debe
+>   citar la edición vigente, **hay que rehacer esta correspondencia**; no se
+>   hizo aquí porque no se tuvo el texto de la norma a la vista y no se citan
+>   de memoria controles de una norma que no se ha consultado.
+> - **Los números de artículo de la Ley N.º 8968** (Protección de la Persona
+>   frente al tratamiento de sus datos personales) están **sin verificar**
+>   contra el texto oficial. Los principios que se invocan —finalidad del
+>   tratamiento y calidad del dato— son los correctos en sustancia, pero la
+>   numeración concreta hay que confirmarla antes de que este documento se
+>   cite en el informe académico.
+>
+> **Qué hacer con esto:** la verificación corresponde a la revisión documental
+> de la PPS, con las fuentes delante, y es una tarea de media hora. Mientras
+> tanto, el contenido de la columna derecha es válido por sí mismo: describe
+> qué hace el sistema, con independencia de bajo qué número se clasifique.
+
+| Control (*etiqueta por verificar*) | Cómo queda (*comprobado contra el código*) |
 |---|---|
 | **A.9.4 — Control de acceso a la información** | El portal expone exclusivamente documentos que un funcionario con el permiso `documentos.publicar` marcó como `PUBLICADO`. Publicar es, a partir de ahora, **el acto que hace público un documento en Internet**, no solo "visible para la municipalidad". El PO debe confirmar que los usuarios con ese permiso lo entienden así: ver P-6. |
 | **A.12.4 — Registro y seguimiento** | La publicación y la despublicación siguen quedando en bitácora con su autor. Lo que no se registra es la consulta anónima (11.5). La trazabilidad de *quién hizo público qué* se conserva íntegra. |
 | **A.13.1 — Seguridad de las redes** | No cambia: el backend sigue escuchando solo en loopback y el único camino es el proxy de Apache sobre HTTPS. El portal no abre ningún puerto. |
 | **A.14.2 — Seguridad en el desarrollo** | DTO de lista blanca (8.4), validación de entrada, pruebas específicas de los estados no públicos (14.1). |
-| **Ley N.º 8968, art. 5 (finalidad) y 6 (calidad del dato)** | **Quien publica es responsable de que el PDF no contenga datos personales que no deban ser públicos.** El sistema no inspecciona el contenido de los PDF y no puede hacerlo. Se propone que el instructivo de WordPress y la pantalla de publicación lleven una advertencia explícita, y que el PO acuerde con las dependencias una revisión previa. Ver P-7. |
+| **Ley N.º 8968 — principios de finalidad y de calidad del dato** (*artículos por verificar*) | **Quien publica es responsable de que no se hagan públicos datos personales que no deban serlo.** El sistema no inspecciona el contenido de los PDF y no puede hacerlo; tampoco revisa el título, la descripción ni las etiquetas, que son igual de visibles. Se propone que el instructivo de WordPress y la pantalla de publicación lleven una advertencia explícita, y que el PO acuerde con las dependencias una revisión previa. Ver P-7. |
 
 Esta última fila es el riesgo real de la entrega. Lo técnico está controlado; lo
 que puede causar un incidente es un PDF con una cédula, un teléfono o una firma
-escaneada dentro, publicado por alguien que creía que "publicado" significaba
-"visible en la intranet".
+escaneada dentro —o un título que diga el nombre de la persona— publicado por
+alguien que creía que "publicado" significaba "visible en la intranet".
 
 ---
 
@@ -852,7 +1058,7 @@ escaneada dentro, publicado por alguien que creía que "publicado" significaba
 | 7 | Documento publicado sin versiones | Se omite, sin excepción |
 | 8 | Subsección sin documentos | 200 con `datos: []` y `total: 0` |
 | 9 | `GET` de un documento `BORRADOR` por `visualizar` | 404 con el mensaje genérico |
-| 10 | `GET` de un documento inexistente por `visualizar` | 404 **idéntico byte a byte** al del caso 9 |
+| 10 | `GET` de un documento inexistente por `visualizar` | 404 con el **mismo `statusCode`, el mismo `error` y el mismo `mensaje`** que el caso 9. No se compara el cuerpo entero: `ExcepcionGlobalFilter` le añade `ruta` y `timestamp`, que por fuerza difieren |
 | 11 | Subsección que no cuelga de la sección indicada | 404 |
 | 12 | Código de sección inexistente | 404 |
 | 13 | Código que corresponde a una subsección usado como sección | 404 |
@@ -861,6 +1067,9 @@ escaneada dentro, publicado por alguien que creía que "publicado" significaba
 | 16 | DTO del listado | **No** contiene `estado`, `idUsuarioCreador`, `nombreUsuarioCreador`, `rutaArchivo`, `nombreArchivoSistema` ni `hashArchivo` |
 | 17 | Árbol de secciones | ITSP-03 aparece; ninguna categoría `INACTIVO` aparece |
 | 18 | Descarga pública | **No** se llama a `BitacoraService.registrar` |
+| 19 | Documento clasificado **directamente en una raíz** | Se cuenta en `cantidadDocumentos` de esa raíz y aparece en `GET /publico/secciones/:codigo/documentos`, no en el de ninguna subsección |
+| 20 | `GET .../visualizar` con `If-None-Match` igual al `hashArchivo` de la versión vigente | **304 sin cuerpo**, y no se abre el archivo. Con un `ETag` distinto, 200 con el PDF. Un documento `BORRADOR` con el `ETag` correcto sigue dando **404**: la visibilidad se comprueba antes que la caché |
+| 21 | Códigos en mayúsculas (`ITSP-01`) y en minúsculas (`itsp-01`) | Misma respuesta: la colación de la columna es insensible a mayúsculas (8.2) |
 
 El caso 10 merece una prueba propia y no un comentario: es la que impide que una
 refactorización futura reintroduzca la enumeración.
@@ -878,14 +1087,14 @@ cambió algo que no tocaba.
 |---|---|
 | 1 | `/vista` muestra las 4 secciones en el orden de la base |
 | 2 | Una sección muestra sus subsecciones con el conteo correcto |
-| 3 | Participación ciudadana muestra el marcador "Contenido próximamente" |
+| 3 | Participación ciudadana muestra el marcador "Contenido próximamente" y **ningún** recuadro de subsección |
 | 4 | Una subsección lista sus documentos por fecha descendente |
 | 5 | Una subsección sin documentos muestra "Sin documentos publicados" |
 | 6 | "Ver" abre el PDF en pestaña nueva |
 | 7 | "Descargar" descarga el archivo con el nombre esperado |
 | 8 | F5 en `/vista/itsp-01/itsp-01-02` recarga esa subsección (prueba el `.htaccess`) |
 | 9 | Las migas de pan vuelven a la sección y a la raíz |
-| 10 | **En las herramientas del navegador: ninguna petición a `/auth/refresh`, ninguna cookie enviada, ninguna cabecera `Authorization`** |
+| 10 | **En las herramientas del navegador: ninguna petición a `/auth/refresh`, ninguna cabecera `Authorization`, y la cookie `refreshToken` no aparece en ninguna petición del portal.** Puede haber cookies de WordPress con `Path=/`: eso es esperable y no es un fallo, porque el controlador público no las lee |
 | 11 | Navegación completa solo con teclado, con foco visible en cada paso |
 | 12 | Zoom al 200 % sin pérdida de contenido ni scroll horizontal |
 | 13 | A 360 px de ancho, las tarjetas se apilan y nada se desborda |
@@ -894,7 +1103,19 @@ cambió algo que no tocaba.
 ### 14.4 Prueba de humo en la VM, por HTTPS
 
 Con la aplicación desplegada y antes de tocar WordPress, usando
-`/munipalmares/wp-munidata/iframes/prueba-vista.html` (15.5b):
+`/munipalmares/wp-munidata/iframes/prueba-vista.html` (15.5b).
+
+> **Siempre por `https://<host>/...`, nunca por `http://localhost/...`.** El
+> `Include` de `munidata.conf` va únicamente en el `<VirtualHost *:443>`
+> (15.2), de modo que en el puerto 80 **no existe el proxy de `/api`**:
+> entrando por `http://localhost` el frontend carga —porque es un archivo
+> estático— pero **toda** llamada a la API devuelve 404 y el portal aparece
+> roto sin que nada esté mal. Es la confusión más fácil de cometer en esta
+> prueba y la más cara de diagnosticar, porque el síntoma apunta al backend y
+> la causa está en la URL que se usó para entrar.
+>
+> Lo mismo vale al probar desde el propio servidor: hay que usar el nombre real
+> del host por HTTPS, no `localhost`.
 
 | # | Comprobación |
 |---|---|
@@ -1054,7 +1275,13 @@ IP, sin rutas de la VM. Contenido:
 3. Crear el ítem de menú **Transparencia** en el menú principal, con las cuatro
    páginas como subítems, en el orden del índice ITSP.
 4. Cómo comprobar que quedó bien y qué hacer si el iframe sale en blanco (lista
-   corta: ruta mal escrita, página no publicada, caché del navegador).
+   corta: ruta mal escrita, página no publicada, caché del navegador, y la
+   causa de abajo).
+   **Siempre por `https://`.** Si se abre la página por `http://` o por
+   `http://localhost`, el contenido del iframe carga pero queda sin datos: el
+   proxy de la API solo existe en el servidor virtual de HTTPS (15.2), así que
+   por el puerto 80 todas las llamadas devuelven 404. El síntoma es un panel
+   con su encabezado y un mensaje de error donde deberían estar las secciones.
 5. Qué **no** hay que tocar: la configuración de Apache, el `.htaccess` de
    WordPress y el plugin de OneDrive (ver P-8).
 
@@ -1085,21 +1312,33 @@ el efecto sobre la limitación de tasa. No es un fallo de despliegue, es un avis
 
 | Semana | Backend | Frontend | WordPress y despliegue |
 |---|---|---|---|
-| **1** | Módulo `publico`: controlador, servicio, DTO de lista blanca, excepción propia, limitación de tasa. Las 18 pruebas de 14.1. | Tipos, servicio, composable, cliente HTTP público. Cambios del router (9.2). | — |
-| **2** | Ajustes del contrato tras la revisión con el PO. | Layout público y las tres vistas, con los cuatro estados. Accesibilidad. Prototipo claro-sobre-oscuro. | Snippets y `prueba-vista.html`. Borrador del instructivo. |
-| **3** | — | Correcciones de la validación con el PO. | Despliegue en la VM, comprobaciones nuevas, prueba de humo completa (14.4) incluidos iPhone y Android, páginas y menú de WordPress, instructivo final. |
+| **1** | Módulo `publico`: controlador, servicio, DTO de lista blanca, excepción propia, limitación de tasa, revalidación con `ETag`. Las 21 pruebas de 14.1. | Tipos, servicio, composable, cliente HTTP público. Cambios del router (9.2). | **Fin de semana: el backend se despliega en la VM.** Se comprueba `/api/publico/secciones` por HTTPS (15.6, comprobación 8). **Requisito previo: la revisión de P-7 terminada.** |
+| **2** | Ajustes del contrato tras la revisión con el PO. | Layout público y las tres vistas, con los cuatro estados. Accesibilidad. Prototipo claro-sobre-oscuro. | Snippets y `prueba-vista.html`. Borrador del instructivo. **Fin de semana: el frontend se despliega en la VM.** `/vista` y `prueba-vista.html` funcionando por HTTPS, con la prueba de humo de 14.4 hecha, iPhone y Android incluidos. |
+| **3** | — | Correcciones de la validación con el PO. | **Integración con WordPress**: páginas, menú, instructivo final. Ajuste de alturas (P-3). Redespliegue y prueba de humo conjunta. Margen para lo que aparezca. |
+
+**Por qué se despliega en etapas y no todo en la semana 3.** Los fallos de este
+trabajo no viven en el código sino en el camino: el proxy de `/api`, el
+`.htaccess`, la ruta base, los snippets servidos como archivo, el visor de PDF
+de un móvil. Nada de eso se reproduce en la máquina de desarrollo. Desplegar al
+final de la semana 1 y de la semana 2 deja **dos semanas y una semana** de
+margen para descubrirlos; dejarlo todo para la 3 no deja ninguno, y la semana 3
+ya está ocupada por la única tarea que depende de un tercero.
 
 **Hitos de validación con el PO**
 
 | Cuándo | Qué se valida |
 |---|---|
-| Fin de semana 1 | Este documento aprobado y las preguntas abiertas cerradas. |
+| Inicio de semana 1 | **La revisión de P-7**, que condiciona el despliegue del backend. |
+| Fin de semana 1 | Este documento aprobado y las preguntas abiertas cerradas. Backend desplegado y respondiendo. |
 | Mitad de semana 2 | El prototipo claro-sobre-oscuro (16.2). Es el punto de no retorno del diseño. |
-| Fin de semana 2 | El instructivo de WordPress, para que quien tenga los permisos pueda agendarse. |
-| Semana 3 | Prueba de humo conjunta en la VM. |
+| Fin de semana 2 | El portal funcionando en la VM por HTTPS, visible con `prueba-vista.html` **sin haber tocado WordPress**. Instructivo entregado, para que quien tenga los permisos pueda agendarse. |
+| Semana 3 | El portal dentro de WordPress, con el menú. |
 
 **El camino crítico no es el código: es el acceso a WordPress.** Hay que
-resolverlo en la semana 1, no en la 3.
+resolverlo en la semana 1, no en la 3. El escalonamiento de arriba está pensado
+justo para eso: al final de la semana 2 todo lo que depende del equipo está
+hecho y demostrable, y lo único que queda pendiente es lo que depende de otra
+persona.
 
 ### 16.2 Cómo validar el aspecto claro dentro de una portada oscura
 
@@ -1153,12 +1392,12 @@ Medibles. La entrega está terminada cuando **todos** se cumplen.
 | CA-1 | En una ventana de incógnito, sin haber iniciado sesión nunca, `https://<host>/munipalmares/wp-munidata/vista` muestra las 4 secciones del índice ITSP con los nombres que tiene la base. |
 | CA-2 | Las 4 páginas de WordPress del menú "Transparencia" muestran cada una su sección dentro del iframe. |
 | CA-3 | Desde una subsección con documentos se puede **ver** un PDF en pestaña nueva y **descargarlo**, en escritorio, en iPhone y en Android. |
-| CA-4 | Un documento en `BORRADOR` y uno `INACTIVO` devuelven **404 con idéntica respuesta** a la de un identificador inexistente, tanto en el listado como en `visualizar` y `descargar`. |
-| CA-5 | En las herramientas del navegador, ninguna petición del portal lleva cookie ni `Authorization`, y no hay ningún `POST /auth/refresh`. |
+| CA-4 | Un documento en `BORRADOR` y uno `INACTIVO` devuelven 404 con el **mismo `statusCode`, `error` y `mensaje`** que un identificador inexistente, tanto en el listado como en `visualizar` y `descargar`. (`ruta` y `timestamp` difieren por construcción y no se comparan.) |
+| CA-5 | En las herramientas del navegador, ninguna petición del portal lleva la cookie `refreshToken` ni cabecera `Authorization`, y no hay ningún `POST /auth/refresh`. En el código, el controlador público no lee ninguna cookie. |
 | CA-6 | La respuesta del listado no contiene `estado`, `idUsuarioCreador`, `nombreUsuarioCreador`, `rutaArchivo`, `nombreArchivoSistema` ni `hashArchivo`. |
-| CA-7 | Una subsección sin documentos muestra "Sin documentos publicados"; Participación ciudadana muestra "Contenido próximamente". |
+| CA-7 | Una subsección sin documentos muestra "Sin documentos publicados". Participación ciudadana muestra **únicamente** "Contenido próximamente", sin ningún recuadro de subsección. |
 | CA-8 | Recargar con F5 en `/vista/itsp-01/itsp-01-02`, dentro y fuera del iframe, mantiene la subsección. |
-| CA-9 | `nest build` limpio y **las 183 pruebas anteriores más las 18 nuevas pasando**. |
+| CA-9 | `nest build` limpio y **las 183 pruebas anteriores más las 21 nuevas pasando**. |
 | CA-10 | `verificar-despliegue.ps1` pasa sus diez comprobaciones contra la VM. |
 | CA-11 | Tras un `desplegar.ps1` completo, los snippets siguen en `/iframes/` y las páginas de WordPress siguen funcionando sin que nadie toque nada. |
 | CA-12 | La navegación completa del portal es posible solo con teclado, con foco visible, y los contrastes medidos cumplen AA. |
@@ -1184,13 +1423,41 @@ del fin de la semana 1. Ninguna bloquea el arranque del backend.
 
 | # | Pregunta | Valor por defecto |
 |---|---|---|
-| **P-1** | **Participación ciudadana tiene una subsección en la base** (`ITSP-03-01`, "Información"), pero por D-11 nunca tendrá documentos. ¿Se muestra ese recuadro, se oculta, o se muestra la sección sin recuadros y solo con el marcador? | **Mostrar el marcador "Contenido próximamente" y, debajo, el recuadro de la subsección**, que al abrirse dice "Sin documentos publicados". Es lo coherente con D-12 (los nombres los manda la base) y con D-10. |
+| **P-1** | **Participación ciudadana tiene una subsección en la base** (`ITSP-03-01`, "Información"), pero por D-11 nunca tendrá documentos. ¿Se muestra ese recuadro, se oculta, o se muestra la sección solo con el marcador? | **Solo el marcador "Contenido próximamente", sin recuadro de subsección.** Un recuadro que lleva a una página que siempre dice "Sin documentos publicados" es un callejón sin salida: el ciudadano hace clic esperando algo y no encuentra nada, dos veces seguidas. Entre respetar D-12 al pie de la letra y no hacerle perder el tiempo a quien visita el portal, pesa más lo segundo. La subsección sigue en la base y, el día que la sección reciba contenido, basta con quitar el caso especial. |
 | **P-2** | El contenido de Participación ciudadana, ¿viene de los formularios del Observatorio de Datos? ¿Se **enlaza** desde la página de WordPress o se **incrusta** como un segundo iframe junto al de Muni Data? | **Se incrusta como un segundo iframe en la misma página de WordPress**, encima del de Muni Data, usando el snippet que el Observatorio ya provee. Muni Data no se entera y no se acopla a nada. |
 | **P-3** | Alturas del iframe por sección. | **800 px** para ITSP-01 e ITSP-04; **650 px** para ITSP-02 e ITSP-03. Son los dos valores que el Observatorio ya usa en esa portada. |
 | **P-4** | Nombre del archivo al descargar: ¿el título del documento saneado o el nombre original con que se subió? | **El título saneado** (`Informe de labores 2025.pdf`), con el nombre original como respaldo. Evita publicar nombres internos. |
 | **P-5** | ¿Los PDF públicos deben ser **indexables** por buscadores? Un portal de transparencia normalmente querría que sí. | **No se declara nada** (`X-Robots-Tag` ausente), que es el comportamiento actual. Decidirlo requiere hablar de `sitemap` y de SEO, y eso no cabe en el plazo. |
 | **P-6** | ¿Entienden los usuarios con permiso `documentos.publicar` que, a partir de esta entrega, "publicar" significa **publicar en Internet**? | **Se añade una advertencia** en el instructivo y se propone al PO añadirla también al diálogo de publicación en una entrega posterior. |
-| **P-7** | ¿Quién revisa que un PDF no contenga datos personales antes de publicarlo? ¿Hay que revisar los que **ya** están publicados antes de abrir el portal? | **Sí: revisar lo ya publicado antes de abrir el portal.** Es una tarea del PO y de las dependencias, no del sistema, y conviene hacerla en la semana 1 o 2, no la noche anterior. |
+| **P-7** | ¿Quién revisa que no se publiquen datos personales que no deban serlo? ¿Y qué pasa con lo que **ya** está publicado? | **Revisar todo lo ya publicado ANTES del primer despliegue del backend** —no antes de crear las páginas de WordPress—, y acordar quién revisa de ahí en adelante. La revisión abarca **el PDF y también el título, la descripción y las etiquetas**, porque esos tres salen en el listado público. Ver el recuadro de abajo: es la única pregunta de esta lista con una fecha límite dura. |
+
+> ### P-7 tiene una fecha límite, y no es la que parece
+>
+> Es tentador pensar que el portal "se abre" cuando aparece el menú
+> Transparencia en WordPress, y que hasta entonces hay margen. **No es así.**
+>
+> En cuanto el backend con el módulo público se despliega en la VM,
+> `https://<host>/munipalmares/wp-munidata/api/publico/secciones` y todo lo que
+> cuelga de ahí **responde a cualquiera que escriba la URL**. El menú de
+> WordPress no es una puerta: es un atajo. No hay ninguna autenticación, ningún
+> `Referer` comprobado y ninguna lista de orígenes detrás, **ni la habrá**,
+> porque el contenido es público por diseño. Lo mismo vale para `/vista`, que
+> funciona igual abierta directamente en una pestaña que dentro del iframe.
+>
+> Por lo tanto: **la revisión de lo ya publicado tiene que estar hecha antes
+> del despliegue del backend, que según 16.1 ocurre al final de la semana 1**,
+> y no antes de la integración con WordPress de la semana 3.
+>
+> **Qué hay que revisar en cada documento publicado:** el contenido del PDF, y
+> además su **título**, su **descripción** y sus **etiquetas**, porque los tres
+> viajan en el listado público (8.3) y son legibles sin abrir el archivo. Un
+> título como "Despido de <nombre> — expediente" es tan público como el PDF.
+>
+> **Si la revisión no está lista a tiempo**, la salida es sencilla y hay que
+> acordarla de antemano: no desplegar el módulo público todavía. Desplegar
+> primero y revisar después no es una opción, porque lo publicado por error no
+> se puede despublicar de la memoria de quien ya lo vio, ni de la caché de un
+> buscador.
 | **P-8** | Coexistencia con el plugin de OneDrive ya instalado en WordPress: ¿interfiere con un bloque HTML personalizado? | **Se asume que no**, porque el bloque del Observatorio ya convive con él. Se verifica al crear la primera página. |
 | **P-9** | El Observatorio embebido es oscuro y Muni Data será claro, en la misma portada. ¿Se acepta? | **Sí, claro** (D-7). Se le muestra al PO con los dos a la vista en la validación de 16.2 antes de cerrarlo. |
 | **P-10** | ¿Se arregla en esta entrega el defecto preexistente de 7.2 (`window.location.href = '/login'` sin la ruta base)? | **Sí**, en un commit aparte marcado como defecto preexistente. |
