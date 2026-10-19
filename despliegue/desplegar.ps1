@@ -88,12 +88,27 @@ $rutaConfig        = Join-Path $RutaDatos 'config'
 $archivoEntorno    = Join-Path $rutaConfig '.env.produccion'
 $plantillaEntorno  = Join-Path $rutaDespliegue '.env.produccion.ejemplo'
 $rutaBackendDestino = Join-Path $RutaDatos 'backend'
+# La version nueva se arma aparte, con el servicio todavia corriendo, y
+# solo se pone en su sitio por renombrado cuando ya esta completa. La
+# anterior se conserva hasta que la verificacion pase.
+$rutaBackendNuevo    = "$rutaBackendDestino.nuevo"
+$rutaBackendAnterior = "$rutaBackendDestino.anterior"
 $rutaAlmacenamiento = Join-Path $RutaDatos 'storage\documentos'
 $rutaRespaldos     = Join-Path $RutaDatos 'respaldos'
 $rutaRegistros     = Join-Path $RutaDatos 'registros'
 
 $marcaTiempo       = Get-Date -Format 'yyyyMMdd-HHmmss'
 $rutaRespaldoActual = Join-Path $rutaRespaldos $marcaTiempo
+
+# Hasta donde llego el reemplazo del backend. Lo consulta el mensaje de
+# error final para describir el estado REAL en vez de afirmar a ciegas que
+# no quedo nada a medias.
+#
+#   sin-tocar     No se preparo nada. La instalacion anterior esta intacta.
+#   preparado     Existe backend.nuevo, completo. backend sigue siendo el de antes.
+#   intercambiado backend es la version nueva y backend.anterior la de antes.
+#   deshecho      Se intercambio y se revirtio: backend vuelve a ser el de antes.
+$estadoDelBackend = 'sin-tocar'
 
 # ------------------------------------------------------------
 # Utilidades
@@ -178,7 +193,11 @@ function Invocar-Comando {
         [Parameter(Mandatory = $true)][string] $Programa,
         [Parameter(Mandatory = $true)][string[]] $Argumentos,
         [string] $DirectorioTrabajo = '',
-        [string] $Descripcion = ''
+        [string] $Descripcion = '',
+        # Para los comandos de la vuelta atras: si uno falla, hay que
+        # seguir intentando restaurar y contarlo al final, no abortar el
+        # rescate a medio hacer.
+        [switch] $Tolerante
     )
 
     $etiqueta = $Descripcion
@@ -189,6 +208,10 @@ function Invocar-Comando {
         if ($DirectorioTrabajo -ne '') { Set-Location -LiteralPath $DirectorioTrabajo }
         & $Programa @Argumentos
         if ($LASTEXITCODE -ne 0) {
+            if ($Tolerante) {
+                Write-Host ("AVISO: fallo {0} (codigo {1}); se continua." -f $etiqueta, $LASTEXITCODE) -ForegroundColor Yellow
+                return
+            }
             throw "Fallo: $etiqueta (codigo $LASTEXITCODE)"
         }
     } finally {
@@ -424,6 +447,11 @@ $VARIABLES_PUBLICAS = @('NODE_ENV', 'PUERTO', 'HOST_ESCUCHA', 'BD_HOST', 'BD_PUE
 # cubren el arranque en frio de la VM con holgura.
 $SEGUNDOS_ESPERA_PUERTO = 60
 $SEGUNDOS_ENTRE_SONDEOS = 2
+
+# Margen para que el servicio pase a Stopped de verdad antes de renombrar
+# su carpeta. El servicio se configura con AppStopMethodConsole de 15
+# segundos, asi que 30 deja holgura sin dejar el despliegue colgado.
+$SEGUNDOS_ESPERA_DETENCION = 30
 
 function Obtener-TipoDeValor {
     <#
@@ -802,6 +830,189 @@ function Esperar-PuertoEscuchando {
     }
 }
 
+function Esperar-ServicioDetenido {
+    <#
+        Espera a que el servicio quede realmente en Stopped.
+
+        "nssm stop" vuelve en cuanto le pide al proceso que termine, no
+        cuando ha terminado. Entre una cosa y otra, el proceso sigue vivo y
+        con sus archivos abiertos: si se renombra la carpeta del backend en
+        ese hueco, el renombrado falla o deja la instalacion a medias.
+        Nest ademas cierra conexiones al salir y el servicio esta
+        configurado con AppStopMethodConsole de 15 segundos, asi que el
+        hueco es real y no teorico.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $Nombre,
+        [int] $Segundos = 30
+    )
+
+    $limite = (Get-Date).AddSeconds($Segundos)
+    while ((Get-Date) -lt $limite) {
+        $servicio = Get-Service -Name $Nombre -ErrorAction SilentlyContinue
+        if ($null -eq $servicio -or $servicio.Status -eq 'Stopped') {
+            return $true
+        }
+        Start-Sleep -Seconds 1
+    }
+    return $false
+}
+
+function Comprobar-ContenidoEsperadoDelBackend {
+    <#
+        Comprueba que la carpeta del backend contenga solo lo que este
+        script pone ahi.
+
+        Hace falta antes de renombrarla: si alguien guardo algo mas dentro
+        —un .env suelto, un volcado, una carpeta de pruebas— ese contenido
+        se iria con el renombrado a backend.anterior y luego desapareceria
+        al limpiarla. Mejor detenerse y decir que hay, que borrar en
+        silencio algo que alguien dejo a proposito.
+    #>
+    param([Parameter(Mandatory = $true)][string] $Ruta)
+
+    if (-not (Test-Path -LiteralPath $Ruta)) {
+        return @()
+    }
+
+    $esperados = @('dist', 'node_modules', 'package.json', 'package-lock.json')
+    return @(
+        Get-ChildItem -LiteralPath $Ruta -Force |
+            Where-Object { $esperados -notcontains $_.Name } |
+            ForEach-Object { $_.Name }
+    )
+}
+
+function Intercambiar-CarpetasDelBackend {
+    <#
+        Pone la version nueva en su sitio con dos renombrados.
+
+        Renombrar es casi instantaneo y, sobre todo, es atomico desde el
+        punto de vista de quien mira la carpeta: o esta la version vieja o
+        esta la nueva, nunca media. Copiar archivo por archivo encima de la
+        instalacion viva es justo lo que dejaba el sistema en un estado
+        imposible de describir cuando algo fallaba a mitad.
+
+        Solo debe llamarse con el servicio ya detenido y confirmado.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $Destino,
+        [Parameter(Mandatory = $true)][string] $Nuevo,
+        [Parameter(Mandatory = $true)][string] $Anterior
+    )
+
+    if (Test-Path -LiteralPath $Anterior) {
+        Remove-Item -LiteralPath $Anterior -Recurse -Force
+    }
+
+    if (Test-Path -LiteralPath $Destino) {
+        Rename-Item -LiteralPath $Destino -NewName (Split-Path -Leaf $Anterior)
+    }
+
+    Rename-Item -LiteralPath $Nuevo -NewName (Split-Path -Leaf $Destino)
+}
+
+function Deshacer-IntercambioDelBackend {
+    <#
+        Devuelve la instalacion anterior a su sitio.
+
+        Se usa cuando la version nueva no llega a arrancar. Lo que estaba
+        funcionando ayer vuelve a estar en backend, y la que fallo queda en
+        backend.nuevo para poder mirarla.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $Destino,
+        [Parameter(Mandatory = $true)][string] $Nuevo,
+        [Parameter(Mandatory = $true)][string] $Anterior
+    )
+
+    if (-not (Test-Path -LiteralPath $Anterior)) {
+        return $false
+    }
+
+    if (Test-Path -LiteralPath $Nuevo) {
+        Remove-Item -LiteralPath $Nuevo -Recurse -Force
+    }
+
+    if (Test-Path -LiteralPath $Destino) {
+        Rename-Item -LiteralPath $Destino -NewName (Split-Path -Leaf $Nuevo)
+    }
+
+    Rename-Item -LiteralPath $Anterior -NewName (Split-Path -Leaf $Destino)
+    return $true
+}
+
+function Describir-EstadoDelBackend {
+    <#
+        Describe en que estado quedo todo de verdad.
+
+        Sustituye al mensaje anterior, que afirmaba "nada quedo a medias en
+        el servicio" pasara lo que pasara. Eso era falso en el caso mas
+        probable: npm ci fallando con el servicio corriendo dejaba
+        node_modules a medio borrar y dist ya reemplazado. Un mensaje que
+        tranquiliza sin haber comprobado nada es peor que no decir nada,
+        porque manda a buscar el problema a otro sitio.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $Estado,
+        [Parameter(Mandatory = $true)][string] $Destino,
+        [Parameter(Mandatory = $true)][string] $Nuevo,
+        [Parameter(Mandatory = $true)][string] $Anterior,
+        [Parameter(Mandatory = $true)][string] $NombreServicio
+    )
+
+    Write-Host ''
+    Write-Host 'Estado real en que quedo el sistema:' -ForegroundColor Yellow
+
+    foreach ($carpeta in @($Destino, $Nuevo, $Anterior)) {
+        if (Test-Path -LiteralPath $carpeta) {
+            $tieneMain = Test-Path -LiteralPath (Join-Path $carpeta 'dist\main.js')
+            $tieneModulos = Test-Path -LiteralPath (Join-Path $carpeta 'node_modules')
+            Write-Host ("  {0}  (dist\main.js: {1}, node_modules: {2})" -f $carpeta, $tieneMain, $tieneModulos) -ForegroundColor Yellow
+        } else {
+            Write-Host ("  {0}  no existe" -f $carpeta) -ForegroundColor Yellow
+        }
+    }
+
+    $servicio = Get-Service -Name $NombreServicio -ErrorAction SilentlyContinue
+    if ($null -eq $servicio) {
+        Write-Host ("  Servicio {0}: no existe." -f $NombreServicio) -ForegroundColor Yellow
+    } else {
+        Write-Host ("  Servicio {0}: {1}." -f $NombreServicio, $servicio.Status) -ForegroundColor Yellow
+    }
+
+    Write-Host ''
+    switch ($Estado) {
+        'sin-tocar' {
+            Write-Host '  No se llego a tocar la instalacion del backend: la que habia sigue' -ForegroundColor Yellow
+            Write-Host '  entera. Si el servicio esta Running, esta sirviendo la version anterior.' -ForegroundColor Yellow
+        }
+        'preparado' {
+            Write-Host '  La version nueva quedo preparada en backend.nuevo pero NO se puso en' -ForegroundColor Yellow
+            Write-Host '  uso. La instalacion de backend sigue siendo la anterior y esta entera;' -ForegroundColor Yellow
+            Write-Host '  si el servicio esta Running, sigue sirviendo esa. Puede corregir la' -ForegroundColor Yellow
+            Write-Host '  causa y volver a ejecutar desplegar.ps1: backend.nuevo se rehace.' -ForegroundColor Yellow
+        }
+        'intercambiado' {
+            Write-Host '  backend YA es la version nueva y la anterior esta en backend.anterior.' -ForegroundColor Yellow
+            Write-Host '  Si el servicio no esta Running, el sistema esta caido. Para volver a la' -ForegroundColor Yellow
+            Write-Host '  version anterior sin esperar:' -ForegroundColor Yellow
+            Write-Host ("    nssm stop {0}" -f $NombreServicio) -ForegroundColor Yellow
+            Write-Host ("    Rename-Item '{0}' '{1}'" -f $Destino, (Split-Path -Leaf $Nuevo)) -ForegroundColor Yellow
+            Write-Host ("    Rename-Item '{0}' '{1}'" -f $Anterior, (Split-Path -Leaf $Destino)) -ForegroundColor Yellow
+            Write-Host ("    nssm start {0}" -f $NombreServicio) -ForegroundColor Yellow
+        }
+        'deshecho' {
+            Write-Host '  Se puso la version nueva, no arranco, y se devolvio la anterior a su' -ForegroundColor Yellow
+            Write-Host '  sitio. backend vuelve a ser la instalacion que funcionaba; la que fallo' -ForegroundColor Yellow
+            Write-Host '  quedo en backend.nuevo para poder revisarla.' -ForegroundColor Yellow
+        }
+        default {
+            Write-Host '  Estado no reconocido; revise las carpetas de arriba a mano.' -ForegroundColor Yellow
+        }
+    }
+}
+
 # ------------------------------------------------------------
 # Inicio
 # ------------------------------------------------------------
@@ -1104,26 +1315,65 @@ try {
     # --------------------------------------------------------
     # 7. Publicacion del backend
     # --------------------------------------------------------
-    Escribir-Paso 'Publicando el backend'
+    # Se arma ENTERA en una carpeta aparte, con el servicio todavia
+    # corriendo y atendiendo peticiones. Solo cuando esta completa se
+    # detiene el servicio y se intercambia por renombrado (paso 9).
+    #
+    # Antes se escribia directamente sobre C:\munidata\backend con el
+    # servicio en pie, y eso fallaba de verdad: npm ci empieza vaciando
+    # node_modules, y el proceso de Node tiene abierto el addon nativo de
+    # bcrypt (bcrypt.node), que Windows no deja borrar mientras este en
+    # uso. El resultado era un EPERM/EBUSY a mitad de camino, con
+    # node_modules medio borrado, dist ya reemplazado por el codigo nuevo
+    # y el servicio siguiendo en pie solo con lo que tenia cargado en
+    # memoria: un estado que no es ni la version vieja ni la nueva.
+    Escribir-Paso 'Preparando la version nueva del backend'
     if ($Simular) {
-        Escribir-Simulado "reemplazaria $rutaBackendDestino\dist"
-        Escribir-Simulado "copiaria package.json y package-lock.json"
-        Escribir-Simulado "npm ci --omit=dev en $rutaBackendDestino"
+        Escribir-Simulado "borraria $rutaBackendNuevo si hubiera quedado de un intento anterior"
+        Escribir-Simulado "crearia $rutaBackendNuevo y copiaria alli dist y package*.json"
+        Escribir-Simulado "npm ci --omit=dev en $rutaBackendNuevo, CON EL SERVICIO AUN CORRIENDO"
+        Escribir-Simulado "comprobaria que en $rutaBackendDestino no haya nada mas que dist, node_modules y package*.json"
     } else {
-        $distDestino = Join-Path $rutaBackendDestino 'dist'
-        if (Test-Path -LiteralPath $distDestino) {
-            Remove-Item -LiteralPath $distDestino -Recurse -Force
+        # Un backend.nuevo que haya sobrado de un intento fallido se borra
+        # sin miramientos: nada lo usa, no esta en el PATH de nadie y
+        # conservarlo solo daria pie a mezclar versiones.
+        if (Test-Path -LiteralPath $rutaBackendNuevo) {
+            Remove-Item -LiteralPath $rutaBackendNuevo -Recurse -Force
+            Escribir-Detalle 'Se descarto un backend.nuevo de un intento anterior.'
         }
-        Copy-Item -LiteralPath (Join-Path $rutaBackendRepo 'dist') -Destination $rutaBackendDestino -Recurse -Force
+
+        # Comprobacion previa al intercambio, hecha AQUI y no en el paso 9
+        # para no detener el servicio y descubrir despues que no se puede
+        # continuar.
+        $inesperados = Comprobar-ContenidoEsperadoDelBackend -Ruta $rutaBackendDestino
+        if ($inesperados.Count -gt 0) {
+            $mensaje  = "En $rutaBackendDestino hay contenido que este script no puso ahi: " + ($inesperados -join ', ') + [Environment]::NewLine
+            $mensaje += '       El despliegue renombra esa carpeta entera, asi que ese contenido se iria con ella.' + [Environment]::NewLine
+            $mensaje += '       Muevalo a otro sitio y vuelva a ejecutar. Solo deben quedar dist, node_modules y package*.json.'
+            throw $mensaje
+        }
+
+        $null = New-Item -ItemType Directory -Path $rutaBackendNuevo -Force
+        Copy-Item -LiteralPath (Join-Path $rutaBackendRepo 'dist') -Destination $rutaBackendNuevo -Recurse -Force
         foreach ($archivo in @('package.json', 'package-lock.json')) {
-            Copy-Item -LiteralPath (Join-Path $rutaBackendRepo $archivo) -Destination $rutaBackendDestino -Force
+            Copy-Item -LiteralPath (Join-Path $rutaBackendRepo $archivo) -Destination $rutaBackendNuevo -Force
         }
-        Escribir-Detalle "dist y package*.json copiados a $rutaBackendDestino"
+        Escribir-Detalle "dist y package*.json copiados a $rutaBackendNuevo"
 
         # --omit=dev deja fuera NestJS CLI, TypeScript, Jest y demas: el
-        # servicio solo ejecuta JavaScript ya compilado.
-        Invocar-Comando -Programa $rutaNpm -Argumentos @('ci', '--omit=dev') -DirectorioTrabajo $rutaBackendDestino -Descripcion 'npm ci --omit=dev en el destino'
-        Escribir-Detalle 'Dependencias de produccion instaladas.'
+        # servicio solo ejecuta JavaScript ya compilado. Aqui no hay nada
+        # bloqueado porque ningun proceso usa esta carpeta.
+        Invocar-Comando -Programa $rutaNpm -Argumentos @('ci', '--omit=dev') -DirectorioTrabajo $rutaBackendNuevo -Descripcion 'npm ci --omit=dev en la carpeta de preparacion'
+
+        if (-not (Test-Path -LiteralPath (Join-Path $rutaBackendNuevo 'dist\main.js'))) {
+            throw "La preparacion no dejo dist\main.js en $rutaBackendNuevo"
+        }
+        if (-not (Test-Path -LiteralPath (Join-Path $rutaBackendNuevo 'node_modules'))) {
+            throw "npm ci no dejo node_modules en $rutaBackendNuevo"
+        }
+
+        $estadoDelBackend = 'preparado'
+        Escribir-Detalle 'Version nueva lista. El servicio sigue corriendo con la anterior.'
     }
 
     # --------------------------------------------------------
@@ -1190,10 +1440,22 @@ try {
     $rutaMain = Join-Path $rutaBackendDestino 'dist\main.js'
 
     if ($Simular) {
+        # El orden de estas lineas es el orden real de las operaciones.
+        Escribir-Simulado 'ORDEN: detener -> confirmar Stopped -> renombrar -> configurar -> arrancar'
         if ($null -eq $servicioExistente) {
-            Escribir-Simulado "nssm install $NombreServicio `"$rutaNode`" `"$rutaMain`""
+            Escribir-Simulado 'el servicio no existe: nada tiene archivos abiertos, asi que'
+            Escribir-Simulado "  1) renombraria $rutaBackendDestino -> $rutaBackendAnterior"
+            Escribir-Simulado "  2) renombraria $rutaBackendNuevo -> $rutaBackendDestino"
+            Escribir-Simulado "  3) nssm install $NombreServicio `"$rutaNode`" `"$rutaMain`""
         } else {
-            Escribir-Simulado "el servicio ya existe; actualizaria su configuracion"
+            Escribir-Simulado "el servicio ya existe (estado: $($servicioExistente.Status)); lo detendria ANTES de tocar ninguna carpeta:"
+            Escribir-Simulado "  1) nssm stop $NombreServicio"
+            Escribir-Simulado ("  2) esperaria hasta {0} s a que Get-Service diga Stopped, y si no lo dijera" -f $SEGUNDOS_ESPERA_DETENCION)
+            Escribir-Simulado '     abortaria SIN tocar nada: con el proceso en pie, renombrar la carpeta'
+            Escribir-Simulado '     del backend deja la instalacion a medias'
+            Escribir-Simulado "  3) renombraria $rutaBackendDestino -> $rutaBackendAnterior"
+            Escribir-Simulado "  4) renombraria $rutaBackendNuevo -> $rutaBackendDestino"
+            Escribir-Simulado '  5) nssm set Application y AppParameters'
         }
         Escribir-Simulado "nssm set $NombreServicio AppDirectory $rutaBackendDestino"
         Escribir-Simulado "nssm set $NombreServicio Start SERVICE_AUTO_START"
@@ -1201,15 +1463,42 @@ try {
         Escribir-Simulado "nssm set $NombreServicio AppStdout $rutaRegistros\api-salida.log  (rotado a 10 MB)"
         Escribir-Simulado "nssm set $NombreServicio AppStderr $rutaRegistros\api-error.log   (rotado a 10 MB)"
     } else {
+        # ORDEN OBLIGATORIO: detener -> confirmar Stopped -> intercambiar.
+        # Mientras el proceso viva, sus archivos estan abiertos y el
+        # renombrado falla o, peor, deja la instalacion partida en dos.
         if ($null -eq $servicioExistente) {
+            # No hay servicio todavia: nada esta abierto, el intercambio es
+            # trivialmente seguro y se hace antes de crearlo para que
+            # apunte ya a la carpeta definitiva.
+            Intercambiar-CarpetasDelBackend -Destino $rutaBackendDestino -Nuevo $rutaBackendNuevo -Anterior $rutaBackendAnterior
+            $estadoDelBackend = 'intercambiado'
+            Escribir-Detalle 'Version nueva puesta en su sitio.'
+
             Invocar-Comando -Programa $rutaNssmResuelta -Argumentos @('install', $NombreServicio, $rutaNode, $rutaMain) -Descripcion 'nssm install'
             Escribir-Detalle 'Servicio creado.'
         } else {
-            Escribir-Detalle "Ya existe (estado: $($servicioExistente.Status)). Se actualiza su configuracion."
-            if ($servicioExistente.Status -eq 'Running') {
+            Escribir-Detalle "Ya existe (estado: $($servicioExistente.Status))."
+
+            if ($servicioExistente.Status -ne 'Stopped') {
                 Invocar-Comando -Programa $rutaNssmResuelta -Argumentos @('stop', $NombreServicio) -Descripcion 'nssm stop'
-                Escribir-Detalle 'Servicio detenido para actualizarlo.'
+
+                # "nssm stop" vuelve al pedir la parada, no al completarse.
+                if (-not (Esperar-ServicioDetenido -Nombre $NombreServicio -Segundos $SEGUNDOS_ESPERA_DETENCION)) {
+                    $estadoActual = (Get-Service -Name $NombreServicio -ErrorAction SilentlyContinue).Status
+                    $mensaje  = ("El servicio {0} no llego a Stopped en {1} segundos (estado: {2})." -f $NombreServicio, $SEGUNDOS_ESPERA_DETENCION, $estadoActual) + [Environment]::NewLine
+                    $mensaje += '       No se toca ninguna carpeta: con el proceso en pie, renombrar la del backend' + [Environment]::NewLine
+                    $mensaje += '       falla a medias y deja la instalacion sin poder arrancar.' + [Environment]::NewLine
+                    $mensaje += ("       Detengalo a mano (nssm stop {0} o Stop-Service) y vuelva a ejecutar." -f $NombreServicio)
+                    throw $mensaje
+                }
+                Escribir-Detalle 'Servicio detenido y confirmado en Stopped.'
             }
+
+            # Solo ahora, con el proceso fuera y sus archivos cerrados.
+            Intercambiar-CarpetasDelBackend -Destino $rutaBackendDestino -Nuevo $rutaBackendNuevo -Anterior $rutaBackendAnterior
+            $estadoDelBackend = 'intercambiado'
+            Escribir-Detalle "Version nueva en $rutaBackendDestino; la anterior en $rutaBackendAnterior."
+
             # Se reescriben por si cambio la ruta de node (una
             # actualizacion de Node.js cambia la carpeta de instalacion).
             Invocar-Comando -Programa $rutaNssmResuelta -Argumentos @('set', $NombreServicio, 'Application', $rutaNode) -Descripcion 'nssm set Application'
@@ -1341,8 +1630,11 @@ try {
     $archivoLogSalida = Join-Path $rutaRegistros 'api-salida.log'
 
     if ($Simular) {
-        Escribir-Simulado "nssm restart $NombreServicio"
+        Escribir-Simulado "nssm start $NombreServicio (ya quedo detenido en el paso anterior)"
         Escribir-Simulado ("esperaria hasta {0} segundos, sondeando cada {1}, a que el puerto {2} escuche en 127.0.0.1" -f $SEGUNDOS_ESPERA_PUERTO, $SEGUNDOS_ENTRE_SONDEOS, $Puerto)
+        Escribir-Simulado 'si NO llegara a escuchar, desharia el cambio: detendria, devolveria'
+        Escribir-Simulado "$rutaBackendAnterior a su sitio, dejaria la version que fallo en"
+        Escribir-Simulado "$rutaBackendNuevo y volveria a arrancar la version anterior"
         Escribir-Simulado 'y si no escuchara mostraria el estado del servicio, los PID vistos (para delatar un'
         Escribir-Simulado 'bucle de reinicios) y las ultimas 30 lineas que CADA log recibiera en este intento'
     } else {
@@ -1404,6 +1696,41 @@ try {
             Mostrar-ColaRegistro -Ruta $archivoLogError  -DesdeByte $tamanoLogErrorPrevio  -Lineas 30 -ValoresAOcultar $valoresSensibles
             Mostrar-ColaRegistro -Ruta $archivoLogSalida -DesdeByte $tamanoLogSalidaPrevio -Lineas 30 -ValoresAOcultar $valoresSensibles
 
+            # La version nueva no arranca: se devuelve la anterior a su
+            # sitio y se vuelve a levantar. Dejar el sistema caido con una
+            # version que no funciona, teniendo al lado una que si, no es
+            # una opcion; y la que fallo queda en backend.nuevo para poder
+            # mirarla con calma.
+            if ($estadoDelBackend -eq 'intercambiado' -and (Test-Path -LiteralPath $rutaBackendAnterior)) {
+                Write-Host ''
+                Write-Host 'Devolviendo la version anterior a su sitio...' -ForegroundColor Yellow
+
+                Invocar-Comando -Programa $rutaNssmResuelta -Argumentos @('stop', $NombreServicio) -Descripcion 'nssm stop' -Tolerante
+                if (-not (Esperar-ServicioDetenido -Nombre $NombreServicio -Segundos $SEGUNDOS_ESPERA_DETENCION)) {
+                    Write-Host ("El servicio no llego a Stopped en {0} s, asi que NO se deshace el cambio:" -f $SEGUNDOS_ESPERA_DETENCION) -ForegroundColor Red
+                    Write-Host 'renombrar con el proceso en pie dejaria la instalacion partida.' -ForegroundColor Red
+                    throw ("El servicio no quedo escuchando en el puerto {0} y tampoco se pudo detener para revertir." -f $Puerto)
+                }
+
+                if (Deshacer-IntercambioDelBackend -Destino $rutaBackendDestino -Nuevo $rutaBackendNuevo -Anterior $rutaBackendAnterior) {
+                    $estadoDelBackend = 'deshecho'
+                    Write-Host 'Version anterior restaurada. Arrancando el servicio con ella...' -ForegroundColor Yellow
+
+                    Invocar-Comando -Programa $rutaNssmResuelta -Argumentos @('start', $NombreServicio) -Descripcion 'nssm start' -Tolerante
+                    $sondeoVuelta = Esperar-PuertoEscuchando -Puerto $Puerto -NombreDelServicio $NombreServicio `
+                        -Segundos $SEGUNDOS_ESPERA_PUERTO -Intervalo $SEGUNDOS_ENTRE_SONDEOS
+
+                    if ($sondeoVuelta.Escuchando) {
+                        Write-Host ("La version ANTERIOR volvio a escuchar en el puerto {0}: el sistema sigue en servicio." -f $Puerto) -ForegroundColor Yellow
+                        Write-Host ("La version que fallo quedo en {0} para revisarla." -f $rutaBackendNuevo) -ForegroundColor Yellow
+                    } else {
+                        Write-Host 'La version anterior TAMPOCO arranco. El sistema esta caido.' -ForegroundColor Red
+                        Write-Host 'Eso apunta a algo externo al codigo: la base de datos, el archivo de' -ForegroundColor Red
+                        Write-Host 'entorno o el puerto ocupado por otro proceso.' -ForegroundColor Red
+                    }
+                }
+            }
+
             throw ("El servicio no quedo escuchando en el puerto {0}." -f $Puerto)
         }
 
@@ -1443,7 +1770,28 @@ try {
         if ($LASTEXITCODE -ne 0) {
             Write-Host ''
             Write-Host 'El despliegue termino pero la verificacion encontro problemas (ver tabla arriba).' -ForegroundColor Yellow
+            if (Test-Path -LiteralPath $rutaBackendAnterior) {
+                Write-Host ("Se CONSERVA {0} para poder volver atras si hace falta." -f $rutaBackendAnterior) -ForegroundColor Yellow
+            }
             exit 1
+        }
+    }
+
+    # --------------------------------------------------------
+    # 13. Limpieza de la version anterior
+    # --------------------------------------------------------
+    # Solo aqui: con la verificacion pasada. Mientras no lo estuviera, esa
+    # carpeta era la unica forma rapida de volver atras.
+    if (-not $Simular -and (Test-Path -LiteralPath $rutaBackendAnterior)) {
+        if ($OmitirVerificacion) {
+            Write-Host ''
+            Write-Host ("Se conserva {0}: la verificacion se omitio, asi que nadie ha comprobado" -f $rutaBackendAnterior) -ForegroundColor Yellow
+            Write-Host 'todavia que esta version sirva. Borrela cuando lo haya confirmado.' -ForegroundColor Yellow
+        } else {
+            Escribir-Paso 'Limpieza de la version anterior'
+            Remove-Item -LiteralPath $rutaBackendAnterior -Recurse -Force
+            Escribir-Detalle "Verificacion pasada; se elimino $rutaBackendAnterior."
+            Escribir-Detalle "El respaldo de $rutaRespaldoActual se conserva igual."
         }
     }
 
@@ -1467,7 +1815,20 @@ try {
     Write-Host ''
     Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host ''
-    Write-Host 'El despliegue se detuvo. Nada quedo a medias en el servicio: si ya habia' -ForegroundColor Red
-    Write-Host 'una version funcionando, siga con revertir.ps1 para restaurarla.' -ForegroundColor Red
+    Write-Host 'El despliegue se detuvo.' -ForegroundColor Red
+
+    # Antes aqui se afirmaba "nada quedo a medias en el servicio" pasara lo
+    # que pasara. Era falso justo en el caso mas probable, y mandaba a
+    # buscar el problema al sitio equivocado. Ahora se mira y se cuenta.
+    if (-not $Simular) {
+        Describir-EstadoDelBackend -Estado $estadoDelBackend -Destino $rutaBackendDestino `
+            -Nuevo $rutaBackendNuevo -Anterior $rutaBackendAnterior -NombreServicio $NombreServicio
+
+        Write-Host ''
+        Write-Host ("Hay ademas un respaldo completo de lo que habia antes en {0}," -f $rutaRespaldoActual) -ForegroundColor Yellow
+        Write-Host 'si el respaldo previo llego a hacerse. Para restaurarlo:' -ForegroundColor Yellow
+        Write-Host '  powershell -ExecutionPolicy Bypass -File .\despliegue\revertir.ps1' -ForegroundColor Yellow
+    }
+
     exit 1
 }

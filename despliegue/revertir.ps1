@@ -371,7 +371,13 @@ try {
     $servicio = Get-Service -Name $NombreServicio -ErrorAction SilentlyContinue
     if ($null -eq $servicio) {
         Escribir-Detalle 'El servicio no existe; se continua con la restauracion de archivos.'
-    } elseif ($servicio.Status -eq 'Running') {
+        # Se compara con 'Stopped' y no con 'Running': un servicio en
+        # StartPending, StopPending o Paused TIENE proceso vivo con sus
+        # archivos abiertos. Mirando solo 'Running' se saltaba la parada
+        # en esos estados y se iba derecho a reemplazar dist con el
+        # proceso en pie, que es el mismo fallo que se corrigio en
+        # desplegar.ps1.
+    } elseif ($servicio.Status -ne 'Stopped') {
         & $rutaNssmResuelta 'stop' $NombreServicio | Out-Null
         $codigoParada = $LASTEXITCODE
 
