@@ -45,6 +45,9 @@ import { AlmacenamientoDocumentosService } from './almacenamiento-documentos.ser
   ],
   controllers: [DocumentosController],
   providers: [DocumentosService, VersionesDocumentosService, AlmacenamientoDocumentosService],
-  exports: [DocumentosService, VersionesDocumentosService],
+  // AlmacenamientoDocumentosService se exporta para PublicoModule: es quien
+  // resuelve la ruta contra la raiz del almacenamiento y comprueba que no
+  // se salga de ella. Reutilizarlo evita que esa defensa quede duplicada.
+  exports: [DocumentosService, VersionesDocumentosService, AlmacenamientoDocumentosService],
 })
 export class DocumentosModule {}
