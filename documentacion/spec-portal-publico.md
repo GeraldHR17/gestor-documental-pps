@@ -529,9 +529,16 @@ PDF de la versión vigente, `Content-Disposition: inline`.
 El mismo PDF, `Content-Disposition: attachment`.
 
 **404** si el documento no existe, no está `PUBLICADO`, está en una categoría
-inactiva o no tiene versiones. **503** (`ArchivoNoDisponibleException`) si la
-fila existe pero el archivo no está en disco, que es un fallo de operación y no
-una ausencia.
+inactiva o no tiene versiones. **503** (`DocumentoPublicoNoDisponibleException`)
+si la fila existe pero el archivo no está en disco, que es un fallo de operación
+y no una ausencia.
+
+> **Por qué una excepción propia y no `ArchivoNoDisponibleException`.** Esa ya
+> existe, pero es **410 Gone** y su mensaje está escrito para un funcionario:
+> «El archivo de esta versión no está disponible en el almacenamiento del
+> servidor». Ni el código ni el texto sirven aquí. El servicio público captura
+> la del almacenamiento —que sigue lanzándose y registrándose en el log, como
+> hasta ahora— y la traduce a esta, con el 503 y el mensaje genérico de 8.5.
 
 Cabeceras de la respuesta: ver 12.4.
 
@@ -738,7 +745,7 @@ excepciones de negocio, en la línea de las que ya existen en
 | Excepción | Código | Uso |
 |---|---|---|
 | `RecursoPublicoNoDisponibleException` | 404 | Sección, subsección o documento que no debe ser visible. Mensaje único. |
-| (reutilizada) `ArchivoNoDisponibleException` | 503 | Fila sin archivo en disco. Ya existe y ya registra el fallo en el log del servicio. |
+| `DocumentoPublicoNoDisponibleException` | 503 | Fila sin archivo en disco. **No se reutiliza `ArchivoNoDisponibleException`**: esa es 410 y su mensaje nombra el almacenamiento del servidor. El servicio público la captura y la traduce; el almacenamiento sigue lanzándola y registrando el fallo en el log. |
 
 **Nunca** se usan `DocumentoNoEncontradoException` ni
 `CategoriaNoEncontradaException` en el módulo público: sus mensajes están
@@ -1074,6 +1081,12 @@ alguien que creía que "publicado" significaba "visible en la intranet".
 El caso 10 merece una prueba propia y no un comentario: es la que impide que una
 refactorización futura reintroduzca la enumeración.
 
+> **Esta tabla son 21 casos, pero la implementación dejó 41 pruebas.** Varios
+> casos se dividieron en pruebas separadas para que un fallo señale exactamente
+> qué se rompió, y a nivel HTTP se añadieron las de cabeceras, saneo del nombre
+> de descarga, parámetros no declarados y 429, que esta tabla no enumera.
+> **El total que debe pasar es 183 + 41 = 224**, en 15 suites.
+
 ### 14.2 Backend — verificación de regresión
 
 `nest build` limpio y las **183 pruebas existentes siguen pasando**. El módulo
@@ -1312,7 +1325,7 @@ el efecto sobre la limitación de tasa. No es un fallo de despliegue, es un avis
 
 | Semana | Backend | Frontend | WordPress y despliegue |
 |---|---|---|---|
-| **1** | Módulo `publico`: controlador, servicio, DTO de lista blanca, excepción propia, limitación de tasa, revalidación con `ETag`. Las 21 pruebas de 14.1. | Tipos, servicio, composable, cliente HTTP público. Cambios del router (9.2). | **Fin de semana: el backend se despliega en la VM.** Se comprueba `/api/publico/secciones` por HTTPS (15.6, comprobación 8). **Requisito previo: la revisión de P-7 terminada.** |
+| **1** | Módulo `publico`: controlador, servicio, DTO de lista blanca, excepción propia, limitación de tasa, revalidación con `ETag`. Las 41 pruebas de 14.1 (ver la nota de esa seccion). | Tipos, servicio, composable, cliente HTTP público. Cambios del router (9.2). | **Fin de semana: el backend se despliega en la VM.** Se comprueba `/api/publico/secciones` por HTTPS (15.6, comprobación 8). **Requisito previo: la revisión de P-7 terminada.** |
 | **2** | Ajustes del contrato tras la revisión con el PO. | Layout público y las tres vistas, con los cuatro estados. Accesibilidad. Prototipo claro-sobre-oscuro. | Snippets y `prueba-vista.html`. Borrador del instructivo. **Fin de semana: el frontend se despliega en la VM.** `/vista` y `prueba-vista.html` funcionando por HTTPS, con la prueba de humo de 14.4 hecha, iPhone y Android incluidos. |
 | **3** | — | Correcciones de la validación con el PO. | **Integración con WordPress**: páginas, menú, instructivo final. Ajuste de alturas (P-3). Redespliegue y prueba de humo conjunta. Margen para lo que aparezca. |
 
@@ -1397,7 +1410,7 @@ Medibles. La entrega está terminada cuando **todos** se cumplen.
 | CA-6 | La respuesta del listado no contiene `estado`, `idUsuarioCreador`, `nombreUsuarioCreador`, `rutaArchivo`, `nombreArchivoSistema` ni `hashArchivo`. |
 | CA-7 | Una subsección sin documentos muestra "Sin documentos publicados". Participación ciudadana muestra **únicamente** "Contenido próximamente", sin ningún recuadro de subsección. |
 | CA-8 | Recargar con F5 en `/vista/itsp-01/itsp-01-02`, dentro y fuera del iframe, mantiene la subsección. |
-| CA-9 | `nest build` limpio y **las 183 pruebas anteriores más las 21 nuevas pasando**. |
+| CA-9 | `nest build` limpio y **las 183 pruebas anteriores más las 41 nuevas pasando: 224 en total**. |
 | CA-10 | `verificar-despliegue.ps1` pasa sus diez comprobaciones contra la VM. |
 | CA-11 | Tras un `desplegar.ps1` completo, los snippets siguen en `/iframes/` y las páginas de WordPress siguen funcionando sin que nadie toque nada. |
 | CA-12 | La navegación completa del portal es posible solo con teclado, con foco visible, y los contrastes medidos cumplen AA. |

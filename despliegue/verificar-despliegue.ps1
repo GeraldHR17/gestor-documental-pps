@@ -405,6 +405,41 @@ if ($UrlPublica -eq '') {
     Write-Host 'URL publica : (no indicada; se omitiran las pruebas a traves de Apache)'
 } else {
     Write-Host ("URL publica : {0}" -f $UrlPublica)
+
+    # Validacion antes de hacer nada. El error que se busca atajar es
+    # copiar la linea de ejemplo de DESPLIEGUE.md tal cual, con
+    # <su-dominio> o <host> dentro: las peticiones fallarian todas y la
+    # tabla final culparia a Apache de un problema que esta en la linea
+    # de comandos.
+    $motivo = ''
+    if ($UrlPublica -match '[<>]') {
+        $motivo = 'lleva < o >, que son marcadores de la guia y no parte de la direccion'
+    } elseif ($UrlPublica -match '\s') {
+        $motivo = 'lleva espacios'
+    } elseif ($UrlPublica -notmatch '^https://') {
+        # El sistema funciona solo por HTTPS: el Include de munidata.conf
+        # va unicamente en el VirtualHost *:443, asi que por el puerto 80
+        # el proxy de /api no existe y todas las pruebas darian 404.
+        $motivo = 'no empieza por https:// (el sistema solo se publica por HTTPS)'
+    } elseif ($UrlPublica -notmatch '^https://[^/\s]+') {
+        $motivo = 'no es una direccion absoluta: falta el nombre del servidor'
+    }
+
+    if ($motivo -ne '') {
+        Write-Host ''
+        Write-Host 'Reemplace el texto de ejemplo por la direccion real de la VM' -ForegroundColor Red
+        Write-Host ''
+        Write-Host ("  -UrlPublica recibio : {0}" -f $UrlPublica) -ForegroundColor Red
+        Write-Host ("  Problema            : {0}" -f $motivo) -ForegroundColor Red
+        Write-Host '' -ForegroundColor Red
+        Write-Host '  En DESPLIEGUE.md, <host> y <su-dominio> son marcadores: hay que' -ForegroundColor Red
+        Write-Host '  sustituirlos por el nombre real del servidor, el mismo que esta en' -ForegroundColor Red
+        Write-Host '  FRONTEND_URL del archivo de entorno. Por ejemplo:' -ForegroundColor Red
+        Write-Host '    -UrlPublica "https://servidor.ejemplo.go.cr/munipalmares/wp-munidata"' -ForegroundColor Red
+        Write-Host ''
+        Write-Host 'No se ejecuto ninguna comprobacion.' -ForegroundColor Red
+        exit 2
+    }
 }
 
 if ($Simular) {

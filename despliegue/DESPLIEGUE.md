@@ -499,6 +499,16 @@ Get-Service | Where-Object { $_.Name -match 'apache|httpd' }
 powershell -ExecutionPolicy Bypass -File .\despliegue\verificar-despliegue.ps1 -UrlPublica "https://<host>/munipalmares/wp-munidata"
 ```
 
+> **`<host>` y `<su-dominio>` son marcadores, en toda esta guía.** Los
+> corchetes angulares no forman parte de la dirección: hay que sustituir
+> todo el marcador, corchetes incluidos, por el nombre real del servidor.
+> Si se copia la línea tal cual, `verificar-despliegue.ps1` lo detecta,
+> responde «Reemplace el texto de ejemplo por la dirección real de la VM»
+> y **sale con código 2 sin ejecutar ninguna comprobación**, para que no
+> parezca un problema de Apache lo que es una dirección mal escrita. Lo
+> mismo si la dirección no empieza por `https://`: la API solo se publica
+> por HTTPS (sección 4.3).
+
 Reemplace `<host>` por la dirección real de la VM, la misma que puso en
 `FRONTEND_URL`. Ahora deberían pasar las siete comprobaciones.
 
