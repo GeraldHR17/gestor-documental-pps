@@ -582,9 +582,15 @@ function Restaurar-EntradasDeEntorno {
     )
 
     try {
-        if ($Habia -and $Anteriores.Count -gt 0) {
-            $null = New-ItemProperty -Path $Clave -Name $Nombre -PropertyType MultiString -Value ([string[]] $Anteriores) -Force
-            return ("se restauro el valor anterior, con {0} variables" -f $Anteriores.Count)
+        # @() aunque el parametro este declarado [string[]]: pasarle $null
+        # explicitamente lo deja en $null, no en un arreglo vacio, y
+        # entonces .Count lanzaria PropertyNotFoundException bajo
+        # StrictMode. Hoy la unica llamada ya envuelve el argumento, pero
+        # la funcion no deberia depender de eso.
+        $anterioresSeguros = @($Anteriores)
+        if ($Habia -and $anterioresSeguros.Count -gt 0) {
+            $null = New-ItemProperty -Path $Clave -Name $Nombre -PropertyType MultiString -Value ([string[]] $anterioresSeguros) -Force
+            return ("se restauro el valor anterior, con {0} variables" -f $anterioresSeguros.Count)
         }
         Remove-ItemProperty -Path $Clave -Name $Nombre -ErrorAction SilentlyContinue
         return 'no habia valor previo, asi que se quito el que se acababa de escribir'
@@ -868,6 +874,16 @@ function Comprobar-ContenidoEsperadoDelBackend {
         se iria con el renombrado a backend.anterior y luego desapareceria
         al limpiarla. Mejor detenerse y decir que hay, que borrar en
         silencio algo que alguien dejo a proposito.
+
+        OJO al usarla, igual que con Obtener-EntradasDeEntorno: PowerShell
+        DESENVUELVE lo que devuelve una funcion. Con cero elementos quien
+        llama recibe $null, y con uno solo recibe la cadena suelta; bajo
+        Set-StrictMode -Version Latest, en Windows PowerShell 5.1, ni
+        $null ni String tienen .Count y mirarla lanza
+        PropertyNotFoundException. Hay que envolver SIEMPRE la llamada en
+        @(). Omitirlo es lo que rompio el despliegue en la VM con el
+        mensaje "The property 'Count' cannot be found on this object",
+        justo en el caso normal: la carpeta limpia.
     #>
     param([Parameter(Mandatory = $true)][string] $Ruta)
 
@@ -1345,12 +1361,27 @@ try {
         # Comprobacion previa al intercambio, hecha AQUI y no en el paso 9
         # para no detener el servicio y descubrir despues que no se puede
         # continuar.
-        $inesperados = Comprobar-ContenidoEsperadoDelBackend -Ruta $rutaBackendDestino
+        # @() obligatorio: sin el, la carpeta limpia devuelve $null y un
+        # solo elemento devuelve una cadena, y ninguno de los dos tiene
+        # .Count bajo StrictMode en Windows PowerShell 5.1.
+        $inesperados = @(Comprobar-ContenidoEsperadoDelBackend -Ruta $rutaBackendDestino)
         if ($inesperados.Count -gt 0) {
             $mensaje  = "En $rutaBackendDestino hay contenido que este script no puso ahi: " + ($inesperados -join ', ') + [Environment]::NewLine
             $mensaje += '       El despliegue renombra esa carpeta entera, asi que ese contenido se iria con ella.' + [Environment]::NewLine
             $mensaje += '       Muevalo a otro sitio y vuelva a ejecutar. Solo deben quedar dist, node_modules y package*.json.'
             throw $mensaje
+        }
+
+        # Que backend no tenga node_modules es un estado PREVIO legitimo:
+        # pasa tras un intento fallido en el que hubo que borrarlo a mano.
+        # No se comprueba ni se exige nada de el: la version nueva se
+        # construye entera aqui y el intercambio no depende de lo que la
+        # anterior tuviera. Solo se anota, porque cambia lo que se puede
+        # prometer si luego hay que deshacer (ver el paso 11).
+        if ((Test-Path -LiteralPath $rutaBackendDestino) -and
+            -not (Test-Path -LiteralPath (Join-Path $rutaBackendDestino 'node_modules'))) {
+            Escribir-Detalle 'La instalacion actual no tiene node_modules; no importa para preparar la nueva.'
+            Escribir-Detalle 'Pero no podria arrancar, asi que no serviria como vuelta atras.'
         }
 
         $null = New-Item -ItemType Directory -Path $rutaBackendNuevo -Force
@@ -1712,6 +1743,16 @@ try {
                     throw ("El servicio no quedo escuchando en el puerto {0} y tampoco se pudo detener para revertir." -f $Puerto)
                 }
 
+                # Si la instalacion anterior no tenia node_modules, no va a
+                # arrancar y no hay que prometer lo contrario: se restaura
+                # igual —es mejor que nada— pero diciendo lo que es.
+                $anteriorArrancable = Test-Path -LiteralPath (Join-Path $rutaBackendAnterior 'node_modules')
+                if (-not $anteriorArrancable) {
+                    Write-Host 'AVISO: la version anterior NO tiene node_modules, asi que tampoco podra' -ForegroundColor Red
+                    Write-Host '       arrancar. Se restaura igual para dejar las carpetas en orden, pero' -ForegroundColor Red
+                    Write-Host '       el sistema quedara caido hasta que se instalen las dependencias.' -ForegroundColor Red
+                }
+
                 if (Deshacer-IntercambioDelBackend -Destino $rutaBackendDestino -Nuevo $rutaBackendNuevo -Anterior $rutaBackendAnterior) {
                     $estadoDelBackend = 'deshecho'
                     Write-Host 'Version anterior restaurada. Arrancando el servicio con ella...' -ForegroundColor Yellow
@@ -1723,6 +1764,11 @@ try {
                     if ($sondeoVuelta.Escuchando) {
                         Write-Host ("La version ANTERIOR volvio a escuchar en el puerto {0}: el sistema sigue en servicio." -f $Puerto) -ForegroundColor Yellow
                         Write-Host ("La version que fallo quedo en {0} para revisarla." -f $rutaBackendNuevo) -ForegroundColor Yellow
+                    } elseif (-not $anteriorArrancable) {
+                        Write-Host 'La version anterior no arranco, como estaba previsto: no tenia' -ForegroundColor Red
+                        Write-Host 'node_modules. El sistema esta CAIDO y seguira asi hasta que haya una' -ForegroundColor Red
+                        Write-Host 'instalacion completa. Lo mas rapido es arreglar la causa del fallo' -ForegroundColor Red
+                        Write-Host 'y volver a ejecutar desplegar.ps1, que rehace las dependencias.' -ForegroundColor Red
                     } else {
                         Write-Host 'La version anterior TAMPOCO arranco. El sistema esta caido.' -ForegroundColor Red
                         Write-Host 'Eso apunta a algo externo al codigo: la base de datos, el archivo de' -ForegroundColor Red
