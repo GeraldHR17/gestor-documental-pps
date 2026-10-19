@@ -5,7 +5,8 @@
 .DESCRIPCION
     Comprueba, de dentro hacia fuera, que cada pieza del camino funciona:
     el servicio, el puerto local, la API directa, Apache sirviendo el
-    frontend, el proxy de la API y el .htaccess del SPA.
+    frontend, el proxy de la API, el .htaccess del SPA y el portal
+    publico de transparencia.
 
     Ese orden es deliberado: si falla el primer punto no tiene sentido
     mirar los siguientes, y la tabla final indica en cada fallo que
@@ -283,6 +284,114 @@ function Invocar-Web {
     }
 }
 
+function Obtener-ConfiarEnProxy {
+    <#
+        Lee CONFIAR_EN_PROXY de donde el servicio la toma de verdad.
+
+        La fuente autoritativa es el valor REG_MULTI_SZ AppEnvironmentExtra
+        de la clave del servicio en el registro: es lo que NSSM le pasa al
+        proceso. El .env.produccion es solo el archivo del que desplegar.ps1
+        copia esos valores, de modo que puede haber cambiado despues sin que
+        el servicio se entere; se usa solo como respaldo, y diciendolo.
+
+        NO se usa "nssm get": su salida es UTF-16 y al capturarla en una
+        variable llega con un caracter nulo entre cada letra, asi que
+        buscar texto en ella falla siempre.
+
+        Se imprime UNICAMENTE esta variable. Las otras 25 incluyen la
+        contrasena de la base, los secretos JWT y la del correo.
+    #>
+    param([Parameter(Mandatory = $true)][string] $NombreServicio,
+          [Parameter(Mandatory = $true)][string] $RutaDatos)
+
+    $clave = "HKLM:\SYSTEM\CurrentControlSet\Services\$NombreServicio\Parameters"
+
+    if (Test-Path -LiteralPath $clave) {
+        try {
+            $propiedad = Get-ItemProperty -Path $clave -Name 'AppEnvironmentExtra' -ErrorAction Stop
+            foreach ($entrada in @($propiedad.AppEnvironmentExtra)) {
+                # Se parte por el PRIMER '=': los valores en base64 de los
+                # secretos pueden llevar '=' dentro.
+                $partes = $entrada -split '=', 2
+                if ($partes.Count -eq 2 -and $partes[0] -eq 'CONFIAR_EN_PROXY') {
+                    return [pscustomobject]@{ Valor = $partes[1].Trim(); Origen = 'el registro del servicio' }
+                }
+            }
+            return [pscustomobject]@{ Valor = $null; Origen = 'el registro del servicio' }
+        } catch {
+            # Sigue al respaldo.
+        }
+    }
+
+    $archivoEntorno = Join-Path (Join-Path $RutaDatos 'config') '.env.produccion'
+    if (Test-Path -LiteralPath $archivoEntorno) {
+        foreach ($linea in (Get-Content -LiteralPath $archivoEntorno -Encoding UTF8)) {
+            $texto = $linea.TrimStart([char]0xFEFF).Trim()
+            if ($texto -match '^CONFIAR_EN_PROXY\s*=') {
+                return [pscustomobject]@{
+                    Valor  = (($texto -split '=', 2)[1]).Trim()
+                    Origen = "$archivoEntorno (el servicio no esta en el registro de esta maquina)"
+                }
+            }
+        }
+    }
+
+    return [pscustomobject]@{ Valor = $null; Origen = 'ninguna fuente disponible en esta maquina' }
+}
+
+function Mostrar-AvisoConfiarEnProxy {
+    <#
+        Aviso, no comprobacion: no suma a la cuenta ni hace fallar nada.
+
+        Con CONFIAR_EN_PROXY en false y Apache delante, req.ip vale
+        127.0.0.1 para TODOS los visitantes, de modo que los contadores de
+        la limitacion de tasa del portal publico caen en un solo cubo:
+        bastaria una persona recargando para dejar el portal en 429 para
+        el resto. El sistema sigue funcionando, asi que esto no se nota
+        hasta que alguien se queja.
+    #>
+    param([Parameter(Mandatory = $true)][string] $NombreServicio,
+          [Parameter(Mandatory = $true)][string] $RutaDatos,
+          [switch] $Simular)
+
+    Write-Host ''
+    Write-Host '------------------------------------------------------------'
+    Write-Host 'Aviso informativo: CONFIAR_EN_PROXY'
+
+    if ($Simular) {
+        Write-Host '[SIMULACION] leeria CONFIAR_EN_PROXY del valor AppEnvironmentExtra' -ForegroundColor Yellow
+        Write-Host ("[SIMULACION]   de HKLM:\SYSTEM\CurrentControlSet\Services\{0}\Parameters," -f $NombreServicio) -ForegroundColor Yellow
+        Write-Host '[SIMULACION]   y si el servicio no existiera, del .env.produccion.' -ForegroundColor Yellow
+        Write-Host '[SIMULACION] Imprimiria SOLO esa variable, nunca las otras 25.' -ForegroundColor Yellow
+        Write-Host '[SIMULACION] Avisaria si no vale true. No es un fallo de despliegue.' -ForegroundColor Yellow
+        return
+    }
+
+    $lectura = Obtener-ConfiarEnProxy -NombreServicio $NombreServicio -RutaDatos $RutaDatos
+
+    if ($null -eq $lectura.Valor) {
+        Write-Host ("  No se pudo leer la variable en {0}." -f $lectura.Origen) -ForegroundColor Yellow
+        Write-Host '  Compruebela a mano antes de abrir el portal publico.' -ForegroundColor Yellow
+        return
+    }
+
+    Write-Host ("  CONFIAR_EN_PROXY = {0}   (leido de {1})" -f $lectura.Valor, $lectura.Origen)
+
+    if ($lectura.Valor -eq 'true') {
+        Write-Host '  Correcto: la limitacion de tasa del portal publico cuenta por IP real.' -ForegroundColor Green
+        return
+    }
+
+    Write-Host ''
+    Write-Host '  AVISO: no vale true.' -ForegroundColor Yellow
+    Write-Host '  Detras de Apache, sin trust proxy, la API ve 127.0.0.1 como origen de' -ForegroundColor Yellow
+    Write-Host '  TODAS las peticiones. La limitacion de tasa del portal publico sumaria' -ForegroundColor Yellow
+    Write-Host '  entonces a todos los visitantes en un mismo contador, y una sola persona' -ForegroundColor Yellow
+    Write-Host '  recargando dejaria el portal en 429 para los demas.' -ForegroundColor Yellow
+    Write-Host '  Corrijalo en .env.produccion y vuelva a ejecutar desplegar.ps1 para que' -ForegroundColor Yellow
+    Write-Host '  el servicio reciba el valor nuevo. No es un fallo de este despliegue.' -ForegroundColor Yellow
+}
+
 # ------------------------------------------------------------
 # Inicio
 # ------------------------------------------------------------
@@ -309,12 +418,19 @@ if ($Simular) {
     Write-Host ("[SIMULACION]   6. GET <URL publica>/{0} devuelve 200 (valida el .htaccess)." -f $RutaProfunda) -ForegroundColor Yellow
     Write-Host '[SIMULACION]   7. POST <URL publica>/api/auth/login con credenciales invalidas devuelve 401,' -ForegroundColor Yellow
     Write-Host '[SIMULACION]      y NO 404 ni 502, que indicarian proxy mal cableado.' -ForegroundColor Yellow
+    Write-Host '[SIMULACION]   8. GET <URL publica>/api/publico/secciones devuelve 200 y las 4 secciones' -ForegroundColor Yellow
+    Write-Host '[SIMULACION]      del indice ITSP, sin necesidad de sesion. Un 404 significaria que' -ForegroundColor Yellow
+    Write-Host '[SIMULACION]      falta desplegar el backend nuevo, y un 401 que al controlador' -ForegroundColor Yellow
+    Write-Host '[SIMULACION]      publico le falta @Publico().' -ForegroundColor Yellow
     Write-Host ''
     Write-Host '[SIMULACION] Si fallaran la 2 o la 3, mostraria ademas las ultimas 30 lineas de' -ForegroundColor Yellow
     Write-Host ("[SIMULACION]   {0}" -f $archivoLogError) -ForegroundColor Yellow
     Write-Host ("[SIMULACION]   {0}" -f $archivoLogSalida) -ForegroundColor Yellow
     Write-Host '[SIMULACION] con la hora de arranque de la aplicacion por delante, para no confundir' -ForegroundColor Yellow
     Write-Host '[SIMULACION] estos errores con los que dejo un intento anterior, y tapando los secretos.' -ForegroundColor Yellow
+
+    Mostrar-AvisoConfiarEnProxy -NombreServicio $NombreServicio -RutaDatos $RutaDatos -Simular
+
     Write-Host ''
     Write-Host '[SIMULACION] Ninguna comprobacion escribe datos. Terminado sin cambios.' -ForegroundColor Green
     exit 0
@@ -378,7 +494,7 @@ if ($respuesta.Codigo -eq 200 -and $respuesta.Contenido -match '"estado"\s*:\s*"
 # Pruebas a traves de Apache
 # ------------------------------------------------------------
 if ($UrlPublica -eq '') {
-    foreach ($pendiente in @('Frontend publico', 'GET /api/salud (por Apache)', 'Ruta profunda del SPA', 'POST /api/auth/login invalido')) {
+    foreach ($pendiente in @('Frontend publico', 'GET /api/salud (por Apache)', 'Ruta profunda del SPA', 'POST /api/auth/login invalido', 'GET /api/publico/secciones')) {
         Agregar-Resultado $pendiente 'OMITIDA' 'No se indico -UrlPublica.' 'Vuelva a ejecutar pasando -UrlPublica con la direccion real.'
     }
 } else {
@@ -456,7 +572,48 @@ if ($UrlPublica -eq '') {
     } else {
         Agregar-Resultado 'POST /api/auth/login invalido' 'FALLO' ("Codigo inesperado " + $respuesta.Codigo) 'Se esperaba 401. Revise el log del servicio.'
     }
+
+    # 8. Portal publico de transparencia
+    # Es la unica ruta del sistema que responde sin sesion, asi que un 401
+    # aqui no es un problema de credenciales: significa que al controlador
+    # le falta @Publico().
+    $respuesta = Invocar-Web -Url ($base + '/api/publico/secciones')
+
+    if ($respuesta.Codigo -eq 200) {
+        $secciones = $null
+        try { $secciones = $respuesta.Contenido | ConvertFrom-Json } catch { $secciones = $null }
+        $cuantas = @($secciones).Count
+
+        if ($null -eq $secciones) {
+            Agregar-Resultado 'GET /api/publico/secciones' 'FALLO' '200 pero la respuesta no es JSON.' 'Probablemente el .htaccess esta desviando la ruta hacia index.html. Compruebe la regla "RewriteRule ^api(/|$) - [L]".'
+        } elseif ($cuantas -eq 4) {
+            Agregar-Resultado 'GET /api/publico/secciones' 'OK' ("200 y las 4 secciones del indice ITSP: " + ((@($secciones) | ForEach-Object { $_.codigo }) -join ', '))
+        } else {
+            $mensaje = ("200, pero devuelve {0} seccion(es) en vez de 4." -f $cuantas)
+            $revisar = 'Alguna de las cuatro raices ITSP esta INACTIVO en el catalogo, o la base no tiene los datos de 03-datos-itsp.sql.'
+            Agregar-Resultado 'GET /api/publico/secciones' 'FALLO' $mensaje $revisar
+        }
+    } elseif ($respuesta.Codigo -eq 404) {
+        Agregar-Resultado 'GET /api/publico/secciones' 'FALLO' '404: la ruta no existe en el backend.' 'Falta desplegar el backend nuevo: esta corriendo una version anterior al modulo publico. Ejecute desplegar.ps1.'
+    } elseif ($respuesta.Codigo -eq 401) {
+        Agregar-Resultado 'GET /api/publico/secciones' 'FALLO' '401: la ruta pide autenticacion.' 'El controlador publico no lleva @Publico(), de modo que el JwtAuthGuard global lo esta protegiendo. Es un error de codigo, no de despliegue.'
+    } elseif ($respuesta.Codigo -eq 429) {
+        Agregar-Resultado 'GET /api/publico/secciones' 'FALLO' '429: limitacion de tasa.' 'Espere un minuto y repita. Si se repite sin trafico, revise CONFIAR_EN_PROXY (ver el aviso de esta misma salida).'
+    } else {
+        $detalle = "Codigo " + $respuesta.Codigo
+        if ($respuesta.Error -ne '') { $detalle = $respuesta.Error }
+        Agregar-Resultado 'GET /api/publico/secciones' 'FALLO' $detalle 'Se esperaba 200. Revise el log del servicio.'
+    }
 }
+
+# ------------------------------------------------------------
+# Aviso informativo: CONFIAR_EN_PROXY
+# ------------------------------------------------------------
+# No es una comprobacion de despliegue y no hace fallar nada: el sistema
+# funciona igual con la variable en false. Lo que deja de funcionar es la
+# limitacion de tasa del portal publico, y de una forma que no se nota
+# hasta que alguien se queja.
+Mostrar-AvisoConfiarEnProxy -NombreServicio $NombreServicio -RutaDatos $RutaDatos -Simular:$Simular
 
 # ------------------------------------------------------------
 # Informe
