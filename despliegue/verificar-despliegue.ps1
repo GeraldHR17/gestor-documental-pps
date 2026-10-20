@@ -457,6 +457,11 @@ if ($Simular) {
     Write-Host '[SIMULACION]      del indice ITSP, sin necesidad de sesion. Un 404 significaria que' -ForegroundColor Yellow
     Write-Host '[SIMULACION]      falta desplegar el backend nuevo, y un 401 que al controlador' -ForegroundColor Yellow
     Write-Host '[SIMULACION]      publico le falta @Publico().' -ForegroundColor Yellow
+    Write-Host '[SIMULACION]   9. GET <URL publica>/vista devuelve 200 y el index del SPA: valida que el' -ForegroundColor Yellow
+    Write-Host '[SIMULACION]      .htaccess aplique el fallback tambien a las rutas del portal.' -ForegroundColor Yellow
+    Write-Host '[SIMULACION]  10. GET <URL publica>/iframes/prueba-vista.html devuelve 200 y NO el index:' -ForegroundColor Yellow
+    Write-Host '[SIMULACION]      si devolviera el index, el .htaccess estaria reescribiendo archivos que' -ForegroundColor Yellow
+    Write-Host '[SIMULACION]      si existen, y en WordPress apareceria la aplicacion entera en vez del iframe.' -ForegroundColor Yellow
     Write-Host ''
     Write-Host '[SIMULACION] Si fallaran la 2 o la 3, mostraria ademas las ultimas 30 lineas de' -ForegroundColor Yellow
     Write-Host ("[SIMULACION]   {0}" -f $archivoLogError) -ForegroundColor Yellow
@@ -529,7 +534,7 @@ if ($respuesta.Codigo -eq 200 -and $respuesta.Contenido -match '"estado"\s*:\s*"
 # Pruebas a traves de Apache
 # ------------------------------------------------------------
 if ($UrlPublica -eq '') {
-    foreach ($pendiente in @('Frontend publico', 'GET /api/salud (por Apache)', 'Ruta profunda del SPA', 'POST /api/auth/login invalido', 'GET /api/publico/secciones')) {
+    foreach ($pendiente in @('Frontend publico', 'GET /api/salud (por Apache)', 'Ruta profunda del SPA', 'POST /api/auth/login invalido', 'GET /api/publico/secciones', 'GET /vista (portal publico)', 'GET /iframes/prueba-vista.html')) {
         Agregar-Resultado $pendiente 'OMITIDA' 'No se indico -UrlPublica.' 'Vuelva a ejecutar pasando -UrlPublica con la direccion real.'
     }
 } else {
@@ -638,6 +643,45 @@ if ($UrlPublica -eq '') {
         $detalle = "Codigo " + $respuesta.Codigo
         if ($respuesta.Error -ne '') { $detalle = $respuesta.Error }
         Agregar-Resultado 'GET /api/publico/secciones' 'FALLO' $detalle 'Se esperaba 200. Revise el log del servicio.'
+    }
+
+    # 9. Ruta /vista del portal publico
+    # Es una ruta del SPA, no un archivo: tiene que caer en index.html por
+    # el fallback del .htaccess, igual que las rutas profundas internas.
+    $respuesta = Invocar-Web -Url ($base + '/vista')
+
+    if ($respuesta.Codigo -eq 200 -and $respuesta.Contenido -match '<div id="app"') {
+        Agregar-Resultado 'GET /vista (portal publico)' 'OK' '200 y devuelve el index del SPA.'
+    } elseif ($respuesta.Codigo -eq 200) {
+        Agregar-Resultado 'GET /vista (portal publico)' 'FALLO' '200 pero el contenido no es el index del SPA.' 'Puede estar sirviendose otra carpeta. Revise el <Directory> de munidata.conf y la ruta publicada.'
+    } elseif ($respuesta.Codigo -eq 404) {
+        $revisar = 'El .htaccess no esta aplicando el fallback a index.html. Falta AllowOverride All en el <Directory>, o mod_rewrite no esta cargado, o el RewriteBase no coincide con la ruta publica.'
+        Agregar-Resultado 'GET /vista (portal publico)' 'FALLO' '404.' $revisar
+    } else {
+        $detalle = "Codigo " + $respuesta.Codigo
+        if ($respuesta.Error -ne '') { $detalle = $respuesta.Error }
+        Agregar-Resultado 'GET /vista (portal publico)' 'FALLO' $detalle 'Revise el .htaccess publicado y el error_log de Apache.'
+    }
+
+    # 10. Snippets de iframe servidos como ARCHIVO
+    # El fallo que atrapa es el mas dificil de diagnosticar a ojo: si la
+    # regla de archivos existentes del .htaccess no se aplica, el snippet
+    # se sirve como index.html y dentro del bloque de WordPress aparece la
+    # aplicacion entera en vez del iframe, sin que nada parezca roto.
+    $respuesta = Invocar-Web -Url ($base + '/iframes/prueba-vista.html')
+
+    if ($respuesta.Codigo -eq 200 -and $respuesta.Contenido -match '<div id="app"') {
+        $revisar = 'El .htaccess esta reescribiendo archivos que SI existen. Compruebe las dos RewriteCond de REQUEST_FILENAME (-f y -d) y su RewriteRule.'
+        Agregar-Resultado 'GET /iframes/prueba-vista.html' 'FALLO' '200 pero devuelve el index del SPA, no el archivo.' $revisar
+    } elseif ($respuesta.Codigo -eq 200) {
+        Agregar-Resultado 'GET /iframes/prueba-vista.html' 'OK' '200 y se sirve como archivo, no reescrito a index.html.'
+    } elseif ($respuesta.Codigo -eq 404) {
+        $revisar = 'No se publico la carpeta iframes. Sale de frontend/public/, asi que compruebe que el build la incluyo en dist y que desplegar.ps1 la copio.'
+        Agregar-Resultado 'GET /iframes/prueba-vista.html' 'FALLO' '404.' $revisar
+    } else {
+        $detalle = "Codigo " + $respuesta.Codigo
+        if ($respuesta.Error -ne '') { $detalle = $respuesta.Error }
+        Agregar-Resultado 'GET /iframes/prueba-vista.html' 'FALLO' $detalle 'Revise el error_log de Apache.'
     }
 }
 

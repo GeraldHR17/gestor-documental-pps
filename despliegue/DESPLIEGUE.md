@@ -694,6 +694,68 @@ controlado) o archivos huérfanos en disco.
 
 ---
 
+## 8.4 Portal público de transparencia
+
+El portal es la parte del sistema que WordPress incrusta por iframe en la
+portada ciudadana. No tiene pasos de despliegue propios: sale del mismo
+`desplegar.ps1` que el resto del frontend.
+
+**Qué se publica.** Además del SPA, la carpeta `iframes/` con los cuatro
+snippets de WordPress y la página de verificación. Salen de
+`frontend/public/`, así que Vite los copia a `dist/` y sobreviven al
+reemplazo limpio de cada despliegue. **No los cree a mano en el
+servidor:** el siguiente despliegue los borraría.
+
+**Cabeceras.** El `.htaccess` publicado declara `X-Frame-Options:
+SAMEORIGIN` y `Content-Security-Policy: frame-ancestors 'self'`. Las dos
+dicen lo mismo —solo el propio sitio puede embeber estas páginas— en la
+directiva antigua y en la que los navegadores actuales privilegian. No se
+declara ninguna otra directiva de CSP.
+
+**Comprobarlo después de desplegar:**
+
+```
+powershell -ExecutionPolicy Bypass -File .\despliegue\verificar-despliegue.ps1 -UrlPublica "https://servidor.ejemplo.go.cr/munipalmares/wp-munidata"
+```
+
+Son diez comprobaciones. Las tres del portal:
+
+| # | Qué valida | Si falla |
+|---|---|---|
+| 8 | `GET /api/publico/secciones` devuelve las 4 secciones | 404: falta desplegar el backend nuevo. 401: al controlador le falta `@Publico()` |
+| 9 | `GET /vista` devuelve el index del SPA | El `.htaccess` no aplica el fallback a las rutas del portal |
+| 10 | `GET /iframes/prueba-vista.html` devuelve el **archivo**, no el index | La regla de archivos existentes del `.htaccess` no se aplica |
+
+La 10 atrapa el fallo más difícil de ver a ojo: si el snippet se sirve
+como `index.html`, dentro del bloque de WordPress aparece la aplicación
+entera en vez del iframe, y nada parece roto.
+
+**Prueba de humo, antes de tocar WordPress.** Abra en el navegador:
+
+```
+https://servidor.ejemplo.go.cr/munipalmares/wp-munidata/iframes/prueba-vista.html
+```
+
+Esa página pinta los cuatro iframes sobre el mismo fondo oscuro de la
+portada real, así que permite enseñarle el resultado al PO y validar el
+aspecto **sin que nadie haya creado todavía ninguna página de
+WordPress**. Compruebe ahí los once puntos de la sección 9 de este
+documento, y en particular abrir y descargar un PDF desde un iPhone y
+desde un Android: el visor de PDF del sistema y el bloqueo de ventanas
+emergentes se comportan distinto que en escritorio.
+
+> **Siempre por `https://`.** Por el puerto 80 no existe el proxy de
+> `/api` (sección 4.3): el portal carga pero sale sin datos, y el síntoma
+> apunta al backend cuando el problema está en la dirección que se usó.
+
+**Integración con WordPress.** La hace quien administre WordPress
+siguiendo `documentacion/portal-publico/INTEGRACION-WORDPRESS.md`, que
+está escrito para alguien sin conocimientos técnicos: cuatro páginas con
+un bloque HTML personalizado y un menú. No requiere tocar Apache ni el
+servidor.
+
+---
+
 ## 9. Prueba de humo funcional
 
 Después de la verificación automática, compruebe a mano estos nueve puntos
