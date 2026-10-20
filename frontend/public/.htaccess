@@ -51,18 +51,35 @@ Options -Indexes
   # clasico para que un archivo subido se interprete como script.
   Header always set X-Content-Type-Options "nosniff"
 
-  # El sistema no se embebe en ningun otro sitio; SAMEORIGIN corta el
-  # clickjacking sin romper nada propio.
+  # El sistema SI se embebe, desde el MISMO origen: la portada de
+  # WordPress incrusta por iframe la ruta /vista del portal publico de
+  # transparencia. SAMEORIGIN lo permite —compara el origen del documento
+  # de nivel superior con el del embebido, y aqui coinciden— y sigue
+  # cortando el clickjacking desde cualquier otro sitio.
   Header always set X-Frame-Options "SAMEORIGIN"
+
+  # Lo mismo, en la directiva que los navegadores actuales privilegian:
+  # X-Frame-Options esta obsoleto y, cuando ambas estan presentes, gana
+  # frame-ancestors. Se declara SOLO esa directiva: es independiente y no
+  # activa ninguna politica sobre scripts, estilos ni fuentes, asi que no
+  # puede romper la carga de las tipografias (ver la nota de abajo).
+  #
+  # Si algun dia el portal hubiera que embeberlo desde otro subdominio,
+  # se cambia 'self' por ese origen exacto, aqui y en un solo sitio.
+  Header always set Content-Security-Policy "frame-ancestors 'self'"
 
   # Evita filtrar la ruta completa (que incluye identificadores de
   # documento) hacia sitios externos.
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
 
-  # No se declara Content-Security-Policy aqui: la aplicacion carga
-  # fuentes e iconos desde fonts.googleapis.com y fonts.gstatic.com, y una
-  # politica incompleta romperia la tipografia sin avisar. Queda como
-  # mejora posterior, con la lista de origenes verificada.
+  # No se declara NINGUNA OTRA directiva de Content-Security-Policy: la
+  # aplicacion carga fuentes e iconos desde fonts.googleapis.com y
+  # fonts.gstatic.com, y una politica incompleta romperia la tipografia
+  # sin avisar. La de arriba es segura porque frame-ancestors solo
+  # gobierna quien puede embeber esta pagina; lo que carga la pagina lo
+  # gobiernan default-src y font-src, que no se declaran. Una politica
+  # completa queda como mejora posterior, con la lista de origenes
+  # verificada.
 </IfModule>
 
 # ------------------------------------------------------------

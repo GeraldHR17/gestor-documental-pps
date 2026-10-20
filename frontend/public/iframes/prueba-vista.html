@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Es una página de verificación técnica, no contenido público: que
+         no la indexe nadie. -->
+    <meta name="robots" content="noindex" />
+    <title>Verificación del portal público — Muni Data</title>
+
+    <style>
+      /* Sin dependencias a propósito: esta página tiene que poder abrirse
+         en la VM aunque nada más funcione. El fondo es el mismo
+         #0A0C11 (token deep-onyx) de la portada de WordPress, para ver
+         cómo se lee el panel claro sobre el oscuro antes de tocar
+         WordPress. */
+      :root {
+        --fondo: #0a0c11;
+        --texto: #f0f1f1;
+        --tenue: #abadb3;
+        --borde: #2f3131;
+        --acento: #d30505;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 24px 16px;
+        background: var(--fondo);
+        color: var(--texto);
+        font-family: 'Public Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+        font-size: 17px;
+        line-height: 1.55;
+      }
+
+      .contenedor {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+        font-weight: 800;
+        line-height: 1.2;
+      }
+
+      .aviso {
+        margin: 0 0 24px;
+        padding: 12px 16px;
+        border-left: 4px solid var(--acento);
+        background: #16181d;
+        color: var(--tenue);
+        font-size: 14px;
+      }
+
+      .controles {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 24px;
+      }
+
+      .controles button {
+        min-height: 44px;
+        padding: 0 16px;
+        border: 1px solid var(--borde);
+        border-radius: 8px;
+        background: #16181d;
+        color: var(--texto);
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .controles button[aria-pressed='true'] {
+        border-color: var(--acento);
+        background: var(--acento);
+        color: #fff;
+      }
+
+      .controles button:focus-visible {
+        outline: 2px solid #fff;
+        outline-offset: 2px;
+      }
+
+      .rejilla {
+        display: grid;
+        gap: 24px;
+      }
+
+      .rejilla[data-vista='cuatro'] {
+        grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      }
+
+      .bloque h2 {
+        margin: 0 0 8px;
+        font-size: 20px;
+        font-weight: 700;
+      }
+
+      .bloque p.ruta {
+        margin: 0 0 8px;
+        color: var(--tenue);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+      }
+
+      .marco {
+        /* Mismo radio que la tarjeta del portal, para que el borde del
+           iframe y el del bloque coincidan. */
+        overflow: hidden;
+        border-radius: 8px;
+      }
+
+      .bloque[hidden] {
+        display: none;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="contenedor">
+      <h1>Verificación del portal público</h1>
+
+      <p class="aviso">
+        <strong>Página de verificación técnica.</strong> No es parte del portal ciudadano y no
+        aparece en ningún menú. Sirve para comprobar en la VM que las cuatro secciones cargan
+        dentro de un iframe, sobre el mismo fondo oscuro de la portada, sin haber tocado
+        WordPress todavía. Ábrala siempre por <code>https://</code>: por
+        <code>http://localhost</code> el proxy de la API no existe y las secciones saldrían
+        vacías.
+      </p>
+
+      <div class="controles" role="group" aria-label="Forma de ver las secciones">
+        <button type="button" data-vista="cuatro" aria-pressed="true">Las cuatro en rejilla</button>
+        <button type="button" data-vista="itsp-01" aria-pressed="false">
+          Solo Información institucional
+        </button>
+        <button type="button" data-vista="itsp-02" aria-pressed="false">
+          Solo Rendición de cuentas
+        </button>
+        <button type="button" data-vista="itsp-03" aria-pressed="false">
+          Solo Participación ciudadana
+        </button>
+        <button type="button" data-vista="itsp-04" aria-pressed="false">
+          Solo Datos abiertos de gobierno
+        </button>
+      </div>
+
+      <div class="rejilla" data-vista="cuatro">
+        <section class="bloque" data-seccion="itsp-01">
+          <h2>Información institucional</h2>
+          <p class="ruta">/munipalmares/wp-munidata/vista/itsp-01 — 800 px</p>
+          <div class="marco">
+            <iframe
+              src="/munipalmares/wp-munidata/vista/itsp-01"
+              title="Transparencia: Información institucional"
+              style="width: 100%; height: 800px; border: 0; display: block"
+            ></iframe>
+          </div>
+        </section>
+
+        <section class="bloque" data-seccion="itsp-02">
+          <h2>Rendición de cuentas</h2>
+          <p class="ruta">/munipalmares/wp-munidata/vista/itsp-02 — 650 px</p>
+          <div class="marco">
+            <iframe
+              src="/munipalmares/wp-munidata/vista/itsp-02"
+              title="Transparencia: Rendición de cuentas"
+              style="width: 100%; height: 650px; border: 0; display: block"
+            ></iframe>
+          </div>
+        </section>
+
+        <section class="bloque" data-seccion="itsp-03">
+          <h2>Participación ciudadana</h2>
+          <p class="ruta">/munipalmares/wp-munidata/vista/itsp-03 — 650 px</p>
+          <div class="marco">
+            <iframe
+              src="/munipalmares/wp-munidata/vista/itsp-03"
+              title="Transparencia: Participación ciudadana"
+              style="width: 100%; height: 650px; border: 0; display: block"
+            ></iframe>
+          </div>
+        </section>
+
+        <section class="bloque" data-seccion="itsp-04">
+          <h2>Datos abiertos de gobierno</h2>
+          <p class="ruta">/munipalmares/wp-munidata/vista/itsp-04 — 800 px</p>
+          <div class="marco">
+            <iframe
+              src="/munipalmares/wp-munidata/vista/itsp-04"
+              title="Transparencia: Datos abiertos de gobierno"
+              style="width: 100%; height: 800px; border: 0; display: block"
+            ></iframe>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script>
+      // El conmutador solo oculta y muestra bloques: los iframes se
+      // cargan una vez al abrir la página, así que cambiar de vista no
+      // vuelve a pedir nada al servidor.
+      (function () {
+        var botones = document.querySelectorAll('.controles button');
+        var rejilla = document.querySelector('.rejilla');
+        var bloques = document.querySelectorAll('.bloque');
+
+        function mostrar(vista) {
+          rejilla.setAttribute('data-vista', vista);
+          for (var i = 0; i < bloques.length; i++) {
+            var seccion = bloques[i].getAttribute('data-seccion');
+            bloques[i].hidden = vista !== 'cuatro' && seccion !== vista;
+          }
+          for (var j = 0; j < botones.length; j++) {
+            botones[j].setAttribute(
+              'aria-pressed',
+              botones[j].getAttribute('data-vista') === vista ? 'true' : 'false'
+            );
+          }
+        }
+
+        for (var k = 0; k < botones.length; k++) {
+          botones[k].addEventListener('click', function () {
+            mostrar(this.getAttribute('data-vista'));
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>
