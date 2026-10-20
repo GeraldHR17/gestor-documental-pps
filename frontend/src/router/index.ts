@@ -15,8 +15,23 @@ declare module 'vue-router' {
     permiso?: string;
     /** Rutas a las que un usuario ya autenticado no debería volver. */
     soloAnonimos?: boolean;
+    /**
+     * Rutas del portal público de transparencia: se resuelven SIN tocar la
+     * sesión.
+     *
+     * No es lo mismo que `publica`. Una ruta `publica` (login, recuperar
+     * contraseña) sí pasa por `restaurarSesion()`, porque necesita saber
+     * si ya hay alguien dentro para redirigirlo. El portal no: lo abre un
+     * ciudadano anónimo desde un iframe de WordPress, y pedirle al
+     * servidor que renueve una sesión que no existe es una petición de
+     * más en cada visita, con su cookie y su entrada en el log.
+     */
+    sinSesion?: boolean;
   }
 }
+
+/** Prefijo de todas las rutas del portal público. */
+const PREFIJO_PORTAL_PUBLICO = '/vista';
 
 /**
  * Genera las tres rutas (lista, alta y edición) de cada catálogo plano a
@@ -82,6 +97,38 @@ const router = createRouter({
       // Deliberadamente NO es soloAnonimos: alguien con sesión abierta debe
       // poder abrir el enlace de verificación que le llegó al correo.
       meta: { publica: true },
+    },
+
+    // ---------- Portal público de transparencia (sin sesión) ----------
+    // Cuelga de su propio layout, NO de AppShellLayout: ese trae barra
+    // lateral, menú de usuario y cierre de sesión, que dentro del iframe
+    // de WordPress no le sirven a nadie.
+    {
+      path: PREFIJO_PORTAL_PUBLICO,
+      component: () => import('@/layouts/PortalPublicoLayout.vue'),
+      meta: { sinSesion: true },
+      children: [
+        {
+          path: '',
+          name: 'portal-secciones',
+          component: () => import('@/views/PortalSeccionesView.vue'),
+          meta: { sinSesion: true },
+        },
+        {
+          path: ':seccion',
+          name: 'portal-seccion',
+          component: () => import('@/views/PortalSeccionView.vue'),
+          props: true,
+          meta: { sinSesion: true },
+        },
+        {
+          path: ':seccion/:subseccion',
+          name: 'portal-subseccion',
+          component: () => import('@/views/PortalSubseccionView.vue'),
+          props: true,
+          meta: { sinSesion: true },
+        },
+      ],
     },
 
     // ---------- Área autenticada (dentro del shell) ----------
@@ -190,12 +237,26 @@ const router = createRouter({
     {
       path: '/:rutaNoEncontrada(.*)*',
       name: 'no-encontrado',
-      redirect: { name: 'dashboard' },
+      // Un enlace roto DENTRO del portal no puede acabar en el panel
+      // interno: el ciudadano vería el formulario de inicio de sesión sin
+      // entender por qué. Se queda en la portada pública.
+      redirect: (destino) =>
+        destino.path.startsWith(PREFIJO_PORTAL_PUBLICO)
+          ? { name: 'portal-secciones' }
+          : { name: 'dashboard' },
     },
   ],
 });
 
 router.beforeEach(async (destino) => {
+  // PRIMERA comprobación, antes de tocar la sesión. El portal público lo
+  // abre gente que no tiene cuenta: llamar a restaurarSesion() aquí
+  // dispararía un POST /auth/refresh en cada visita, con su cookie y su
+  // entrada en el log, para una sesión que no existe.
+  if (destino.meta.sinSesion) {
+    return true;
+  }
+
   const { usuario, motivoCierre, restaurarSesion, tienePermiso } = useAutenticacion();
 
   // El access token vive solo en memoria, así que tras un F5 hay que
