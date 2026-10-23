@@ -7,6 +7,7 @@ import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAutenticacion } from '@/composables/useAutenticacion';
 import { useNotificaciones } from '@/composables/useNotificaciones';
+import { useTema } from '@/composables/useTema';
 import ModalConfirmacion from '@/components/ModalConfirmacion.vue';
 import { CATALOGOS_SIMPLES } from '@/lib/catalogos.config';
 
@@ -14,6 +15,7 @@ const route = useRoute();
 const router = useRouter();
 const { usuario, cerrarSesion, tienePermiso } = useAutenticacion();
 const { notificarExito } = useNotificaciones();
+const { esOscuro, alternarTema } = useTema();
 
 const menuLateralAbierto = ref(false);
 
@@ -233,6 +235,21 @@ async function manejarCerrarSesion(): Promise<void> {
         </div>
 
         <div v-if="usuario" class="flex items-center gap-3 min-w-0">
+          <!-- Conmutador claro/oscuro (spec-ajustes-posdespliegue 9.3.4).
+               aria-pressed dice si el modo oscuro está activo; la etiqueta
+               no cambia, para que el lector anuncie siempre lo mismo. -->
+          <button
+            type="button"
+            class="w-touch-target h-touch-target shrink-0 rounded-secondary flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors"
+            aria-label="Modo oscuro"
+            :aria-pressed="esOscuro"
+            :title="esOscuro ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'"
+            @click="alternarTema"
+          >
+            <span aria-hidden="true" class="material-symbols-outlined">
+              {{ esOscuro ? 'light_mode' : 'dark_mode' }}
+            </span>
+          </button>
           <div class="text-right hidden sm:block min-w-0">
             <p class="font-label-sm text-label-sm text-on-surface truncate">
               {{ usuario.nombreCompleto }}

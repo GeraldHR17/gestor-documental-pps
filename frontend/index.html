@@ -6,13 +6,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Muni Data — Municipalidad de Palmares</title>
 
-    <!-- Superficie de la página, ANTES de cualquier hoja de estilos y de
-         montar Vue: el portal público (/vista/...) es siempre oscuro y,
-         dentro del iframe de WordPress, no debe destellar en blanco
-         mientras carga (RNF-4). Replica a mano la clasificación de
+    <!-- Superficie y tema de la página, ANTES de cualquier hoja de estilos
+         y de montar Vue, para que nada destelle en blanco al cargar (RNF-4):
+         ni el portal público dentro del iframe de WordPress, ni el sistema
+         al recargar en modo oscuro.
+
+         Superficie: replica a mano la clasificación de
          src/lib/superficie.ts, que la mantiene al navegar dentro de la
-         aplicación: portal = rutas /vista; publica = login, recuperar
-         contraseña y verificar correo; sistema = todo lo demás. -->
+         aplicación. portal = rutas /vista; publica = login, recuperar
+         contraseña y verificar correo; sistema = todo lo demás.
+
+         Tema: replica src/lib/tema.ts. Lo elegido en este navegador
+         (clave munidata-tema) o, si nunca se eligió, la preferencia del
+         sistema operativo. Solo se aplica en la superficie 'sistema'. -->
     <script>
       (function () {
         var base = '%BASE_URL%';
@@ -24,12 +30,22 @@
         } else if (/^(login|recuperar-contrasena|verificar-correo)(\/|$)/i.test(relativa)) {
           superficie = 'publica';
         }
+
+        var tema = null;
+        try { tema = localStorage.getItem('munidata-tema'); } catch (e) {}
+        if (tema !== 'claro' && tema !== 'oscuro') {
+          tema = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'oscuro' : 'claro';
+        }
+
         document.documentElement.setAttribute('data-superficie', superficie);
+        document.documentElement.setAttribute('data-tema', tema);
       })();
     </script>
     <style>
       html[data-superficie='portal'],
-      html[data-superficie='portal'] body {
+      html[data-superficie='portal'] body,
+      html[data-tema='oscuro'][data-superficie='sistema'],
+      html[data-tema='oscuro'][data-superficie='sistema'] body {
         background-color: #0d0c12;
         color-scheme: dark;
       }
