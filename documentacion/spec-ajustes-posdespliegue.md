@@ -55,7 +55,7 @@ confirmación del PO**. Mientras tanto se implementa lo decidido.
 | | Decisión | Decidido por Gerald |
 |---|---|---|
 | **1** | Hoy el sistema permite convertir una sección en subsección y al revés. Con códigos automáticos lo prohibimos. ¿De acuerdo? | Sí, se prohíbe. Para reorganizar se crea la categoría nueva y se mueven los documentos. **Pendiente de confirmación del PO.** |
-| **2** | El encargo habla de URL `/vista/itps-01`, pero el sistema usa `itsp-01` (con **S-P**, de "Índice de Transparencia del Sector Público"). ¿Qué grafía está escrita en las páginas de WordPress? | Se conserva `ITSP` para los códigos nuevos y no se modifica ningún código existente. Gerald verifica por su cuenta la grafía de los enlaces de WordPress. |
+| **2** | El encargo habla de URL `/vista/itps-01`, pero el sistema usa `itsp-01` (con **S-P**, de "Índice de Transparencia del Sector Público"). ¿Qué grafía está escrita en las páginas de WordPress? | Se conserva `ITSP` para los códigos nuevos y no se modifica ningún código existente. **Confirmado:** los enlaces de WordPress y los códigos usan `ITSP`, también la quinta raíz (`ITSP-05`). |
 | **3** | Los botones de los recuadros públicos serán redondeados (píldora), como en el Observatorio. En el sistema interno la píldora está reservada a las insignias de estado. ¿Aceptamos la excepción solo en los recuadros públicos? | Sí, solo en los recuadros públicos; se anota en `DESIGN.md`. **Pendiente de confirmación del PO.** |
 
 ---
@@ -165,7 +165,7 @@ Todas se pueden revertir antes de la Fase 2.
 | Id | Ambigüedad | Decisión asumida | Motivo |
 |---|---|---|---|
 | D-1 | El encargo dice `ITPS-NN`; el repo siembra `ITSP-NN` en mayúsculas (`03-datos-itsp.sql`) y los snippets usan `/vista/itsp-0N`. | Prefijo **`ITSP`**, almacenado en **mayúsculas**, salida pública en minúsculas (como hoy). | La realidad del repo manda (encargo §0). |
-| D-2 | La raíz creada a mano en la VM pudo guardarse como `itps-05`, `ITPS-05`, `ITSP-05` u otro texto. | Para calcular el máximo de raíces se reconocen **`ITSP-NN` e `ITPS-NN`** (sin distinguir mayúsculas). Los códigos nuevos son siempre `ITSP`. Cualquier otro formato es irregular. | Si existiera `ITPS-05` y se ignorara, la siguiente raíz sería `ITSP-05`: dos "secciones 05" con URL casi idénticas. Reconocer la errata evita esa confusión sin tocar el código existente. |
+| D-2 | La raíz creada a mano en la VM pudo guardarse como `itps-05`, `ITPS-05`, `ITSP-05` u otro texto. | Para calcular el máximo de raíces se reconocen **`ITSP-NN` e `ITPS-NN`** (sin distinguir mayúsculas). Los códigos nuevos son siempre `ITSP`. Cualquier otro formato es irregular. | Si existiera `ITPS-05` y se ignorara, la siguiente raíz sería `ITSP-05`: dos "secciones 05" con URL casi idénticas. Reconocer la errata evita esa confusión sin tocar el código existente. **P-2 confirmó que en la VM todo usa `ITSP`**: esto queda solo como defensa. |
 | D-3 | ¿Cómo se forma el código de una subsección cuya raíz tiene un código irregular? | **Código de la raíz en mayúsculas + `-MM`.** Con raíz `ITSP-05` da `ITSP-05-01`, como pide el encargo; con raíz `itps-05` da `ITPS-05-01`. | Mantiene la subsección legible bajo su sección sin reescribir la raíz. |
 | D-4 | Mínimo dos dígitos; "crece si pasa de 99". | `LPAD(n, 2, '0')` para n ≤ 99; desde 100, el número sin relleno (`ITSP-100`). Al leer se acepta `\d{2,}`. | Literal del encargo. |
 | D-5 | Un cliente que siga enviando `codigo` en `POST`/`PATCH`. | Se **ignora en silencio**: el `ValidationPipe` global usa `whitelist: true` **sin** `forbidNonWhitelisted`, así que al quitar la propiedad del DTO el campo se descarta antes del servicio. No se responde 400. | No rompe a ningún cliente (incluido un frontend viejo en caché) y no exige tocar la configuración global. |
@@ -1078,7 +1078,7 @@ resto de la entrega no depende de ellos.
 | Id | Pregunta | Decisión |
 |---|---|---|
 | P-1 | ¿Se prohíbe convertir raíz ↔ subsección? (Resumen, 1) | **Sí, se prohíbe.** Se invierten las pruebas que hoy exigen lo contrario (14.1). *Pendiente de confirmación del PO.* |
-| P-2 | ¿Qué grafía usan los enlaces de WordPress y qué código tiene de verdad la quinta raíz? (Resumen, 2) | **`ITSP` para los códigos nuevos.** La migración no modifica ningún código existente (C-4). Gerald verifica por su cuenta la grafía de los enlaces de WordPress. |
+| P-2 | ¿Qué grafía usan los enlaces de WordPress y qué código tiene de verdad la quinta raíz? (Resumen, 2) | **CONFIRMADA por Gerald:** los enlaces de WordPress y los códigos de categoría usan `ITSP`, y la quinta raíz, `ITSP-05`, tiene la misma grafía que las demás. La migración no modifica ningún código existente (C-4). D-2 se mantiene solo como defensa. |
 | P-3 | ¿Excepción de la píldora en los botones públicos? (Resumen, 3) | **Sí, solo en las vistas públicas**, con la nota de excepción en `DESIGN.md` (9.2). *Pendiente de confirmación del PO.* |
 | P-4 | ¿Borde de 1 px en los botones rojos para superar 3:1 frente a la tarjeta? (12.2) | **No**, sin borde. |
 | P-5 | ¿Reservar los números de las subsecciones movidas (R-4)? | **No** se reserva. |
