@@ -43,12 +43,18 @@ export function useCategoriasItsp() {
     estado.categorias.filter((categoria) => categoria.idCategoriaPadre === null),
   );
 
-  async function crear(datos: GuardarCategoriaItspDto): Promise<void> {
-    await categoriasItspService.crear(datos);
+  // Devuelven la categoría guardada porque el código lo asigna el backend:
+  // el formulario lo necesita para decir cuál quedó.
+  async function crear(datos: GuardarCategoriaItspDto): Promise<CategoriaItspDto> {
+    return categoriasItspService.crear(datos);
   }
 
-  async function actualizar(id: number, datos: GuardarCategoriaItspDto): Promise<void> {
-    await categoriasItspService.actualizar(id, datos);
+  async function actualizar(id: number, datos: GuardarCategoriaItspDto): Promise<CategoriaItspDto> {
+    return categoriasItspService.actualizar(id, datos);
+  }
+
+  async function obtenerSiguienteCodigo(idCategoriaPadre: number | null): Promise<string> {
+    return categoriasItspService.obtenerSiguienteCodigo(idCategoriaPadre);
   }
 
   async function cambiarEstado(id: number, nuevoEstado: EstadoCatalogo): Promise<void> {
@@ -57,5 +63,13 @@ export function useCategoriasItsp() {
     if (categoria) categoria.estado = nuevoEstado;
   }
 
-  return { ...toRefs(estado), categoriasRaiz, listar, crear, actualizar, cambiarEstado };
+  return {
+    ...toRefs(estado),
+    categoriasRaiz,
+    listar,
+    crear,
+    actualizar,
+    obtenerSiguienteCodigo,
+    cambiarEstado,
+  };
 }

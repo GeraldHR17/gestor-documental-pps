@@ -14,6 +14,7 @@ import type {
   FiltrosCatalogoDto,
   GuardarCatalogoDto,
   GuardarCategoriaItspDto,
+  SiguienteCodigoCategoriaDto,
 } from '@/types/catalogo.types';
 
 export interface ServicioCatalogo {
@@ -78,6 +79,19 @@ export const categoriasItspService = {
   async obtener(id: number): Promise<CategoriaItspDto> {
     const { data } = await clienteHttp.get<CategoriaItspDto>(`/categorias-itsp/${id}`);
     return data;
+  },
+
+  /**
+   * Código que recibiría ahora una categoría con ese padre (sin padre =
+   * raíz). Es una previsión: si otra persona guarda antes, el código final
+   * puede ser el siguiente, y lo trae la respuesta del guardado.
+   */
+  async obtenerSiguienteCodigo(idCategoriaPadre: number | null): Promise<string> {
+    const { data } = await clienteHttp.get<SiguienteCodigoCategoriaDto>(
+      '/categorias-itsp/siguiente-codigo',
+      { params: idCategoriaPadre === null ? {} : { idCategoriaPadre } },
+    );
+    return data.codigo;
   },
 
   async crear(datos: GuardarCategoriaItspDto): Promise<CategoriaItspDto> {

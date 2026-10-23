@@ -98,20 +98,6 @@ export function validarDescripcionCatalogo(valor: string): string | null {
   return null;
 }
 
-/** El código ITSP es opcional; si se escribe, se rige por el largo de la columna. */
-export function validarCodigoCategoria(valor: string): string | null {
-  if (!valor.trim()) return null;
-
-  if (valor !== valor.trim()) {
-    return 'El código no puede iniciar ni terminar con espacios en blanco.';
-  }
-
-  if (valor.length > 50) {
-    return 'El código no puede superar los 50 caracteres.';
-  }
-
-  return null;
-}
 
 // ---------------------------------------------------------------------
 // Documentos (Fase 6)

@@ -189,7 +189,7 @@ onMounted(recargar);
                   </div>
                 </td>
                 <td class="py-gutter-sm px-gutter-lg text-secondary whitespace-nowrap">
-                  {{ categoria.codigo ?? '—' }}
+                  {{ categoria.codigo }}
                 </td>
                 <td class="py-gutter-sm px-gutter-lg text-secondary whitespace-nowrap">
                   {{ categoria.nivel === 1 ? 'Raíz' : 'Subsección' }}
