@@ -190,7 +190,7 @@ onMounted(() => {
 
     <!-- Filtros -->
     <div
-      class="bg-pure-white rounded-primary border border-surface-alt p-gutter-sm flex flex-col gap-gutter-sm"
+      class="bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-sm flex flex-col gap-gutter-sm"
     >
       <div class="relative w-full">
         <span
@@ -203,7 +203,7 @@ onMounted(() => {
           type="text"
           placeholder="Buscar por título o descripción..."
           aria-label="Buscar documentos"
-          class="w-full h-touch-target pl-10 pr-4 rounded-secondary border border-outline bg-pure-white focus:border-2 focus:border-on-surface focus:outline-none transition-colors font-body-lg text-body-lg text-on-surface placeholder:text-secondary"
+          class="w-full h-touch-target pl-10 pr-4 rounded-secondary border border-outline bg-surface-container-lowest focus:border-2 focus:border-on-surface focus:outline-none transition-colors font-body-lg text-body-lg text-on-surface placeholder:text-secondary"
           @input="manejarBuscar"
         />
       </div>
@@ -258,7 +258,7 @@ onMounted(() => {
             @keydown="bloquearNegativos"
             placeholder="Año"
             aria-label="Filtrar por año"
-            class="h-touch-target px-3 w-full rounded-secondary border border-outline bg-pure-white text-on-surface font-body-md text-body-md"
+            class="h-touch-target px-3 w-full rounded-secondary border border-outline bg-surface-container-lowest text-on-surface font-body-md text-body-md"
           />
           <select
             v-model="filtroEstado"
@@ -279,11 +279,11 @@ onMounted(() => {
     </p>
 
     <!-- Tabla -->
-    <div class="bg-pure-white rounded-primary border border-surface-alt overflow-hidden flex flex-col">
+    <div class="bg-surface-container-lowest rounded-primary border border-surface-alt overflow-hidden flex flex-col">
       <div class="overflow-x-auto w-full">
         <table class="w-full min-w-[900px] text-left border-collapse">
           <thead>
-            <tr class="bg-on-surface">
+            <tr class="bg-panel">
               <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">
                 Documento
               </th>
@@ -402,7 +402,7 @@ onMounted(() => {
       </div>
 
       <div
-        class="border-t border-surface-alt p-gutter-sm bg-pure-white flex items-center justify-between gap-gutter-sm"
+        class="border-t border-surface-alt p-gutter-sm bg-surface-container-lowest flex items-center justify-between gap-gutter-sm"
       >
         <span class="font-body-md text-body-md text-secondary">
           {{ total }} {{ total === 1 ? 'documento' : 'documentos' }}

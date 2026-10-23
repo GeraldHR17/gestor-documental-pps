@@ -360,7 +360,7 @@ onMounted(cargarDatosIniciales);
     >
       <!-- ================= Columna izquierda ================= -->
       <div class="flex flex-col gap-gutter-lg min-w-0">
-        <section class="bg-pure-white rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-lg">
+        <section class="bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-lg">
           <div class="flex items-baseline justify-between gap-gutter-sm flex-wrap">
             <h2 class="font-headline-sm text-headline-sm text-on-surface">Datos de la persona</h2>
             <p class="font-body-md text-body-md text-secondary">
@@ -378,7 +378,7 @@ onMounted(cargarDatosIniciales);
               type="text"
               placeholder="Nombre y apellidos"
               :aria-invalid="errorVisible('nombreCompleto') !== null"
-              class="w-full h-touch-target px-3 border rounded-primary bg-pure-white text-on-surface placeholder:text-secondary focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
+              class="w-full h-touch-target px-3 border rounded-primary bg-surface-container-lowest text-on-surface placeholder:text-secondary focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
               :class="errorVisible('nombreCompleto') ? 'border-error focus:border-error' : 'border-outline focus:border-on-surface'"
               @input="marcarTocado('nombreCompleto')"
               @blur="marcarTocado('nombreCompleto')"
@@ -399,7 +399,7 @@ onMounted(cargarDatosIniciales);
                 type="text"
                 placeholder="000000000"
                 :aria-invalid="errorVisible('identificacion') !== null"
-                class="w-full h-touch-target px-3 border rounded-primary bg-pure-white text-on-surface placeholder:text-secondary focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
+                class="w-full h-touch-target px-3 border rounded-primary bg-surface-container-lowest text-on-surface placeholder:text-secondary focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
                 :class="errorVisible('identificacion') ? 'border-error focus:border-error' : 'border-outline focus:border-on-surface'"
                 @input="marcarTocado('identificacion')"
                 @blur="marcarTocado('identificacion')"
@@ -420,7 +420,7 @@ onMounted(cargarDatosIniciales);
                 type="email"
                 placeholder="usuario@munipalmares.go.cr"
                 :aria-invalid="errorVisible('correo') !== null"
-                class="w-full h-touch-target px-3 border rounded-primary bg-pure-white text-on-surface placeholder:text-secondary focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
+                class="w-full h-touch-target px-3 border rounded-primary bg-surface-container-lowest text-on-surface placeholder:text-secondary focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
                 :class="errorVisible('correo') ? 'border-error focus:border-error' : 'border-outline focus:border-on-surface'"
                 @input="marcarTocado('correo')"
                 @blur="marcarTocado('correo')"
@@ -444,7 +444,7 @@ onMounted(cargarDatosIniciales);
               type="text"
               placeholder="Mín. 8 caracteres, una mayúscula, un número y un carácter especial"
               :aria-invalid="errorVisible('contrasenaTemporal') !== null"
-              class="w-full h-touch-target px-3 border rounded-primary bg-pure-white text-on-surface placeholder:text-secondary focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
+              class="w-full h-touch-target px-3 border rounded-primary bg-surface-container-lowest text-on-surface placeholder:text-secondary focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
               :class="errorVisible('contrasenaTemporal') ? 'border-error focus:border-error' : 'border-outline focus:border-on-surface'"
               @input="marcarTocado('contrasenaTemporal')"
               @blur="marcarTocado('contrasenaTemporal')"
@@ -492,7 +492,7 @@ onMounted(cargarDatosIniciales);
 
         <!-- Rol asignado: tarjetas seleccionables generadas desde el
              catálogo real de roles, no desde nombres fijos. -->
-        <fieldset class="bg-pure-white rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-sm">
+        <fieldset class="bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-sm">
           <legend class="sr-only">Rol asignado</legend>
           <div>
             <h2 class="font-headline-sm text-headline-sm text-on-surface">
@@ -537,7 +537,7 @@ onMounted(cargarDatosIniciales);
         <div class="flex flex-col sm:flex-row items-center justify-end gap-gutter-sm">
           <button
             type="button"
-            class="w-full sm:w-auto h-touch-target px-gutter-lg bg-pure-white text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors"
+            class="w-full sm:w-auto h-touch-target px-gutter-lg bg-surface-container-lowest text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors"
             @click="manejarCancelar"
           >
             Cancelar
@@ -555,7 +555,7 @@ onMounted(cargarDatosIniciales);
       <!-- ================= Columna derecha ================= -->
       <div class="flex flex-col gap-gutter-lg xl:sticky xl:top-20">
         <!-- Resumen en vivo (E.1) -->
-        <section class="bg-on-surface text-pure-white rounded-primary p-gutter-lg flex flex-col gap-gutter-sm" aria-label="Resumen">
+        <section class="bg-panel text-pure-white rounded-primary p-gutter-lg flex flex-col gap-gutter-sm" aria-label="Resumen">
           <h2 class="font-label-sm text-label-sm uppercase tracking-wide text-primary-fixed-dim">Resumen</h2>
           <div class="flex items-center gap-3">
             <span
@@ -594,7 +594,7 @@ onMounted(cargarDatosIniciales);
         </section>
 
         <!-- Permisos del rol seleccionado (E.2) -->
-        <section class="bg-pure-white rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-sm" aria-live="polite">
+        <section class="bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-sm" aria-live="polite">
           <h2 class="font-headline-sm text-headline-sm text-on-surface">Permisos del rol seleccionado</h2>
           <p v-if="idRol === null" class="font-body-md text-body-md text-secondary">
             Seleccione un rol para ver sus permisos.
@@ -617,13 +617,13 @@ onMounted(cargarDatosIniciales);
         <!-- Cambios recientes (E.4), sólo en edición -->
         <section
           v-if="modoEdicion && bitacoraDisponible"
-          class="bg-pure-white rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-sm"
+          class="bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-sm"
         >
           <div class="flex items-center justify-between gap-gutter-sm">
             <h2 class="font-headline-sm text-headline-sm text-on-surface">Cambios recientes</h2>
             <router-link
               :to="{ name: 'bitacora', query: { entidad: 'usuarios', idRegistro: String(idUsuario) } }"
-              class="font-label-sm text-label-sm text-primary underline hover:text-primary-container transition-colors whitespace-nowrap"
+              class="font-label-sm text-label-sm text-acento underline hover:text-acento-hover transition-colors whitespace-nowrap"
             >
               Ver bitácora
             </router-link>

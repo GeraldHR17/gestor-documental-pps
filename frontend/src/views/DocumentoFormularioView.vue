@@ -227,7 +227,7 @@ onMounted(cargarDatosIniciales);
 
     <form
       v-else
-      class="bg-pure-white rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-lg max-w-3xl"
+      class="bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-lg max-w-3xl"
       novalidate
       @submit.prevent="solicitarGuardado"
     >
@@ -239,7 +239,7 @@ onMounted(cargarDatosIniciales);
           type="text"
           :maxlength="LONGITUD_MAXIMA_TITULO_DOCUMENTO"
           :aria-invalid="errorVisible('titulo') !== null"
-          class="w-full h-touch-target px-3 border rounded-primary bg-pure-white text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
+          class="w-full h-touch-target px-3 border rounded-primary bg-surface-container-lowest text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
           :class="errorVisible('titulo') ? 'border-error focus:border-error' : 'border-outline focus:border-on-surface'"
           @input="marcarTocado('titulo')"
           @blur="marcarTocado('titulo')"
@@ -262,7 +262,7 @@ onMounted(cargarDatosIniciales);
           rows="3"
           :maxlength="LONGITUD_MAXIMA_DESCRIPCION_DOCUMENTO"
           :aria-invalid="errorVisible('descripcion') !== null"
-          class="w-full px-3 py-2 border rounded-primary bg-pure-white text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
+          class="w-full px-3 py-2 border rounded-primary bg-surface-container-lowest text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
           :class="errorVisible('descripcion') ? 'border-error focus:border-error' : 'border-outline focus:border-on-surface'"
           @input="marcarTocado('descripcion')"
           @blur="marcarTocado('descripcion')"
@@ -286,7 +286,7 @@ onMounted(cargarDatosIniciales);
             min="0"
             @keydown="bloquearNegativos"
             :aria-invalid="errorVisible('anio') !== null"
-            class="w-full h-touch-target px-3 border rounded-primary bg-pure-white text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
+            class="w-full h-touch-target px-3 border rounded-primary bg-surface-container-lowest text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
             :class="errorVisible('anio') ? 'border-error focus:border-error' : 'border-outline focus:border-on-surface'"
             @input="marcarTocado('anio')"
             @blur="marcarTocado('anio')"
@@ -409,7 +409,7 @@ onMounted(cargarDatosIniciales);
       <div class="flex flex-col sm:flex-row items-center justify-end gap-gutter-sm pt-gutter-sm border-t border-surface-alt">
         <button
           type="button"
-          class="w-full sm:w-auto h-touch-target px-gutter-lg bg-pure-white text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors"
+          class="w-full sm:w-auto h-touch-target px-gutter-lg bg-surface-container-lowest text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors"
           @click="manejarCancelar"
         >
           Cancelar

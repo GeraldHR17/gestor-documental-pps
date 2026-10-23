@@ -131,7 +131,7 @@ onMounted(async () => {
 
     <!-- Controles de búsqueda y filtros -->
     <div
-      class="bg-pure-white rounded-primary border border-surface-alt p-gutter-sm flex flex-col md:flex-row gap-gutter-sm items-center justify-between"
+      class="bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-sm flex flex-col md:flex-row gap-gutter-sm items-center justify-between"
     >
       <!-- Buscador: radio "Secondary standard" (6px). -->
       <div class="relative w-full md:w-96">
@@ -143,7 +143,7 @@ onMounted(async () => {
           v-model="textoBusqueda"
           type="text"
           placeholder="Buscar por nombre, correo o rol..."
-          class="w-full h-touch-target pl-10 pr-4 rounded-secondary border border-outline bg-pure-white focus:border-2 focus:border-on-surface focus:outline-none transition-colors font-body-lg text-body-lg text-on-surface placeholder:text-secondary"
+          class="w-full h-touch-target pl-10 pr-4 rounded-secondary border border-outline bg-surface-container-lowest focus:border-2 focus:border-on-surface focus:outline-none transition-colors font-body-lg text-body-lg text-on-surface placeholder:text-secondary"
           @input="manejarBuscar"
         />
       </div>
@@ -173,11 +173,11 @@ onMounted(async () => {
     </p>
 
     <!-- Tabla de usuarios -->
-    <div class="bg-pure-white rounded-primary border border-surface-alt overflow-hidden flex flex-col">
+    <div class="bg-surface-container-lowest rounded-primary border border-surface-alt overflow-hidden flex flex-col">
       <div class="overflow-x-auto w-full">
         <table class="w-full min-w-[800px] text-left border-collapse">
           <thead>
-            <tr class="bg-on-surface">
+            <tr class="bg-panel">
               <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">
                 Nombre
               </th>
@@ -222,7 +222,7 @@ onMounted(async () => {
                 <td class="py-gutter-sm px-gutter-lg">
                   <div class="flex items-center gap-3 min-h-list-row">
                     <div
-                      class="w-8 h-8 rounded-full bg-primary-fixed text-primary flex items-center justify-center font-bold text-label-sm shrink-0"
+                      class="w-8 h-8 rounded-full bg-primary-fixed text-acento flex items-center justify-center font-bold text-label-sm shrink-0"
                     >
                       {{ obtenerIniciales(usuario.nombreCompleto) }}
                     </div>
@@ -288,7 +288,7 @@ onMounted(async () => {
 
       <!-- Paginación -->
       <div
-        class="border-t border-surface-alt p-gutter-sm flex flex-col sm:flex-row items-center justify-between gap-gutter-sm bg-pure-white"
+        class="border-t border-surface-alt p-gutter-sm flex flex-col sm:flex-row items-center justify-between gap-gutter-sm bg-surface-container-lowest"
       >
         <span class="font-body-md text-body-md text-secondary">
           Mostrando {{ usuarios.length ? (pagina - 1) * limite + 1 : 0 }} a

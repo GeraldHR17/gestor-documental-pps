@@ -293,7 +293,7 @@ const PASOS: Array<{ numero: Paso; titulo: string; subtitulo: string }> = [
 
     <!-- Indicador de pasos -->
     <ol
-      class="bg-pure-white rounded-primary border border-surface-alt grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-surface-alt"
+      class="bg-surface-container-lowest rounded-primary border border-surface-alt grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-surface-alt"
       aria-label="Pasos del registro"
     >
       <li
@@ -306,7 +306,7 @@ const PASOS: Array<{ numero: Paso; titulo: string; subtitulo: string }> = [
           class="w-8 h-8 rounded-full shrink-0 flex items-center justify-center font-label-sm text-label-sm"
           :class="
             paso > item.numero
-              ? 'bg-on-surface text-pure-white'
+              ? 'bg-panel text-pure-white'
               : paso === item.numero
                 ? 'bg-primary-container text-pure-white'
                 : 'bg-surface-container-high text-secondary'
@@ -330,7 +330,7 @@ const PASOS: Array<{ numero: Paso; titulo: string; subtitulo: string }> = [
       <!-- ================= Paso 1: Archivo ================= -->
       <section
         v-if="paso === 1"
-        class="bg-pure-white rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-lg"
+        class="bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-lg"
       >
         <h2 class="font-headline-sm text-headline-sm text-on-surface">Archivo</h2>
         <ZonaCargaPdf
@@ -342,7 +342,7 @@ const PASOS: Array<{ numero: Paso; titulo: string; subtitulo: string }> = [
         >
           <button
             type="button"
-            class="w-full sm:w-auto h-touch-target px-gutter-lg bg-pure-white text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors"
+            class="w-full sm:w-auto h-touch-target px-gutter-lg bg-surface-container-lowest text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors"
             @click="manejarCancelar"
           >
             Cancelar
@@ -361,7 +361,7 @@ const PASOS: Array<{ numero: Paso; titulo: string; subtitulo: string }> = [
       <!-- ================= Paso 2: Metadatos ================= -->
       <form
         v-else-if="paso === 2"
-        class="bg-pure-white rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-lg"
+        class="bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-lg"
         novalidate
         @submit.prevent="irARevision"
       >
@@ -382,7 +382,7 @@ const PASOS: Array<{ numero: Paso; titulo: string; subtitulo: string }> = [
             type="text"
             :maxlength="LONGITUD_MAXIMA_TITULO_DOCUMENTO"
             :aria-invalid="errorVisible('titulo') !== null"
-            class="w-full h-touch-target px-3 border rounded-primary bg-pure-white text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
+            class="w-full h-touch-target px-3 border rounded-primary bg-surface-container-lowest text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
             :class="
               errorVisible('titulo')
                 ? 'border-error focus:border-error'
@@ -497,7 +497,7 @@ const PASOS: Array<{ numero: Paso; titulo: string; subtitulo: string }> = [
               min="0"
               @keydown="bloquearNegativos"
               :aria-invalid="errorVisible('anio') !== null"
-              class="w-full h-touch-target px-3 border rounded-primary bg-pure-white text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
+              class="w-full h-touch-target px-3 border rounded-primary bg-surface-container-lowest text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
               :class="errorVisible('anio') ? 'border-error focus:border-error' : 'border-outline focus:border-on-surface'"
               @input="marcarTocado('anio')"
               @blur="marcarTocado('anio')"
@@ -548,7 +548,7 @@ const PASOS: Array<{ numero: Paso; titulo: string; subtitulo: string }> = [
             rows="3"
             :maxlength="LONGITUD_MAXIMA_DESCRIPCION_DOCUMENTO"
             :aria-invalid="errorVisible('descripcion') !== null"
-            class="w-full px-3 py-2 border rounded-primary bg-pure-white text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
+            class="w-full px-3 py-2 border rounded-primary bg-surface-container-lowest text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
             :class="errorVisible('descripcion') ? 'border-error focus:border-error' : 'border-outline focus:border-on-surface'"
             @input="marcarTocado('descripcion')"
             @blur="marcarTocado('descripcion')"
@@ -570,7 +570,7 @@ const PASOS: Array<{ numero: Paso; titulo: string; subtitulo: string }> = [
         >
           <button
             type="button"
-            class="w-full sm:w-auto h-touch-target px-gutter-lg font-label-sm text-label-sm text-on-surface underline hover:text-primary transition-colors"
+            class="w-full sm:w-auto h-touch-target px-gutter-lg font-label-sm text-label-sm text-on-surface underline hover:text-acento transition-colors"
             @click="manejarCancelar"
           >
             Cancelar
@@ -578,7 +578,7 @@ const PASOS: Array<{ numero: Paso; titulo: string; subtitulo: string }> = [
           <button
             type="button"
             :disabled="guardando || !metadatosValidos || !archivoInspeccionado"
-            class="w-full sm:w-auto h-touch-target px-gutter-lg bg-pure-white text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            class="w-full sm:w-auto h-touch-target px-gutter-lg bg-surface-container-lowest text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             @click="solicitarGuardado('borrador')"
           >
             Guardar borrador
@@ -597,7 +597,7 @@ const PASOS: Array<{ numero: Paso; titulo: string; subtitulo: string }> = [
       <!-- ================= Paso 3: Revisión ================= -->
       <section
         v-else
-        class="bg-pure-white rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-lg"
+        class="bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-lg"
       >
         <h2 class="font-headline-sm text-headline-sm text-on-surface">Revisión</h2>
         <p class="font-body-md text-body-md text-secondary">
@@ -669,7 +669,7 @@ const PASOS: Array<{ numero: Paso; titulo: string; subtitulo: string }> = [
         >
           <button
             type="button"
-            class="w-full sm:w-auto h-touch-target px-gutter-lg bg-pure-white text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors"
+            class="w-full sm:w-auto h-touch-target px-gutter-lg bg-surface-container-lowest text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors"
             @click="volverA(2)"
           >
             Volver
@@ -687,7 +687,7 @@ const PASOS: Array<{ numero: Paso; titulo: string; subtitulo: string }> = [
 
       <!-- ================= Panel lateral: requisitos ================= -->
       <aside
-        class="bg-on-surface text-pure-white rounded-primary p-gutter-lg flex flex-col gap-gutter-sm xl:sticky xl:top-20"
+        class="bg-panel text-pure-white rounded-primary p-gutter-lg flex flex-col gap-gutter-sm xl:sticky xl:top-20"
         aria-label="Requisitos para publicar"
       >
         <h2 class="font-label-sm text-label-sm uppercase tracking-wide text-primary-fixed-dim">
@@ -701,7 +701,7 @@ const PASOS: Array<{ numero: Paso; titulo: string; subtitulo: string }> = [
           >
             <span
               class="w-5 h-5 rounded-full shrink-0 flex items-center justify-center border transition-colors"
-              :class="requisito.cumplido ? 'bg-pure-white border-pure-white text-on-surface' : 'border-pure-white/50'"
+              :class="requisito.cumplido ? 'bg-surface-container-lowest border-pure-white text-on-surface' : 'border-pure-white/50'"
               aria-hidden="true"
             >
               <span v-if="requisito.cumplido" class="material-symbols-outlined text-[14px]">check</span>

@@ -35,7 +35,7 @@ defineEmits<{ confirmar: []; cancelar: [] }>();
       role="alertdialog"
       aria-modal="true"
       :aria-label="titulo"
-      class="bg-pure-white rounded-primary p-gutter-lg max-w-sm w-full flex flex-col gap-gutter-sm"
+      class="bg-surface-container-lowest rounded-primary p-gutter-lg max-w-sm w-full flex flex-col gap-gutter-sm"
       style="box-shadow: var(--shadow-modal)"
     >
       <h2 class="font-headline-sm text-headline-sm text-on-surface">{{ titulo }}</h2>
@@ -47,7 +47,7 @@ defineEmits<{ confirmar: []; cancelar: [] }>();
       <div class="flex items-center justify-end gap-gutter-sm pt-2">
         <button
           type="button"
-          class="h-touch-target px-gutter-lg bg-pure-white text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors"
+          class="h-touch-target px-gutter-lg bg-surface-container-lowest text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors"
           @click="$emit('cancelar')"
         >
           {{ textoCancelar }}

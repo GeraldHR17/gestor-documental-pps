@@ -281,7 +281,7 @@ onMounted(cargar);
           <router-link
             v-if="puedeEditar"
             :to="{ name: 'documento-editar', params: { id: documento.id } }"
-            class="h-touch-target px-gutter-lg bg-pure-white text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors flex items-center gap-2"
+            class="h-touch-target px-gutter-lg bg-surface-container-lowest text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors flex items-center gap-2"
           >
             <span aria-hidden="true" class="material-symbols-outlined text-[18px]">edit</span>
             Editar metadatos
@@ -289,7 +289,7 @@ onMounted(cargar);
           <button
             v-if="puedeCargarVersion"
             type="button"
-            class="h-touch-target px-gutter-lg bg-pure-white text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors flex items-center gap-2"
+            class="h-touch-target px-gutter-lg bg-surface-container-lowest text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors flex items-center gap-2"
             @click="mostrarFormularioVersion = !mostrarFormularioVersion"
           >
             <span aria-hidden="true" class="material-symbols-outlined text-[18px]">upload_file</span>
@@ -307,7 +307,7 @@ onMounted(cargar);
           <button
             v-if="puedeEjecutar('despublicar')"
             type="button"
-            class="h-touch-target px-gutter-lg bg-pure-white text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors flex items-center gap-2"
+            class="h-touch-target px-gutter-lg bg-surface-container-lowest text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors flex items-center gap-2"
             @click="accionPendiente = 'despublicar'"
           >
             <span aria-hidden="true" class="material-symbols-outlined text-[18px]">public_off</span>
@@ -316,7 +316,7 @@ onMounted(cargar);
           <button
             v-if="puedeEjecutar('inactivar')"
             type="button"
-            class="h-touch-target px-gutter-lg bg-pure-white text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors flex items-center gap-2"
+            class="h-touch-target px-gutter-lg bg-surface-container-lowest text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors flex items-center gap-2"
             @click="accionPendiente = 'inactivar'"
           >
             <span aria-hidden="true" class="material-symbols-outlined text-[18px]">block</span>
@@ -328,7 +328,7 @@ onMounted(cargar);
       <!-- Formulario plegable de nueva versión -->
       <form
         v-if="mostrarFormularioVersion"
-        class="bg-pure-white rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-sm"
+        class="bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-sm"
         novalidate
         @submit.prevent="solicitarNuevaVersion"
       >
@@ -351,7 +351,7 @@ onMounted(cargar);
             v-model="comentarioVersion"
             type="text"
             :maxlength="LONGITUD_MAXIMA_COMENTARIO_VERSION"
-            class="w-full h-touch-target px-3 border rounded-primary bg-pure-white text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
+            class="w-full h-touch-target px-3 border rounded-primary bg-surface-container-lowest text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
             :class="
               errorComentarioVersion
                 ? 'border-error focus:border-error'
@@ -366,7 +366,7 @@ onMounted(cargar);
         <div class="flex flex-col sm:flex-row items-center justify-end gap-gutter-sm">
           <button
             type="button"
-            class="w-full sm:w-auto h-touch-target px-gutter-lg bg-pure-white text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors"
+            class="w-full sm:w-auto h-touch-target px-gutter-lg bg-surface-container-lowest text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors"
             @click="cerrarFormularioVersion"
           >
             Cancelar
@@ -384,7 +384,7 @@ onMounted(cargar);
       <div class="grid grid-cols-1 xl:grid-cols-3 gap-gutter-lg">
         <!-- Metadatos -->
         <section
-          class="bg-pure-white rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-sm"
+          class="bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-sm"
         >
           <h2 class="font-headline-sm text-headline-sm text-on-surface">Metadatos</h2>
           <dl class="flex flex-col gap-gutter-sm font-body-md text-body-md">
@@ -444,7 +444,7 @@ onMounted(cargar);
 
         <!-- Visor PDF -->
         <section
-          class="xl:col-span-2 bg-pure-white rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-sm"
+          class="xl:col-span-2 bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-sm"
         >
           <div class="flex items-center justify-between gap-gutter-sm flex-wrap">
             <h2 class="font-headline-sm text-headline-sm text-on-surface">Vista previa</h2>
@@ -486,7 +486,7 @@ onMounted(cargar);
       </div>
 
       <!-- Historial de versiones (RF-023) -->
-      <section class="bg-pure-white rounded-primary border border-surface-alt overflow-hidden">
+      <section class="bg-surface-container-lowest rounded-primary border border-surface-alt overflow-hidden">
         <div class="p-gutter-lg border-b border-surface-alt">
           <h2 class="font-headline-sm text-headline-sm text-on-surface">Historial de versiones</h2>
           <p class="font-body-md text-body-md text-secondary mt-1">
@@ -496,7 +496,7 @@ onMounted(cargar);
         <div class="overflow-x-auto w-full">
           <table class="w-full min-w-[820px] text-left border-collapse">
             <thead>
-              <tr class="bg-on-surface">
+              <tr class="bg-panel">
                 <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">
                   Versión
                 </th>

@@ -121,7 +121,7 @@ onMounted(recargar);
       </p>
     </div>
 
-    <div class="bg-pure-white rounded-primary border border-surface-alt p-gutter-sm grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-gutter-sm">
+    <div class="bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-sm grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-gutter-sm">
       <div>
         <label class="block font-label-sm text-label-sm text-tertiary uppercase mb-1" for="filtro-usuario">
           Usuario que ejecutó la acción
@@ -177,18 +177,18 @@ onMounted(recargar);
           v-model="filtroAccion"
           type="text"
           placeholder="Ej. PUBLICAR"
-          class="h-touch-target w-full px-3 rounded-secondary border border-outline bg-pure-white text-on-surface font-body-md text-body-md placeholder:text-secondary focus:border-2 focus:border-on-surface focus:outline-none"
+          class="h-touch-target w-full px-3 rounded-secondary border border-outline bg-surface-container-lowest text-on-surface font-body-md text-body-md placeholder:text-secondary focus:border-2 focus:border-on-surface focus:outline-none"
         />
       </div>
     </div>
 
     <p v-if="error" role="alert" aria-live="assertive" class="text-error font-body-md text-body-md">{{ error }}</p>
 
-    <div class="bg-pure-white rounded-primary border border-surface-alt overflow-hidden flex flex-col">
+    <div class="bg-surface-container-lowest rounded-primary border border-surface-alt overflow-hidden flex flex-col">
       <div class="overflow-x-auto w-full">
         <table class="w-full min-w-[900px] text-left border-collapse">
           <thead>
-            <tr class="bg-on-surface">
+            <tr class="bg-panel">
               <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">Fecha y hora</th>
               <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">Acción</th>
               <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">Entidad afectada</th>
@@ -218,7 +218,7 @@ onMounted(recargar);
         </table>
       </div>
 
-      <div class="border-t border-surface-alt p-gutter-sm bg-pure-white flex items-center justify-between gap-gutter-sm">
+      <div class="border-t border-surface-alt p-gutter-sm bg-surface-container-lowest flex items-center justify-between gap-gutter-sm">
         <span class="font-body-md text-body-md text-secondary">{{ total }} {{ total === 1 ? 'entrada' : 'entradas' }}</span>
         <div class="flex items-center gap-gutter-sm">
           <button

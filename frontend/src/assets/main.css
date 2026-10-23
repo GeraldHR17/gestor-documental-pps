@@ -98,6 +98,22 @@
   --color-surface-alt: #f0f0f1;
   --color-pure-white: #ffffff;
 
+  /* ---------- Tokens de un solo uso (spec-ajustes-posdespliegue §9.3.2) ----------
+     Antes, pure-white, on-surface y primary servían a la vez de fondo y de
+     texto, y por eso no se podían redefinir para el modo oscuro sin romper
+     uno de los dos usos. Estos alias separan el uso; en modo claro valen
+     exactamente lo mismo que el token del que salieron.
+       panel        -> fondo oscuro de la barra lateral, de las cabeceras
+                       de tabla y de los paneles de resumen (antes bg-on-surface).
+       acento       -> texto y enlaces rojos (antes text-primary).
+       acento-hover -> hover de un enlace rojo (antes hover:text-primary-container).
+     Los fondos blancos de tarjetas y barras usan surface-container-lowest
+     (también #ffffff), y pure-white queda solo para texto sobre rojo o
+     sobre el panel. */
+  --color-panel: #1a1c1c;
+  --color-acento: #a60001;
+  --color-acento-hover: #d30505;
+
   /* ==========================================================
      2. TIPOGRAFÍA — Public Sans, escala de DESIGN.md
      ==========================================================

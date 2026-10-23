@@ -178,7 +178,7 @@ onMounted(async () => {
         <router-link
           v-if="puedeVerBitacora"
           :to="{ name: 'bitacora' }"
-          class="h-touch-target px-gutter-lg bg-pure-white text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors flex items-center gap-2"
+          class="h-touch-target px-gutter-lg bg-surface-container-lowest text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors flex items-center gap-2"
         >
           <span aria-hidden="true" class="material-symbols-outlined text-[18px]">history</span>
           Ver bitácora
@@ -188,7 +188,7 @@ onMounted(async () => {
           :href="urlPortalPublico"
           target="_blank"
           rel="noopener noreferrer"
-          class="h-touch-target px-gutter-lg bg-pure-white text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors flex items-center gap-2"
+          class="h-touch-target px-gutter-lg bg-surface-container-lowest text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors flex items-center gap-2"
         >
           <span aria-hidden="true" class="material-symbols-outlined text-[18px]">open_in_new</span>
           Abrir portal público
@@ -206,7 +206,7 @@ onMounted(async () => {
           { etiqueta: 'Operaciones en bitácora', valor: resumen?.operacionesBitacora90Dias, detalle: 'últimos 90 días' },
         ]"
         :key="tarjeta.etiqueta"
-        class="bg-pure-white rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-1"
+        class="bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-1"
       >
         <p class="font-label-sm text-label-sm text-tertiary uppercase">{{ tarjeta.etiqueta }}</p>
         <p class="font-headline-lg text-headline-lg text-on-surface">
@@ -220,7 +220,7 @@ onMounted(async () => {
       <!-- ================= Documentos recientes ================= -->
       <section
         v-if="puedeVerDocumentos"
-        class="bg-pure-white rounded-primary border border-surface-alt overflow-hidden flex flex-col"
+        class="bg-surface-container-lowest rounded-primary border border-surface-alt overflow-hidden flex flex-col"
       >
         <div class="p-gutter-lg flex flex-col sm:flex-row sm:items-center justify-between gap-gutter-sm">
           <h2 class="font-headline-sm text-headline-sm text-on-surface">Documentos recientes</h2>
@@ -234,8 +234,8 @@ onMounted(async () => {
               class="h-touch-target px-gutter-sm rounded-secondary font-label-sm text-label-sm transition-colors"
               :class="
                 pestana === opcion.clave
-                  ? 'bg-on-surface text-pure-white'
-                  : 'bg-pure-white text-on-surface border border-outline hover:bg-surface-container'
+                  ? 'bg-panel text-pure-white'
+                  : 'bg-surface-container-lowest text-on-surface border border-outline hover:bg-surface-container'
               "
               @click="cambiarPestana(opcion.clave)"
             >
@@ -251,7 +251,7 @@ onMounted(async () => {
         <div class="overflow-x-auto w-full">
           <table class="w-full min-w-[720px] text-left border-collapse">
             <thead>
-              <tr class="bg-on-surface">
+              <tr class="bg-panel">
                 <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">
                   Documento
                 </th>
@@ -316,7 +316,7 @@ onMounted(async () => {
         <!-- Pendientes de publicación -->
         <section
           v-if="puedeVerReportes"
-          class="bg-pure-white rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-sm"
+          class="bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-sm"
         >
           <h2 class="font-headline-sm text-headline-sm text-on-surface">Pendientes de publicación</h2>
           <p v-if="cargandoReportes" class="font-body-md text-body-md text-secondary">Cargando...</p>
@@ -343,7 +343,7 @@ onMounted(async () => {
           </ul>
           <router-link
             :to="{ name: 'documentos', query: { estado: 'BORRADOR' } }"
-            class="h-touch-target px-gutter-lg bg-pure-white text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors flex items-center justify-center"
+            class="h-touch-target px-gutter-lg bg-surface-container-lowest text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors flex items-center justify-center"
           >
             Revisar cola
           </router-link>
@@ -355,7 +355,7 @@ onMounted(async () => {
              backend con la constante ya centralizada. -->
         <section
           v-if="puedeVerReportes"
-          class="bg-pure-white rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-sm"
+          class="bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-sm"
         >
           <h2 class="font-headline-sm text-headline-sm text-on-surface">Documentos por categoría ITSP</h2>
           <p v-if="cargandoReportes" class="font-body-md text-body-md text-secondary">Cargando...</p>
@@ -381,7 +381,7 @@ onMounted(async () => {
              agrega porque el requerimiento lo pide explícitamente. -->
         <section
           v-if="puedeVerReportes"
-          class="bg-pure-white rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-sm"
+          class="bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-sm"
         >
           <h2 class="font-headline-sm text-headline-sm text-on-surface">Documentos por dependencia</h2>
           <p v-if="cargandoReportes" class="font-body-md text-body-md text-secondary">Cargando...</p>
@@ -419,9 +419,9 @@ onMounted(async () => {
           v-for="acceso in accesosVisibles"
           :key="acceso.nombreRuta"
           :to="{ name: acceso.nombreRuta }"
-          class="h-touch-target px-gutter-lg bg-pure-white text-on-surface font-label-sm text-label-sm rounded-primary border border-surface-alt hover:border-primary-container transition-colors flex items-center gap-2"
+          class="h-touch-target px-gutter-lg bg-surface-container-lowest text-on-surface font-label-sm text-label-sm rounded-primary border border-surface-alt hover:border-primary-container transition-colors flex items-center gap-2"
         >
-          <span aria-hidden="true" class="material-symbols-outlined text-[18px] text-primary">
+          <span aria-hidden="true" class="material-symbols-outlined text-[18px] text-acento">
             {{ acceso.icono }}
           </span>
           {{ acceso.etiqueta }}

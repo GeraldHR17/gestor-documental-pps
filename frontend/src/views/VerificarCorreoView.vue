@@ -55,12 +55,12 @@ async function manejarReenvio(): Promise<void> {
     class="bg-surface-alt text-on-background min-h-screen flex items-center justify-center p-margin-mobile md:p-margin-desktop font-body-lg"
   >
     <div
-      class="w-full max-w-md bg-pure-white rounded-primary border border-surface-alt p-gutter-lg flex flex-col items-center gap-4 text-center"
+      class="w-full max-w-md bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-lg flex flex-col items-center gap-4 text-center"
     >
       <span
         aria-hidden="true"
         class="material-symbols-outlined text-5xl"
-        :class="estado === 'exito' ? 'text-primary' : estado === 'verificando' ? 'text-secondary' : 'text-error'"
+        :class="estado === 'exito' ? 'text-acento' : estado === 'verificando' ? 'text-secondary' : 'text-error'"
       >
         {{
           estado === 'exito' ? 'verified' : estado === 'verificando' ? 'hourglass_top' : 'error'
@@ -98,7 +98,7 @@ async function manejarReenvio(): Promise<void> {
           type="email"
           required
           placeholder="correo@ejemplo.com"
-          class="block w-full px-3 rounded-primary border border-outline bg-pure-white text-on-background focus:border-2 focus:border-on-surface focus:outline-none font-body-lg text-body-lg h-touch-target"
+          class="block w-full px-3 rounded-primary border border-outline bg-surface-container-lowest text-on-background focus:border-2 focus:border-on-surface focus:outline-none font-body-lg text-body-lg h-touch-target"
         />
         <button
           type="submit"

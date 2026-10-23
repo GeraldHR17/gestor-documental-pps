@@ -137,7 +137,7 @@ async function manejarCerrarSesion(): Promise<void> {
          casi-negro. La barra usa por eso `on-surface`; el rojo aparece
          solo en el enlace activo. -->
     <aside
-      class="fixed lg:sticky top-0 left-0 z-40 h-screen w-72 shrink-0 bg-on-surface text-pure-white flex flex-col transition-transform lg:translate-x-0"
+      class="fixed lg:sticky top-0 left-0 z-40 h-screen w-72 shrink-0 bg-panel text-pure-white flex flex-col transition-transform lg:translate-x-0"
       :class="menuLateralAbierto ? 'translate-x-0' : '-translate-x-full'"
     >
       <div class="px-gutter-lg py-gutter-lg border-b border-pure-white/15 flex items-center gap-3">
@@ -216,7 +216,7 @@ async function manejarCerrarSesion(): Promise<void> {
     <div class="flex-1 min-w-0 flex flex-col">
       <!-- Topbar -->
       <header
-        class="sticky top-0 z-20 bg-pure-white border-b border-surface-alt px-margin-mobile md:px-margin-desktop h-16 flex items-center justify-between gap-4"
+        class="sticky top-0 z-20 bg-surface-container-lowest border-b border-surface-alt px-margin-mobile md:px-margin-desktop h-16 flex items-center justify-between gap-4"
       >
         <div class="flex items-center gap-3 min-w-0">
           <button
@@ -240,7 +240,7 @@ async function manejarCerrarSesion(): Promise<void> {
             <p class="font-body-md text-body-md text-tertiary truncate">{{ usuario.rol }}</p>
           </div>
           <div
-            class="w-11 h-11 rounded-full bg-primary-fixed text-primary flex items-center justify-center font-bold shrink-0"
+            class="w-11 h-11 rounded-full bg-primary-fixed text-acento flex items-center justify-center font-bold shrink-0"
             :title="usuario.correo"
           >
             {{ iniciales }}
@@ -262,7 +262,7 @@ async function manejarCerrarSesion(): Promise<void> {
 
       <!-- Pie institucional -->
       <footer
-        class="border-t border-surface-alt bg-pure-white px-margin-mobile md:px-margin-desktop py-gutter-sm flex flex-col sm:flex-row items-center justify-between gap-2 font-body-md text-body-md text-tertiary"
+        class="border-t border-surface-alt bg-surface-container-lowest px-margin-mobile md:px-margin-desktop py-gutter-sm flex flex-col sm:flex-row items-center justify-between gap-2 font-body-md text-body-md text-tertiary"
       >
         <span>© {{ anioActual }} Municipalidad de Palmares — Portal de Gobierno Abierto</span>
         <span class="flex items-center gap-1">

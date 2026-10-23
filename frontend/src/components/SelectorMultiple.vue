@@ -49,7 +49,7 @@ function alternar(id: number): void {
 
     <template v-else>
       <div
-        class="max-h-48 overflow-y-auto rounded-primary border border-outline bg-pure-white divide-y divide-surface-alt"
+        class="max-h-48 overflow-y-auto rounded-primary border border-outline bg-surface-container-lowest divide-y divide-surface-alt"
       >
         <label
           v-for="opcion in opciones"

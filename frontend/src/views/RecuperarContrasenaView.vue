@@ -64,7 +64,7 @@ async function manejarConfirmacion(): Promise<void> {
     class="bg-surface-alt text-on-background min-h-screen flex items-center justify-center p-margin-mobile md:p-margin-desktop font-body-lg"
   >
     <div
-      class="w-full max-w-md bg-pure-white rounded-primary border border-surface-alt overflow-hidden"
+      class="w-full max-w-md bg-surface-container-lowest rounded-primary border border-surface-alt overflow-hidden"
     >
       <div class="px-gutter-lg pt-gutter-lg pb-gutter-sm text-center border-b border-surface-alt">
         <h1 class="font-headline-md text-headline-md text-on-background mb-2">
@@ -93,7 +93,7 @@ async function manejarConfirmacion(): Promise<void> {
                 :type="mostrarContrasena ? 'text' : 'password'"
                 required
                 autocomplete="new-password"
-                class="block w-full pl-3 pr-12 rounded-primary border border-outline bg-pure-white text-on-background focus:border-2 focus:border-on-surface focus:outline-none font-body-lg text-body-lg h-touch-target"
+                class="block w-full pl-3 pr-12 rounded-primary border border-outline bg-surface-container-lowest text-on-background focus:border-2 focus:border-on-surface focus:outline-none font-body-lg text-body-lg h-touch-target"
               />
               <button
                 type="button"
@@ -132,7 +132,7 @@ async function manejarConfirmacion(): Promise<void> {
               type="email"
               required
               autocomplete="username"
-              class="block w-full px-3 rounded-primary border border-outline bg-pure-white text-on-background focus:border-2 focus:border-on-surface focus:outline-none font-body-lg text-body-lg h-touch-target"
+              class="block w-full px-3 rounded-primary border border-outline bg-surface-container-lowest text-on-background focus:border-2 focus:border-on-surface focus:outline-none font-body-lg text-body-lg h-touch-target"
             />
           </div>
 

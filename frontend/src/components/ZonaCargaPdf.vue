@@ -101,7 +101,7 @@ function reemplazar(): void {
       class="rounded-primary border-2 border-dashed border-outline p-gutter-sm flex items-center gap-gutter-sm"
     >
       <div
-        class="w-12 h-12 shrink-0 rounded-secondary bg-on-surface text-pure-white font-label-sm text-label-sm flex items-center justify-center"
+        class="w-12 h-12 shrink-0 rounded-secondary bg-panel text-pure-white font-label-sm text-label-sm flex items-center justify-center"
         aria-hidden="true"
       >
         PDF
@@ -112,14 +112,16 @@ function reemplazar(): void {
         </p>
         <p class="font-body-md text-body-md text-secondary">{{ resumenArchivo }}</p>
         <!-- Barra "completada": el archivo ya está en memoria y validado;
-             la subida real ocurre al guardar, y es una sola petición. -->
+             la subida real ocurre al guardar, y es una sola petición.
+             El relleno usa on-surface (el color de la tinta) y no panel:
+             en modo oscuro tiene que aclararse con el texto. -->
         <div class="h-1.5 rounded-full bg-surface-container-high overflow-hidden" aria-hidden="true">
           <div class="h-full w-full bg-on-surface"></div>
         </div>
       </div>
       <button
         type="button"
-        class="shrink-0 font-label-sm text-label-sm text-on-surface underline hover:text-primary transition-colors"
+        class="shrink-0 font-label-sm text-label-sm text-on-surface underline hover:text-acento transition-colors"
         :disabled="deshabilitado"
         @click="reemplazar"
       >

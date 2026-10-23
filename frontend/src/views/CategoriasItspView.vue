@@ -94,7 +94,7 @@ onMounted(recargar);
     </div>
 
     <div
-      class="bg-pure-white rounded-primary border border-surface-alt p-gutter-sm flex flex-col md:flex-row gap-gutter-sm items-center justify-between"
+      class="bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-sm flex flex-col md:flex-row gap-gutter-sm items-center justify-between"
     >
       <div class="relative w-full md:w-96">
         <span
@@ -107,7 +107,7 @@ onMounted(recargar);
           type="text"
           placeholder="Buscar categoría..."
           aria-label="Buscar categoría"
-          class="w-full h-touch-target pl-10 pr-4 rounded-secondary border border-outline bg-pure-white focus:border-2 focus:border-on-surface focus:outline-none transition-colors font-body-lg text-body-lg text-on-surface placeholder:text-secondary"
+          class="w-full h-touch-target pl-10 pr-4 rounded-secondary border border-outline bg-surface-container-lowest focus:border-2 focus:border-on-surface focus:outline-none transition-colors font-body-lg text-body-lg text-on-surface placeholder:text-secondary"
           @input="manejarBuscar"
         />
       </div>
@@ -126,11 +126,11 @@ onMounted(recargar);
       {{ error }}
     </p>
 
-    <div class="bg-pure-white rounded-primary border border-surface-alt overflow-hidden flex flex-col">
+    <div class="bg-surface-container-lowest rounded-primary border border-surface-alt overflow-hidden flex flex-col">
       <div class="overflow-x-auto w-full">
         <table class="w-full min-w-[760px] text-left border-collapse">
           <thead>
-            <tr class="bg-on-surface">
+            <tr class="bg-panel">
               <th class="py-gutter-sm px-gutter-lg font-label-sm text-label-sm text-pure-white uppercase">
                 Categoría
               </th>
@@ -235,7 +235,7 @@ onMounted(recargar);
         </table>
       </div>
 
-      <div class="border-t border-surface-alt p-gutter-sm bg-pure-white">
+      <div class="border-t border-surface-alt p-gutter-sm bg-surface-container-lowest">
         <span class="font-body-md text-body-md text-secondary">
           {{ categorias.length }} {{ categorias.length === 1 ? 'categoría' : 'categorías' }}
         </span>

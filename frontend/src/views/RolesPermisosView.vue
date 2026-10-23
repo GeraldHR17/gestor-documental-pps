@@ -87,7 +87,7 @@ onMounted(async () => {
               type="text"
               aria-label="Buscar rol"
               placeholder="Buscar rol..."
-              class="w-full pl-10 pr-4 bg-pure-white rounded-secondary border border-outline focus:border-2 focus:border-on-surface focus:outline-none transition-colors font-body-lg text-body-lg h-touch-target"
+              class="w-full pl-10 pr-4 bg-surface-container-lowest rounded-secondary border border-outline focus:border-2 focus:border-on-surface focus:outline-none transition-colors font-body-lg text-body-lg h-touch-target"
             />
           </div>
           <div class="flex flex-col gap-2">
@@ -117,7 +117,7 @@ onMounted(async () => {
                 <h3
                   class="font-label-sm text-label-sm truncate"
                   :class="
-                    rol.idRol === idRolSeleccionado ? 'text-primary font-bold' : 'text-on-surface'
+                    rol.idRol === idRolSeleccionado ? 'text-acento font-bold' : 'text-on-surface'
                   "
                 >
                   {{ rol.nombre }}
@@ -210,7 +210,7 @@ onMounted(async () => {
                     />
                     <span
                       class="font-body-md text-body-md text-on-surface"
-                      :class="{ 'group-hover:text-primary transition-colors': puedeEditar }"
+                      :class="{ 'group-hover:text-acento transition-colors': puedeEditar }"
                     >
                       {{ permiso.descripcion ?? permiso.nombre }}
                     </span>
@@ -229,7 +229,7 @@ onMounted(async () => {
                  bloque de tokens; on-surface es su neutro equivalente). -->
             <button
               type="button"
-              class="w-full sm:w-auto h-touch-target px-gutter-lg bg-pure-white text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors"
+              class="w-full sm:w-auto h-touch-target px-gutter-lg bg-surface-container-lowest text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors"
               @click="manejarDescartar"
             >
               Descartar Cambios

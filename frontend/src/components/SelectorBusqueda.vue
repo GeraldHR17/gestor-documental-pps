@@ -162,7 +162,7 @@ onBeforeUnmount(() => clearTimeout(temporizador));
     <!-- Valor elegido: se muestra como una "ficha" con botón para quitarlo -->
     <div
       v-if="haySeleccion"
-      class="h-touch-target px-3 rounded-secondary border border-on-surface bg-pure-white flex items-center gap-2 font-body-md text-body-md text-on-surface"
+      class="h-touch-target px-3 rounded-secondary border border-on-surface bg-surface-container-lowest flex items-center gap-2 font-body-md text-body-md text-on-surface"
     >
       <span aria-hidden="true" class="material-symbols-outlined text-[18px] text-secondary">check</span>
       <span class="flex-1 min-w-0 truncate">{{ etiquetaSeleccionada ?? 'Cargando...' }}</span>
@@ -189,7 +189,7 @@ onBeforeUnmount(() => clearTimeout(temporizador));
         aria-autocomplete="list"
         :disabled="deshabilitado"
         :placeholder="deshabilitado ? (placeholderDeshabilitado ?? placeholder) : placeholder"
-        class="h-touch-target w-full px-3 rounded-secondary border border-outline bg-pure-white text-on-surface font-body-md text-body-md placeholder:text-secondary focus:border-2 focus:border-on-surface focus:outline-none disabled:bg-surface-container-low disabled:cursor-not-allowed disabled:opacity-70"
+        class="h-touch-target w-full px-3 rounded-secondary border border-outline bg-surface-container-lowest text-on-surface font-body-md text-body-md placeholder:text-secondary focus:border-2 focus:border-on-surface focus:outline-none disabled:bg-surface-container-low disabled:cursor-not-allowed disabled:opacity-70"
         @input="manejarEntrada"
         @focus="manejarFoco"
         @keydown="manejarTecla"
@@ -198,7 +198,7 @@ onBeforeUnmount(() => clearTimeout(temporizador));
       <ul
         v-if="abierto"
         role="listbox"
-        class="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto bg-pure-white rounded-primary border border-surface-alt divide-y divide-surface-alt"
+        class="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto bg-surface-container-lowest rounded-primary border border-surface-alt divide-y divide-surface-alt"
         style="box-shadow: var(--shadow-dropdown)"
       >
         <li v-if="buscando" class="px-3 py-2 font-body-md text-body-md text-secondary">Buscando...</li>

@@ -48,11 +48,11 @@ async function manejarIniciarSesion(): Promise<void> {
          nombre, sin el bloque de texto grande. Deliberadamente NO hay un
          segundo encabezado aparte: un único elemento de logo, siempre dentro
          del panel, para que nunca quede flotando fuera de las dos columnas.
-         Usa `bg-on-surface`, el mismo token del panel lateral del área
+         Usa `bg-panel`, el mismo token del panel lateral del área
          autenticada: así el fondo oscuro de la marca es idéntico antes y
          después de entrar, en vez del gris algo más claro de antes. -->
     <div
-      class="w-full md:w-1/2 shrink-0 bg-on-surface flex flex-col justify-between px-margin-mobile py-gutter-sm md:p-margin-desktop"
+      class="w-full md:w-1/2 shrink-0 bg-panel flex flex-col justify-between px-margin-mobile py-gutter-sm md:p-margin-desktop"
     >
       <!-- Logo e institución en la misma fila, como en el mockup del PO.
            El ícono es el mismo `account_balance` del login previo al
@@ -137,7 +137,7 @@ async function manejarIniciarSesion(): Promise<void> {
                   required
                   autocomplete="username"
                   placeholder="usuario@munipalmares.go.cr"
-                  class="block w-full pl-10 pr-3 border border-outline rounded-primary bg-pure-white text-on-surface placeholder:text-secondary focus:border-2 focus:border-on-surface focus:outline-none transition-colors font-body-lg text-body-lg h-touch-target"
+                  class="block w-full pl-10 pr-3 border border-outline rounded-primary bg-surface-container-lowest text-on-surface placeholder:text-secondary focus:border-2 focus:border-on-surface focus:outline-none transition-colors font-body-lg text-body-lg h-touch-target"
                 />
               </div>
             </div>
@@ -157,7 +157,7 @@ async function manejarIniciarSesion(): Promise<void> {
                   required
                   autocomplete="current-password"
                   placeholder="••••••••"
-                  class="block w-full pl-10 pr-12 border border-outline rounded-primary bg-pure-white text-on-surface placeholder:text-secondary focus:border-2 focus:border-on-surface focus:outline-none transition-colors font-body-lg text-body-lg h-touch-target"
+                  class="block w-full pl-10 pr-12 border border-outline rounded-primary bg-surface-container-lowest text-on-surface placeholder:text-secondary focus:border-2 focus:border-on-surface focus:outline-none transition-colors font-body-lg text-body-lg h-touch-target"
                 />
                 <button
                   type="button"
@@ -175,7 +175,7 @@ async function manejarIniciarSesion(): Promise<void> {
                      permanente (DESIGN.md > Components > Buttons). -->
                 <router-link
                   :to="{ name: 'recuperar-contrasena' }"
-                  class="inline-flex items-center h-touch-target px-2 rounded-secondary font-body-md text-body-md text-deep-onyx underline transition-colors hover:text-primary"
+                  class="inline-flex items-center h-touch-target px-2 rounded-secondary font-body-md text-body-md text-deep-onyx underline transition-colors hover:text-acento"
                 >
                   Olvidé mi contraseña
                 </router-link>

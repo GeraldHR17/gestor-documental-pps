@@ -210,7 +210,7 @@ onMounted(cargarDatosIniciales);
 
     <form
       v-else
-      class="bg-pure-white rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-lg max-w-2xl"
+      class="bg-surface-container-lowest rounded-primary border border-surface-alt p-gutter-lg flex flex-col gap-gutter-lg max-w-2xl"
       novalidate
       @submit.prevent="solicitarGuardado"
     >
@@ -225,7 +225,7 @@ onMounted(cargarDatosIniciales);
           :maxlength="configuracion.longitudMaximaNombre"
           :aria-invalid="errorVisible('nombre') !== null"
           aria-describedby="error-nombre"
-          class="w-full h-touch-target px-3 border rounded-primary bg-pure-white text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
+          class="w-full h-touch-target px-3 border rounded-primary bg-surface-container-lowest text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
           :class="
             errorVisible('nombre')
               ? 'border-error focus:border-error'
@@ -257,7 +257,7 @@ onMounted(cargarDatosIniciales);
           maxlength="255"
           :aria-invalid="errorVisible('descripcion') !== null"
           aria-describedby="error-descripcion"
-          class="w-full px-3 py-2 border rounded-primary bg-pure-white text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
+          class="w-full px-3 py-2 border rounded-primary bg-surface-container-lowest text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
           :class="
             errorVisible('descripcion')
               ? 'border-error focus:border-error'
@@ -287,7 +287,7 @@ onMounted(cargarDatosIniciales);
       >
         <button
           type="button"
-          class="w-full sm:w-auto h-touch-target px-gutter-lg bg-pure-white text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors"
+          class="w-full sm:w-auto h-touch-target px-gutter-lg bg-surface-container-lowest text-on-surface font-label-sm text-label-sm rounded-primary border border-on-surface hover:bg-surface-container transition-colors"
           @click="manejarCancelar"
         >
           Cancelar
