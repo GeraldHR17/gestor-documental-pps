@@ -131,17 +131,27 @@ hijas_reconocidas AS (
           = CAST(CONCAT(UPPER(TRIM(r.codigo)), '-') AS BINARY)
       AND SUBSTRING(TRIM(h.codigo), CHAR_LENGTH(TRIM(r.codigo)) + 2) REGEXP '^[0-9]{2,}$'
 )
-SELECT 'mismo texto' AS tipo, MIN(texto) AS clave, GROUP_CONCAT(id ORDER BY id) AS ids
+-- CONVERT(... USING utf8mb4) en las tres ramas: la columna tiene la
+-- colacion de la base (utf8mb4_unicode_ci en la VM) y los literales la de
+-- la conexion; sin igualarlas, el UNION falla con "Illegal mix of
+-- collations".
+SELECT 'mismo texto' AS tipo,
+       CONVERT(MIN(texto) USING utf8mb4) AS clave,
+       GROUP_CONCAT(id ORDER BY id) AS ids
 FROM textos
 GROUP BY texto
 HAVING COUNT(*) > 1
 UNION ALL
-SELECT 'mismo numero de raiz', CAST(numero AS CHAR), GROUP_CONCAT(id ORDER BY id)
+SELECT 'mismo numero de raiz',
+       CONVERT(CAST(numero AS CHAR) USING utf8mb4),
+       GROUP_CONCAT(id ORDER BY id)
 FROM raices_reconocidas
 GROUP BY numero
 HAVING COUNT(*) > 1
 UNION ALL
-SELECT 'mismo numero de subseccion', CONCAT(MIN(prefijo), '-', numero), GROUP_CONCAT(id ORDER BY id)
+SELECT 'mismo numero de subseccion',
+       CONVERT(CONCAT(MIN(prefijo), '-', numero) USING utf8mb4),
+       GROUP_CONCAT(id ORDER BY id)
 FROM hijas_reconocidas
 GROUP BY id_raiz, numero
 HAVING COUNT(*) > 1;
@@ -223,14 +233,16 @@ hijas_sin_codigo AS (
     JOIN maximo_hija m ON m.id_raiz = h.id_categoria_padre
     WHERE h.codigo IS NULL OR TRIM(h.codigo) = ''
 ),
+-- CONVERT en las dos ramas por la misma razon que en el bloque 4.
 previstos AS (
-    SELECT n.id, r.codigo_final AS codigo_previsto
+    SELECT n.id, CONVERT(r.codigo_final USING utf8mb4) AS codigo_previsto
     FROM raices_sin_codigo n
     JOIN raices r ON r.id = n.id
     UNION ALL
     SELECT n.id,
-           CONCAT(UPPER(r.codigo_final), '-',
-                  IF(n.numero < 100, LPAD(n.numero, 2, '0'), CAST(n.numero AS CHAR)))
+           CONVERT(CONCAT(UPPER(r.codigo_final), '-',
+                          IF(n.numero < 100, LPAD(n.numero, 2, '0'), CAST(n.numero AS CHAR)))
+                   USING utf8mb4)
     FROM hijas_sin_codigo n
     JOIN raices r ON r.id = n.id_raiz
 )
