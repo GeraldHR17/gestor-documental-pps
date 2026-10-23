@@ -6,6 +6,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Muni Data — Municipalidad de Palmares</title>
 
+    <!-- Superficie de la página, ANTES de cualquier hoja de estilos y de
+         montar Vue: el portal público (/vista/...) es siempre oscuro y,
+         dentro del iframe de WordPress, no debe destellar en blanco
+         mientras carga (RNF-4). Replica a mano la clasificación de
+         src/lib/superficie.ts, que la mantiene al navegar dentro de la
+         aplicación: portal = rutas /vista; publica = login, recuperar
+         contraseña y verificar correo; sistema = todo lo demás. -->
+    <script>
+      (function () {
+        var base = '%BASE_URL%';
+        var ruta = window.location.pathname;
+        var relativa = ruta.indexOf(base) === 0 ? ruta.slice(base.length) : ruta.replace(/^\/+/, '');
+        var superficie = 'sistema';
+        if (/^vista(\/|$)/i.test(relativa)) {
+          superficie = 'portal';
+        } else if (/^(login|recuperar-contrasena|verificar-correo)(\/|$)/i.test(relativa)) {
+          superficie = 'publica';
+        }
+        document.documentElement.setAttribute('data-superficie', superficie);
+      })();
+    </script>
+    <style>
+      html[data-superficie='portal'],
+      html[data-superficie='portal'] body {
+        background-color: #0d0c12;
+        color-scheme: dark;
+      }
+    </style>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link

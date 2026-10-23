@@ -22,6 +22,7 @@ import {
 } from '@/lib/portalPublico.config';
 import EsqueletoPortal from '@/components/portal/EsqueletoPortal.vue';
 import ErrorPortal from '@/components/portal/ErrorPortal.vue';
+import PildoraContexto from '@/components/portal/PildoraContexto.vue';
 
 const { secciones, cargando, error, cargarSecciones } = usePortalPublicoSecciones();
 
@@ -38,10 +39,11 @@ function reintentar(): void {
 <template>
   <div>
     <header class="mb-gutter-lg">
-      <h1 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface md:font-headline-lg md:text-headline-lg">
+      <PildoraContexto texto="Municipalidad de Palmares" class="mb-3" />
+      <h1 class="text-headline-lg-mobile font-bold text-(--portal-texto) md:text-headline-lg">
         Transparencia
       </h1>
-      <p class="mt-2 font-body-lg text-body-lg text-secondary">
+      <p class="mt-2 text-body-lg text-(--portal-texto-secundario)">
         Documentos públicos de la Municipalidad de Palmares, organizados según el Índice de
         Transparencia del Sector Público.
       </p>
@@ -55,27 +57,27 @@ function reintentar(): void {
       <li v-for="seccion in secciones" :key="seccion.codigo">
         <RouterLink
           :to="{ name: 'portal-seccion', params: { seccion: seccion.codigo.toLowerCase() } }"
-          class="group flex h-full flex-col rounded-primary border border-surface-alt bg-pure-white p-gutter-lg transition-colors hover:border-outline hover:bg-surface-container-low"
+          class="group flex h-full flex-col rounded-lg border border-(--portal-borde) bg-(--portal-recuadro) p-4 transition-colors hover:border-(--portal-contexto)"
         >
           <span class="flex items-start justify-between gap-3">
-            <span class="font-headline-md text-headline-md text-on-surface">
+            <span class="text-body-lg font-bold text-(--portal-texto)">
               {{ seccion.nombre }}
             </span>
             <span
-              class="material-symbols-outlined shrink-0 text-primary transition-transform group-hover:translate-x-1"
+              class="material-symbols-outlined shrink-0 text-(--portal-texto-secundario) transition-transform group-hover:translate-x-1"
               aria-hidden="true"
               >arrow_forward</span
             >
           </span>
 
-          <span v-if="seccion.descripcion" class="mt-2 font-body-md text-body-md text-secondary">
+          <span v-if="seccion.descripcion" class="mt-2 text-body-md text-(--portal-texto-secundario)">
             {{ seccion.descripcion }}
           </span>
 
           <!-- Participación ciudadana no clasifica documentos: anunciar
                "Sin documentos" invitaría a entrar a buscar algo que no
                hay. Se dice lo que es. -->
-          <span class="mt-auto pt-gutter-sm font-label-sm text-label-sm text-secondary">
+          <span class="mt-auto pt-gutter-sm text-body-md text-(--portal-texto-secundario)">
             {{
               esSeccionSinDocumentos(seccion.codigo)
                 ? 'Contenido próximamente'
@@ -86,7 +88,7 @@ function reintentar(): void {
       </li>
     </ul>
 
-    <p v-if="!cargando && !error && secciones.length === 0" class="font-body-lg text-body-lg text-secondary">
+    <p v-if="!cargando && !error && secciones.length === 0" class="text-body-lg text-(--portal-texto-secundario)">
       {{ TEXTOS.sinSubsecciones }}
     </p>
   </div>

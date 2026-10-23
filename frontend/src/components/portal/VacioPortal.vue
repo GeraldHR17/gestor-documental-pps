@@ -16,12 +16,12 @@ defineProps<{
 
 <template>
   <div
-    class="rounded-primary border border-dashed border-outline-variant bg-surface-container-low p-gutter-lg text-center"
+    class="rounded-lg border border-dashed border-(--portal-borde) bg-(--portal-recuadro) p-gutter-lg text-center"
   >
-    <span class="material-symbols-outlined text-3xl text-secondary" aria-hidden="true">
+    <span class="material-symbols-outlined text-3xl text-(--portal-texto-secundario)" aria-hidden="true">
       {{ icono ?? 'folder_open' }}
     </span>
-    <p class="mt-2 font-headline-sm text-headline-sm text-on-surface">{{ titulo }}</p>
-    <p v-if="detalle" class="mt-1 font-body-md text-body-md text-secondary">{{ detalle }}</p>
+    <p class="mt-2 text-body-lg font-bold text-(--portal-texto)">{{ titulo }}</p>
+    <p v-if="detalle" class="mt-1 text-body-md text-(--portal-texto-secundario)">{{ detalle }}</p>
   </div>
 </template>

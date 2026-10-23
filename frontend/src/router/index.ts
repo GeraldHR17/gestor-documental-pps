@@ -6,6 +6,7 @@ import { useAutenticacion } from '@/composables/useAutenticacion';
 import AppShellLayout from '@/layouts/AppShellLayout.vue';
 import LoginView from '@/views/LoginView.vue';
 import { CATALOGOS_SIMPLES } from '@/lib/catalogos.config';
+import { aplicarSuperficie, superficieDeRuta } from '@/lib/superficie';
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -294,6 +295,12 @@ router.beforeEach(async (destino) => {
   }
 
   return true;
+});
+
+// index.html fija la superficie al cargar; esto la mantiene al navegar
+// dentro de la aplicación (por ejemplo, del login al panel).
+router.afterEach((destino) => {
+  aplicarSuperficie(superficieDeRuta(destino.meta));
 });
 
 export default router;

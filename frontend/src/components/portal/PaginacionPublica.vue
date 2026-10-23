@@ -9,6 +9,8 @@
 // teclado, cambia el orden de tabulación de una pulsación a la
 // siguiente. El resumen va en aria-live para que al cambiar de página el
 // lector anuncie dónde quedó, que es la única pista que tiene.
+//
+// Botones secundarios del Observatorio: píldora de contorno (P-3).
 
 import { computed } from 'vue';
 
@@ -33,17 +35,17 @@ const hasta = computed(() => Math.min(props.total, props.pagina * props.limite))
   <nav
     v-if="totalPaginas > 1"
     aria-label="Paginación de documentos"
-    class="mt-gutter-lg flex flex-wrap items-center justify-between gap-gutter-sm border-t border-surface-alt pt-gutter-sm"
+    class="mt-gutter-lg flex flex-wrap items-center justify-between gap-gutter-sm border-t border-(--portal-borde) pt-gutter-sm"
   >
-    <p class="font-body-md text-body-md text-secondary" aria-live="polite">
+    <p class="text-body-md text-(--portal-texto-secundario)" aria-live="polite">
       Documentos {{ desde }} a {{ hasta }} de {{ total }}
     </p>
 
-    <div class="flex gap-2">
+    <div class="flex gap-2 max-[480px]:w-full max-[480px]:flex-col">
       <button
         type="button"
         :disabled="!hayAnterior || cargando"
-        class="inline-flex h-touch-target items-center justify-center gap-1 rounded-primary border border-secondary bg-pure-white px-gutter-sm font-label-sm text-label-sm text-on-surface transition-colors hover:bg-surface-container-low disabled:cursor-not-allowed disabled:border-outline-variant disabled:text-secondary disabled:opacity-60"
+        class="inline-flex min-h-touch-target items-center justify-center gap-1 rounded-full border border-(--portal-borde) px-gutter-sm text-base font-bold text-(--portal-texto) transition-colors hover:bg-(--portal-hover-secundario) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
         @click="emitir('ir', pagina - 1)"
       >
         <span class="material-symbols-outlined text-base" aria-hidden="true">chevron_left</span>
@@ -53,7 +55,7 @@ const hasta = computed(() => Math.min(props.total, props.pagina * props.limite))
       <button
         type="button"
         :disabled="!haySiguiente || cargando"
-        class="inline-flex h-touch-target items-center justify-center gap-1 rounded-primary border border-secondary bg-pure-white px-gutter-sm font-label-sm text-label-sm text-on-surface transition-colors hover:bg-surface-container-low disabled:cursor-not-allowed disabled:border-outline-variant disabled:text-secondary disabled:opacity-60"
+        class="inline-flex min-h-touch-target items-center justify-center gap-1 rounded-full border border-(--portal-borde) px-gutter-sm text-base font-bold text-(--portal-texto) transition-colors hover:bg-(--portal-hover-secundario) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
         @click="emitir('ir', pagina + 1)"
       >
         Siguiente

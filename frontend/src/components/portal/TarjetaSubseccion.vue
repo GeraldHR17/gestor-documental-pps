@@ -6,8 +6,10 @@
 // Es un <RouterLink>, que genera un <a> de verdad, y no un <div @click>:
 // así se activa con Enter sin escribir una línea de código, sale en la
 // lista de enlaces del lector de pantalla y se puede abrir en otra
-// pestaña. La tarjeta entera es el área de pulsación, muy por encima de
+// pestaña. El recuadro entero es el área de pulsación, muy por encima de
 // los 44 px que exige DESIGN.md.
+//
+// Aspecto: recuadro del Observatorio (spec-ajustes-posdespliegue §9.2).
 
 import { RouterLink } from 'vue-router';
 import { describirCantidad } from '@/lib/portalPublico.config';
@@ -26,27 +28,24 @@ defineProps<{
         name: 'portal-subseccion',
         params: { seccion: codigoSeccion.toLowerCase(), subseccion: subseccion.codigo.toLowerCase() },
       }"
-      class="group flex h-full flex-col rounded-primary border border-surface-alt bg-pure-white p-gutter-lg transition-colors hover:border-outline hover:bg-surface-container-low"
+      class="group flex h-full flex-col rounded-lg border border-(--portal-borde) bg-(--portal-recuadro) p-4 transition-colors hover:border-(--portal-contexto)"
     >
       <span class="flex items-start justify-between gap-3">
-        <span class="font-headline-sm text-headline-sm text-on-surface">
+        <span class="text-body-lg font-bold text-(--portal-texto)">
           {{ subseccion.nombre }}
         </span>
         <span
-          class="material-symbols-outlined shrink-0 text-primary transition-transform group-hover:translate-x-1"
+          class="material-symbols-outlined shrink-0 text-(--portal-texto-secundario) transition-transform group-hover:translate-x-1"
           aria-hidden="true"
           >arrow_forward</span
         >
       </span>
 
-      <span
-        v-if="subseccion.descripcion"
-        class="mt-2 font-body-md text-body-md text-secondary"
-      >
+      <span v-if="subseccion.descripcion" class="mt-2 text-body-md text-(--portal-texto-secundario)">
         {{ subseccion.descripcion }}
       </span>
 
-      <span class="mt-auto pt-gutter-sm font-label-sm text-label-sm text-secondary">
+      <span class="mt-auto pt-gutter-sm text-body-md text-(--portal-texto-secundario)">
         {{ describirCantidad(subseccion.cantidadDocumentos) }}
       </span>
     </RouterLink>

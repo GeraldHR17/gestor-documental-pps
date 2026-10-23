@@ -9,6 +9,9 @@
 //
 // Va en <nav aria-label> porque sin la etiqueta un lector de pantalla
 // anuncia "navegación" a secas y en la página hay más de una región.
+//
+// Los enlaces van en el turquesa del Observatorio y subrayados: sobre la
+// tarjeta dan 5.31:1, y el subrayado los distingue sin depender del color.
 
 import { RouterLink } from 'vue-router';
 import type { RouteLocationRaw } from 'vue-router';
@@ -24,11 +27,11 @@ defineProps<{ migas: Miga[] }>();
 
 <template>
   <nav aria-label="Ruta de navegación" class="mb-gutter-sm">
-    <ol class="flex flex-wrap items-center gap-x-2 gap-y-1 font-body-md text-body-md">
+    <ol class="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-md">
       <li v-for="(miga, indice) in migas" :key="indice" class="flex items-center gap-x-2">
         <span
           v-if="indice > 0"
-          class="material-symbols-outlined text-base text-secondary"
+          class="material-symbols-outlined text-base text-(--portal-texto-secundario)"
           aria-hidden="true"
           >chevron_right</span
         >
@@ -36,12 +39,14 @@ defineProps<{ migas: Miga[] }>();
         <RouterLink
           v-if="miga.destino"
           :to="miga.destino"
-          class="rounded-sm text-primary underline underline-offset-2 hover:text-primary-container"
+          class="rounded-sm text-(--portal-contexto) underline underline-offset-2 hover:text-(--portal-texto)"
         >
           {{ miga.texto }}
         </RouterLink>
 
-        <span v-else aria-current="page" class="text-secondary">{{ miga.texto }}</span>
+        <span v-else aria-current="page" class="text-(--portal-texto-secundario)">{{
+          miga.texto
+        }}</span>
       </li>
     </ol>
   </nav>

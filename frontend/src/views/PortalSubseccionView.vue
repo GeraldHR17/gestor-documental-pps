@@ -28,6 +28,7 @@ import {
 } from '@/lib/portalPublico.config';
 import EsqueletoPortal from '@/components/portal/EsqueletoPortal.vue';
 import ErrorPortal from '@/components/portal/ErrorPortal.vue';
+import PildoraContexto from '@/components/portal/PildoraContexto.vue';
 import VacioPortal from '@/components/portal/VacioPortal.vue';
 import MigasDePanPublicas from '@/components/portal/MigasDePanPublicas.vue';
 import FilaDocumentoPublico from '@/components/portal/FilaDocumentoPublico.vue';
@@ -95,8 +96,9 @@ watch(() => [props.seccion, props.subseccion], () => cargar());
          marcador que su sección, no una lista vacía. -->
     <template v-if="esParticipacion">
       <header class="mb-gutter-lg">
+        <PildoraContexto texto="Transparencia" class="mb-3" />
         <h1
-          class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface md:font-headline-lg md:text-headline-lg"
+          class="text-headline-lg-mobile font-bold text-(--portal-texto) md:text-headline-lg"
         >
           {{ seccion?.nombre ?? 'Participación ciudadana' }}
         </h1>
@@ -110,12 +112,13 @@ watch(() => [props.seccion, props.subseccion], () => cargar());
 
     <template v-else>
       <header class="mb-gutter-lg">
+        <PildoraContexto :texto="seccion?.nombre ?? 'Transparencia'" class="mb-3" />
         <h1
-          class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface md:font-headline-lg md:text-headline-lg"
+          class="text-headline-lg-mobile font-bold text-(--portal-texto) md:text-headline-lg"
         >
           {{ subseccion?.nombre ?? 'Documentos' }}
         </h1>
-        <p v-if="subseccion?.descripcion" class="mt-2 font-body-lg text-body-lg text-secondary">
+        <p v-if="subseccion?.descripcion" class="mt-2 text-body-lg text-(--portal-texto-secundario)">
           {{ subseccion.descripcion }}
         </p>
       </header>
@@ -136,7 +139,7 @@ watch(() => [props.seccion, props.subseccion], () => cargar());
       />
 
       <template v-else>
-        <ul class="divide-y divide-surface-alt">
+        <ul class="flex flex-col gap-3">
           <FilaDocumentoPublico
             v-for="documento in listaDocumentos"
             :key="documento.id"

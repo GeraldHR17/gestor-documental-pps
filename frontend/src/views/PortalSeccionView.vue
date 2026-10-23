@@ -30,6 +30,7 @@ import {
 } from '@/lib/portalPublico.config';
 import EsqueletoPortal from '@/components/portal/EsqueletoPortal.vue';
 import ErrorPortal from '@/components/portal/ErrorPortal.vue';
+import PildoraContexto from '@/components/portal/PildoraContexto.vue';
 import VacioPortal from '@/components/portal/VacioPortal.vue';
 import MigasDePanPublicas from '@/components/portal/MigasDePanPublicas.vue';
 import TarjetaSubseccion from '@/components/portal/TarjetaSubseccion.vue';
@@ -110,12 +111,13 @@ watch(() => props.seccion, cargar);
       <MigasDePanPublicas :migas="migas" />
 
       <header class="mb-gutter-lg">
+        <PildoraContexto texto="Transparencia" class="mb-3" />
         <h1
-          class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface md:font-headline-lg md:text-headline-lg"
+          class="text-headline-lg-mobile font-bold text-(--portal-texto) md:text-headline-lg"
         >
           {{ datos.nombre }}
         </h1>
-        <p v-if="datos.descripcion" class="mt-2 font-body-lg text-body-lg text-secondary">
+        <p v-if="datos.descripcion" class="mt-2 text-body-lg text-(--portal-texto-secundario)">
           {{ datos.descripcion }}
         </p>
       </header>
@@ -140,7 +142,7 @@ watch(() => props.seccion, cargar);
 
         <!-- Documentos colgados de la propia sección, si los hubiera. -->
         <section v-if="documentosPropios > 0" class="mt-gutter-lg">
-          <h2 class="mb-gutter-sm font-headline-md text-headline-md text-on-surface">
+          <h2 class="mb-gutter-sm text-headline-sm font-bold text-(--portal-texto)">
             {{ TEXTOS.documentosDeLaSeccion }}
           </h2>
 
@@ -154,7 +156,7 @@ watch(() => props.seccion, cargar);
           />
 
           <template v-else>
-            <ul class="divide-y divide-surface-alt">
+            <ul class="flex flex-col gap-3">
               <FilaDocumentoPublico
                 v-for="documento in listaDocumentos"
                 :key="documento.id"

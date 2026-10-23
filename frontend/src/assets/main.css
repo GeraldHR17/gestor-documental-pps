@@ -232,6 +232,63 @@
 }
 
 /* ============================================================
+   PORTAL PÚBLICO — estilo del Observatorio de Datos
+   spec-ajustes-posdespliegue §9.2 (D-17)
+   ============================================================
+   Las vistas públicas (/vista/...) se embeben en la portada de WordPress,
+   que es casi negra, junto al Observatorio Municipal de Datos. Para que
+   parezcan parte del mismo sitio usan los colores, la tipografía (Poppins)
+   y las formas de ese otro sistema, y son SIEMPRE oscuras, sin importar la
+   preferencia del visitante.
+
+   Por eso tienen variables propias, declaradas solo en `.tema-portal` (la
+   raíz de PortalPublicoLayout), y NO redefinen ningún token global
+   `--color-*`: el portal no depende del modo oscuro del sistema interno, y
+   ese modo oscuro no puede alterarlo. Los componentes del portal las leen
+   con la sintaxis de Tailwind v4: `bg-(--portal-tarjeta)`.
+
+   El acento `#ba0911` es intencional y distinto del `#d30505` interno: es
+   el del Observatorio (C-7).
+
+   El fondo de html y body lo pone el <style> en línea de index.html, según
+   `data-superficie`, para que no haya un destello blanco antes de que
+   cargue esta hoja (RNF-4). */
+@layer base {
+  .tema-portal {
+    --portal-fondo: #0d0c12;
+    --portal-tarjeta: #1d2327;
+    --portal-recuadro: #2b3338;
+    --portal-esqueleto: #3a4247;
+    --portal-borde: #abadb3;
+    --portal-texto: #ffffff;
+    --portal-texto-secundario: rgb(255 255 255 / 0.75);
+    --portal-acento: #ba0911;
+    --portal-acento-hover: #950710;
+    --portal-hover-secundario: rgb(255 255 255 / 0.1);
+    /* Píldora de contexto y borde al pasar el ratón. 5.31:1 sobre la
+       tarjeta, pero 4.29:1 sobre un recuadro: como texto, solo sobre la
+       tarjeta (12.2). */
+    --portal-contexto: #26a3b8;
+    --portal-error: #f28b82;
+    --portal-foco: #6bccf2;
+    --portal-sombra: 0 24px 48px rgb(0 0 0 / 0.3);
+
+    font-family: 'Poppins', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: var(--text-body-lg);
+    line-height: 1.55;
+    color: var(--portal-texto);
+    color-scheme: dark;
+  }
+
+  /* La regla global de foco usa on-surface (casi negro): sobre la tarjeta
+     oscura no se vería. Más específica que `:focus-visible`, así que gana. */
+  .tema-portal :focus-visible {
+    outline: 2px solid var(--portal-foco);
+    outline-offset: 2px;
+  }
+}
+
+/* ============================================================
    ICONOS — Material Symbols
    ============================================================
    La familia se carga desde index.html. Esta clase es la que activa las
