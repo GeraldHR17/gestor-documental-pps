@@ -7,10 +7,15 @@
 // Por eso el nivel nunca lo envía el cliente, lo deriva este servicio del
 // padre, y las formas de romper la jerarquía se rechazan explícitamente
 // (ver `resolverPadre` y `actualizar`).
+//
+// El código tampoco lo envía el cliente: lo asigna este servicio como
+// "máximo + 1" de su nivel (ver codigos-categoria.ts). Es la parte de la
+// URL pública (/vista/itsp-05) que se pega en WordPress, así que no
+// cambia nunca, salvo cuando una subsección se mueve a otra raíz.
 
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 
 import { CategoriaItsp } from '../entidades/categoria-itsp.entidad';
 import { BitacoraService } from '../bitacora/bitacora.service';
@@ -22,10 +27,12 @@ import { FiltrosCatalogoDto } from './dto/filtros-catalogo.dto';
 import {
   CategoriaItspNodoArbolDto,
   CategoriaItspRespuestaDto,
+  SiguienteCodigoCategoriaRespuestaDto,
 } from './dto/categoria-itsp-respuesta.dto';
+import { siguienteCodigoHija, siguienteCodigoRaiz } from './codigos-categoria';
 import {
   CategoriaPadreInvalidaException,
-  CodigoCategoriaDuplicadoException,
+  CodigoCategoriaNoAsignadoException,
   NombreCatalogoDuplicadoException,
   RegistroCatalogoNoEncontradoException,
 } from '../comun/excepciones/excepciones-catalogos';
@@ -33,6 +40,26 @@ import {
 const ETIQUETA_SINGULAR = 'Categoría ITSP';
 const ETIQUETA_INDEFINIDA = 'una categoría';
 const ENTIDAD_BITACORA = 'categorias_itsp';
+
+const MENSAJE_CAMBIO_DE_NIVEL =
+  'Una categoría raíz no puede convertirse en subsección ni una subsección en raíz';
+
+/** Intentos de asignar código antes de responder 409 (spec §7.2). */
+const INTENTOS_ASIGNACION_CODIGO = 3;
+
+/**
+ * La única restricción única de `categorias_itsp`, aparte de la clave
+ * primaria autoincremental, es la del código. Por eso cualquier
+ * ER_DUP_ENTRY al guardar aquí significa que otra persona ganó ese número
+ * entre la lectura y la escritura. No se compara el nombre del índice: en
+ * una base migrada a mano podría llamarse distinto.
+ */
+function esCodigoDuplicado(error: unknown): boolean {
+  return (
+    error instanceof QueryFailedError &&
+    (error.driverError as { code?: unknown }).code === 'ER_DUP_ENTRY'
+  );
+}
 
 @Injectable()
 export class CategoriasItspService {
@@ -147,25 +174,44 @@ export class CategoriasItspService {
     await this.resolverPadre(idCategoriaPadre);
     await this.verificarNombreDisponibleEntreHermanas(nombre, idCategoriaPadre, null);
 
-    const codigo = this.normalizarTexto(dto.codigo);
-    await this.verificarCodigoDisponible(codigo, null);
+    const guardada = await this.conCodigoAsignado(async (repositorio) => {
+      const codigo = await this.calcularSiguienteCodigo(repositorio, idCategoriaPadre);
 
-    const nuevaCategoria = this.repositorioCategorias.create({
-      nombre,
-      codigo,
-      descripcion: this.normalizarTexto(dto.descripcion),
-      idCategoriaPadre,
-      // Derivado, nunca recibido: sin padre es raíz, con padre es subsección.
-      nivel: idCategoriaPadre === null ? 1 : 2,
-      orden: dto.orden ?? 0,
-      estado: 'ACTIVO',
+      return repositorio.save(
+        repositorio.create({
+          nombre,
+          codigo,
+          descripcion: this.normalizarTexto(dto.descripcion),
+          idCategoriaPadre,
+          // Derivado, nunca recibido: sin padre es raíz, con padre es subsección.
+          nivel: idCategoriaPadre === null ? 1 : 2,
+          orden: dto.orden ?? 0,
+          estado: 'ACTIVO',
+        }),
+      );
     });
 
-    const guardada = await this.repositorioCategorias.save(nuevaCategoria);
-
-    await this.registrarEnBitacora('CREAR', guardada, usuarioAutenticado, { nombre, codigo });
+    await this.registrarEnBitacora('CREAR', guardada, usuarioAutenticado, {
+      nombre,
+      codigo: guardada.codigo,
+    });
 
     return this.obtener(guardada.idCategoriaItsp);
+  }
+
+  /**
+   * Código que recibiría ahora una categoría nueva con ese padre (`null` =
+   * raíz). Es sólo una previsión: si otra persona crea antes, el código
+   * final puede ser el siguiente, y la respuesta del guardado lo trae.
+   */
+  async obtenerSiguienteCodigo(
+    idCategoriaPadre: number | null,
+  ): Promise<SiguienteCodigoCategoriaRespuestaDto> {
+    await this.resolverPadre(idCategoriaPadre);
+
+    return new SiguienteCodigoCategoriaRespuestaDto({
+      codigo: await this.calcularSiguienteCodigo(this.repositorioCategorias, idCategoriaPadre),
+    });
   }
 
   async actualizar(
@@ -174,6 +220,8 @@ export class CategoriasItspService {
     usuarioAutenticado: PayloadJwt,
   ): Promise<CategoriaItspRespuestaDto> {
     const categoria = await this.buscarPorId(id);
+    const codigoAnterior = categoria.codigo;
+    let cambiaDePadre = false;
 
     if (dto.idCategoriaPadre !== undefined) {
       const nuevoPadre = dto.idCategoriaPadre ?? null;
@@ -184,45 +232,34 @@ export class CategoriasItspService {
         );
       }
 
-      if (nuevoPadre !== null) {
-        // Si esta categoría ya tiene subsecciones, colgarla de otra
-        // produciría un tercer nivel: raíz -> esta -> sus subsecciones.
-        const cantidadHijas = await this.repositorioCategorias.count({
-          where: { idCategoriaPadre: categoria.idCategoriaItsp },
-        });
-
-        if (cantidadHijas > 0) {
-          throw new CategoriaPadreInvalidaException(
-            'No se puede asignar una categoría padre a una categoría que ya tiene subsecciones',
-          );
-        }
+      // Una raíz sigue siendo raíz y una subsección sigue siendo
+      // subsección (C-2). Con códigos automáticos, cambiar de nivel dejaría
+      // una URL sin sentido (una raíz llamada ITSP-02-03, o al revés). Esto
+      // también impide el tercer nivel: una raíz con hijas nunca se cuelga
+      // de otra.
+      const esRaiz = categoria.idCategoriaPadre === null;
+      if (esRaiz !== (nuevoPadre === null)) {
+        throw new CategoriaPadreInvalidaException(MENSAJE_CAMBIO_DE_NIVEL);
       }
 
-      await this.resolverPadre(nuevoPadre);
-
-      categoria.idCategoriaPadre = nuevoPadre;
-      categoria.nivel = nuevoPadre === null ? 1 : 2;
-    }
-
-    if (dto.nombre !== undefined) {
-      const nombre = dto.nombre.trim();
-      // También se revisa cuando cambió el padre: el nombre pudo no cambiar,
-      // pero el grupo de hermanas contra el que compite sí.
-      if (nombre !== categoria.nombre || dto.idCategoriaPadre !== undefined) {
-        await this.verificarNombreDisponibleEntreHermanas(
-          nombre,
-          categoria.idCategoriaPadre,
-          categoria.idCategoriaItsp,
-        );
+      if (nuevoPadre !== categoria.idCategoriaPadre) {
+        await this.resolverPadre(nuevoPadre);
+        categoria.idCategoriaPadre = nuevoPadre;
+        cambiaDePadre = true;
       }
-      categoria.nombre = nombre;
     }
 
-    if (dto.codigo !== undefined) {
-      const codigo = this.normalizarTexto(dto.codigo);
-      await this.verificarCodigoDisponible(codigo, categoria.idCategoriaItsp);
-      categoria.codigo = codigo;
+    // También se revisa el nombre cuando cambió el padre: el nombre pudo no
+    // cambiar, pero el grupo de hermanas contra el que compite sí.
+    const nombre = dto.nombre !== undefined ? dto.nombre.trim() : categoria.nombre;
+    if (nombre !== categoria.nombre || cambiaDePadre) {
+      await this.verificarNombreDisponibleEntreHermanas(
+        nombre,
+        categoria.idCategoriaPadre,
+        categoria.idCategoriaItsp,
+      );
     }
+    categoria.nombre = nombre;
 
     if (dto.descripcion !== undefined) {
       categoria.descripcion = this.normalizarTexto(dto.descripcion);
@@ -232,10 +269,27 @@ export class CategoriasItspService {
       categoria.orden = dto.orden;
     }
 
-    await this.repositorioCategorias.save(categoria);
+    if (cambiaDePadre) {
+      // Sólo cambia el código de esta subsección; las hermanas viejas y
+      // nuevas conservan el suyo (C-3).
+      const idPadreNuevo = categoria.idCategoriaPadre;
+      await this.conCodigoAsignado(async (repositorio) => {
+        categoria.codigo = await this.calcularSiguienteCodigo(
+          repositorio,
+          idPadreNuevo,
+          categoria.idCategoriaItsp,
+        );
+        return repositorio.save(categoria);
+      });
+    } else {
+      await this.repositorioCategorias.save(categoria);
+    }
 
     await this.registrarEnBitacora('ACTUALIZAR', categoria, usuarioAutenticado, {
       camposActualizados: Object.keys(dto),
+      ...(categoria.codigo !== codigoAnterior
+        ? { codigoAnterior, codigoNuevo: categoria.codigo }
+        : {}),
     });
 
     return this.obtener(categoria.idCategoriaItsp);
@@ -321,16 +375,65 @@ export class CategoriasItspService {
     }
   }
 
-  private async verificarCodigoDisponible(
-    codigo: string | null,
-    idCategoriaExcluida: number | null,
-  ): Promise<void> {
-    if (codigo === null) return;
+  /**
+   * Siguiente código para una categoría con ese padre, contando activas e
+   * inactivas (inactivar no libera el número, RN-3). Se leen todas las
+   * filas, como en `verificarNombreDisponibleEntreHermanas`: son decenas.
+   * El padre ya viene validado por `resolverPadre`.
+   *
+   * `idCategoriaExcluida` es la subsección que se está moviendo: no debe
+   * contarse a sí misma entre sus hermanas nuevas, aunque un reintento la
+   * encuentre ya con el padre o el código del intento anterior.
+   */
+  private async calcularSiguienteCodigo(
+    repositorio: Repository<CategoriaItsp>,
+    idCategoriaPadre: number | null,
+    idCategoriaExcluida: number | null = null,
+  ): Promise<string> {
+    const todas = (await repositorio.find()).filter(
+      (otra) => otra.idCategoriaItsp !== idCategoriaExcluida,
+    );
 
-    const existente = await this.repositorioCategorias.findOne({ where: { codigo } });
+    if (idCategoriaPadre === null) {
+      return siguienteCodigoRaiz(
+        todas.filter((otra) => otra.idCategoriaPadre === null).map((raiz) => raiz.codigo),
+      );
+    }
 
-    if (existente && existente.idCategoriaItsp !== idCategoriaExcluida) {
-      throw new CodigoCategoriaDuplicadoException();
+    const codigoRaiz =
+      todas.find((otra) => otra.idCategoriaItsp === idCategoriaPadre)?.codigo?.trim() ?? '';
+    if (codigoRaiz === '') {
+      // Sólo antes de la migración 10, que rellena los códigos vacíos.
+      throw new CategoriaPadreInvalidaException(
+        'La categoría padre no tiene código; no se puede numerar la subsección',
+      );
+    }
+
+    return siguienteCodigoHija(
+      codigoRaiz,
+      todas.filter((otra) => otra.idCategoriaPadre === idCategoriaPadre).map((hija) => hija.codigo),
+    );
+  }
+
+  /**
+   * Lee el máximo y escribe dentro de una transacción, y reintenta si otra
+   * persona se llevó el mismo número entre medio (spec §7.2). El índice
+   * único es la garantía; no hace falta `SELECT ... FOR UPDATE`.
+   */
+  private async conCodigoAsignado<T>(
+    operacion: (repositorio: Repository<CategoriaItsp>) => Promise<T>,
+  ): Promise<T> {
+    for (let intento = 1; ; intento++) {
+      try {
+        return await this.repositorioCategorias.manager.transaction((gestor) =>
+          operacion(gestor.getRepository(CategoriaItsp)),
+        );
+      } catch (error) {
+        if (!esCodigoDuplicado(error)) throw error;
+        if (intento >= INTENTOS_ASIGNACION_CODIGO) {
+          throw new CodigoCategoriaNoAsignadoException();
+        }
+      }
     }
   }
 

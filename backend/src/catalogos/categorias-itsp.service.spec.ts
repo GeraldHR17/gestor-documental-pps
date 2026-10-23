@@ -4,16 +4,20 @@
 // agrupado que consumirán los selects en cascada de Fase 6, y las reglas
 // que mantienen la jerarquía en exactamente dos niveles.
 
+import { ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { QueryFailedError } from 'typeorm';
 
 import { CategoriasItspService } from './categorias-itsp.service';
+import { CrearCategoriaItspDto } from './dto/crear-categoria-itsp.dto';
+import { ActualizarCategoriaItspDto } from './dto/actualizar-categoria-itsp.dto';
 import { CategoriaItsp } from '../entidades/categoria-itsp.entidad';
 import { BitacoraService } from '../bitacora/bitacora.service';
 import type { PayloadJwt } from '../autenticacion/estrategias/jwt.strategy';
 import {
   CategoriaPadreInvalidaException,
-  CodigoCategoriaDuplicadoException,
+  CodigoCategoriaNoAsignadoException,
   NombreCatalogoDuplicadoException,
   RegistroCatalogoNoEncontradoException,
 } from '../comun/excepciones/excepciones-catalogos';
@@ -80,17 +84,41 @@ const SUB_INFORMES_INACTIVA = categoria({
 
 const TODAS = [RAIZ_RENDICION, SUB_INFORMES_INACTIVA, SUB_BASICA, RAIZ_INSTITUCIONAL, SUB_PLANES];
 
+// Raíz sin hijas: la única forma de probar raíz -> subsección sin que la
+// regla del tercer nivel lo rechace antes.
+const RAIZ_SIN_HIJAS = categoria({
+  idCategoriaItsp: 3,
+  codigo: 'ITSP-03',
+  nombre: 'Participación ciudadana',
+  orden: 3,
+});
+
+/** El error que lanza TypeORM cuando MySQL rechaza un código repetido. */
+function errorCodigoDuplicado(): QueryFailedError {
+  return new QueryFailedError(
+    'INSERT INTO categorias_itsp ...',
+    [],
+    Object.assign(new Error("Duplicate entry 'ITSP-03' for key 'uk_categorias_itsp_codigo'"), {
+      code: 'ER_DUP_ENTRY',
+    }),
+  );
+}
+
 /**
  * Repositorio en memoria en vez de un `findOne` mockeado por llamada: los
  * métodos de este servicio guardan y vuelven a leer lo guardado (crear
  * termina devolviendo `obtener()`), así que un mock que no recuerde lo
  * escrito falla por razones que no tienen que ver con la regla bajo prueba.
+ *
+ * `manager.transaction` entrega el mismo repositorio: la transacción en sí
+ * es de TypeORM; aquí sólo importa que la asignación del código pase por
+ * ella y se reintente.
  */
 function montarRepositorio(datos: CategoriaItsp[]) {
   const almacen = new Map(datos.map((fila) => [fila.idCategoriaItsp, { ...fila }]));
   let proximoId = 100;
 
-  return {
+  const repositorio = {
     find: jest.fn(() => Promise.resolve([...almacen.values()])),
 
     findOne: jest.fn(({ where }: { where: Record<string, unknown> }) => {
@@ -119,7 +147,18 @@ function montarRepositorio(datos: CategoriaItsp[]) {
     }),
 
     create: jest.fn((datosNuevos: Partial<CategoriaItsp>) => ({ ...datosNuevos })),
+
+    manager: {
+      transaction: jest.fn(
+        (operacion: (gestor: { getRepository: () => unknown }) => Promise<unknown>) =>
+          // `unknown` explícito: sin él, el tipo de `repositorio` se
+          // referiría a sí mismo y TypeScript lo dejaría en `any`.
+          operacion({ getRepository: (): unknown => repositorio }),
+      ),
+    },
   };
+
+  return repositorio;
 }
 
 describe('CategoriasItspService', () => {
@@ -262,23 +301,205 @@ describe('CategoriasItspService', () => {
       ).rejects.toBeInstanceOf(NombreCatalogoDuplicadoException);
     });
 
-    it('rechaza un código ya usado por otra categoría', async () => {
+    it('asigna a una raíz nueva el siguiente ITSP-NN y lo registra en bitácora', async () => {
+      const creada = await servicio.crear({ nombre: 'Nueva raíz' }, usuarioAutenticado);
+
+      expect(creada.codigo).toBe('ITSP-03');
+      expect(bitacoraService.registrar).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accion: 'CREAR_CATEGORIA_ITSP',
+          detalles: { nombre: 'Nueva raíz', codigo: 'ITSP-03' },
+        }),
+      );
+    });
+
+    it('numera la subsección contando también las hermanas inactivas', async () => {
+      // La raíz 2 tiene ITSP-02-01 (activa) e ITSP-02-02 (inactiva).
+      const creada = await servicio.crear(
+        { nombre: 'Presupuesto', idCategoriaPadre: 2 },
+        usuarioAutenticado,
+      );
+
+      expect(creada.codigo).toBe('ITSP-02-03');
+    });
+
+    it('asigna el código dentro de una transacción', async () => {
+      await servicio.crear({ nombre: 'Nueva raíz' }, usuarioAutenticado);
+
+      expect(repositorio.manager.transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('reintenta si otra persona ganó el número y entonces guarda', async () => {
+      repositorio.save.mockRejectedValueOnce(errorCodigoDuplicado());
+
+      const creada = await servicio.crear({ nombre: 'Nueva raíz' }, usuarioAutenticado);
+
+      expect(creada.codigo).toBe('ITSP-03');
+      expect(repositorio.manager.transaction).toHaveBeenCalledTimes(2);
+    });
+
+    it('responde 409 tras tres colisiones seguidas, sin registrar en bitácora', async () => {
+      repositorio.save
+        .mockRejectedValueOnce(errorCodigoDuplicado())
+        .mockRejectedValueOnce(errorCodigoDuplicado())
+        .mockRejectedValueOnce(errorCodigoDuplicado());
+
       await expect(
-        servicio.crear({ nombre: 'Otra raíz', codigo: 'ITSP-01' }, usuarioAutenticado),
-      ).rejects.toBeInstanceOf(CodigoCategoriaDuplicadoException);
+        servicio.crear({ nombre: 'Nueva raíz' }, usuarioAutenticado),
+      ).rejects.toBeInstanceOf(CodigoCategoriaNoAsignadoException);
+      expect(repositorio.manager.transaction).toHaveBeenCalledTimes(3);
+      expect(bitacoraService.registrar).not.toHaveBeenCalled();
+    });
+
+    it('no reintenta un error que no es de código duplicado', async () => {
+      repositorio.save.mockRejectedValueOnce(new Error('Conexión perdida'));
+
+      await expect(
+        servicio.crear({ nombre: 'Nueva raíz' }, usuarioAutenticado),
+      ).rejects.toThrow('Conexión perdida');
+      expect(repositorio.manager.transaction).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('codigo en el cuerpo (D-5)', () => {
+    // La misma configuración que main.ts: whitelist sin forbidNonWhitelisted.
+    const tuberia = new ValidationPipe({ whitelist: true, transform: true });
+
+    it('se descarta al crear, sin responder 400', async () => {
+      const dto = (await tuberia.transform(
+        { nombre: 'Nueva raíz', codigo: 'ITSP-99' },
+        { type: 'body', metatype: CrearCategoriaItspDto },
+      )) as Record<string, unknown>;
+
+      expect(dto).toEqual({ nombre: 'Nueva raíz' });
+    });
+
+    it('se descarta al actualizar, sin responder 400', async () => {
+      const dto = (await tuberia.transform(
+        { codigo: 'OTRO' },
+        { type: 'body', metatype: ActualizarCategoriaItspDto },
+      )) as Record<string, unknown>;
+
+      expect(dto).toEqual({});
+    });
+  });
+
+  describe('obtenerSiguienteCodigo', () => {
+    it('sin padre devuelve la siguiente raíz', async () => {
+      await expect(servicio.obtenerSiguienteCodigo(null)).resolves.toEqual({
+        codigo: 'ITSP-03',
+      });
+    });
+
+    it('con una raíz devuelve su siguiente subsección', async () => {
+      await expect(servicio.obtenerSiguienteCodigo(2)).resolves.toEqual({
+        codigo: 'ITSP-02-03',
+      });
+    });
+
+    it('rechaza un padre que es subsección o que no existe', async () => {
+      await expect(servicio.obtenerSiguienteCodigo(5)).rejects.toBeInstanceOf(
+        CategoriaPadreInvalidaException,
+      );
+      await expect(servicio.obtenerSiguienteCodigo(999)).rejects.toBeInstanceOf(
+        CategoriaPadreInvalidaException,
+      );
+    });
+
+    it('no escribe nada', async () => {
+      await servicio.obtenerSiguienteCodigo(null);
+
+      expect(repositorio.save).not.toHaveBeenCalled();
     });
   });
 
   describe('actualizar', () => {
-    it('convierte una subsección en raíz al enviar idCategoriaPadre null', async () => {
+    // Antes este caso convertía la subsección en raíz. Desde
+    // spec-ajustes-posdespliegue C-2 se rechaza: con códigos automáticos
+    // dejaría una raíz con código de subsección.
+    it('rechaza convertir una subsección en raíz', async () => {
+      await expect(
+        servicio.actualizar(5, { idCategoriaPadre: null }, usuarioAutenticado),
+      ).rejects.toThrow(
+        new CategoriaPadreInvalidaException(
+          'Una categoría raíz no puede convertirse en subsección ni una subsección en raíz',
+        ),
+      );
+      expect(repositorio.save).not.toHaveBeenCalled();
+    });
+
+    it('rechaza convertir una raíz sin hijas en subsección', async () => {
+      await construirCon([...TODAS, RAIZ_SIN_HIJAS]);
+
+      await expect(
+        servicio.actualizar(3, { idCategoriaPadre: 1 }, usuarioAutenticado),
+      ).rejects.toBeInstanceOf(CategoriaPadreInvalidaException);
+      expect(repositorio.save).not.toHaveBeenCalled();
+    });
+
+    it('al mover una subsección recalcula sólo su código y lo registra', async () => {
+      const movida = await servicio.actualizar(5, { idCategoriaPadre: 2 }, usuarioAutenticado);
+
+      expect(movida).toMatchObject({ idCategoriaPadre: 2, codigo: 'ITSP-02-03', nivel: 2 });
+
+      const lista = await servicio.listar();
+      expect(lista.find((fila) => fila.id === 6)?.codigo).toBe('ITSP-02-01');
+      expect(lista.find((fila) => fila.id === 7)?.codigo).toBe('ITSP-02-02');
+
+      expect(bitacoraService.registrar).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accion: 'ACTUALIZAR_CATEGORIA_ITSP',
+          detalles: {
+            camposActualizados: ['idCategoriaPadre'],
+            codigoAnterior: 'ITSP-01-01',
+            codigoNuevo: 'ITSP-02-03',
+          },
+        }),
+      );
+    });
+
+    it('al mover una subsección revisa el nombre contra las hermanas nuevas', async () => {
+      // La raíz 2 ya tiene 'Planes institucionales'.
+      await construirCon([...TODAS, { ...SUB_BASICA, nombre: 'Planes institucionales' }]);
+
+      await expect(
+        servicio.actualizar(5, { idCategoriaPadre: 2 }, usuarioAutenticado),
+      ).rejects.toBeInstanceOf(NombreCatalogoDuplicadoException);
+    });
+
+    it('reintenta el código al mover si otra persona ganó el número', async () => {
+      repositorio.save.mockRejectedValueOnce(errorCodigoDuplicado());
+
+      const movida = await servicio.actualizar(5, { idCategoriaPadre: 2 }, usuarioAutenticado);
+
+      expect(movida.codigo).toBe('ITSP-02-03');
+      expect(repositorio.manager.transaction).toHaveBeenCalledTimes(2);
+    });
+
+    it('no cambia el código si el padre enviado es el mismo', async () => {
       const actualizada = await servicio.actualizar(
         5,
-        { idCategoriaPadre: null },
+        { idCategoriaPadre: 1, nombre: 'Información básica' },
         usuarioAutenticado,
       );
 
-      expect(actualizada).toMatchObject({ nivel: 1, idCategoriaPadre: null });
-      expect(actualizada.nombreCategoriaPadre).toBeNull();
+      expect(actualizada.codigo).toBe('ITSP-01-01');
+      expect(repositorio.manager.transaction).not.toHaveBeenCalled();
+      expect(bitacoraService.registrar).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detalles: { camposActualizados: ['idCategoriaPadre', 'nombre'] },
+        }),
+      );
+    });
+
+    it('no cambia el código al editar sólo nombre, descripción u orden', async () => {
+      const actualizada = await servicio.actualizar(
+        1,
+        { nombre: 'Institucional', descripcion: 'Texto', orden: 9 },
+        usuarioAutenticado,
+      );
+
+      expect(actualizada.codigo).toBe('ITSP-01');
     });
 
     it('impide que una categoría sea su propia categoría padre', async () => {

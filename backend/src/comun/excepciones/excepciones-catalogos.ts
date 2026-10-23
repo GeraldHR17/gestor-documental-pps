@@ -21,18 +21,24 @@ export class NombreCatalogoDuplicadoException extends HttpException {
   }
 }
 
-export class CodigoCategoriaDuplicadoException extends HttpException {
+/**
+ * El código de una categoría lo asigna el sistema (máximo + 1) y lo
+ * garantiza el índice único. Si dos personas crean a la vez, una pierde la
+ * carrera y se reintenta; esto sólo se lanza si se pierde tres veces
+ * seguidas.
+ */
+export class CodigoCategoriaNoAsignadoException extends HttpException {
   constructor() {
-    super('Ya existe una categoría con ese código', HttpStatus.CONFLICT);
+    super('No se pudo asignar un código a la categoría; intente de nuevo', HttpStatus.CONFLICT);
   }
 }
 
 /**
  * La taxonomía ITSP es de exactamente dos niveles (raíz -> subsección),
  * porque así la consumen los selects en cascada del formulario de
- * documentos. Cubre los tres modos de romperla: padre inexistente, padre
- * que ya es subsección, y una raíz con hijos a la que se le quiere poner
- * un padre (pasaría a tener nietos).
+ * documentos. Cubre los modos de romperla: padre inexistente, padre que ya
+ * es subsección, y cambiar de nivel (una raíz no pasa a subsección ni una
+ * subsección a raíz, porque su código y su URL dejarían de tener sentido).
  */
 export class CategoriaPadreInvalidaException extends HttpException {
   constructor(motivo: string) {

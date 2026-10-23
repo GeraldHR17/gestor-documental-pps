@@ -21,6 +21,7 @@ import { CrearCategoriaItspDto } from './dto/crear-categoria-itsp.dto';
 import { ActualizarCategoriaItspDto } from './dto/actualizar-categoria-itsp.dto';
 import { CambiarEstadoCatalogoDto } from './dto/cambiar-estado-catalogo.dto';
 import { FiltrosCatalogoDto } from './dto/filtros-catalogo.dto';
+import { ConsultaSiguienteCodigoDto } from './dto/consulta-siguiente-codigo.dto';
 
 @Controller('categorias-itsp')
 @RequierePermisos('catalogos.administrar')
@@ -37,6 +38,14 @@ export class CategoriasItspController {
   @Get('arbol')
   obtenerArbol(@Query() filtros: FiltrosCatalogoDto) {
     return this.categoriasItspService.obtenerArbol(filtros);
+  }
+
+  // Solo lectura: el código que se asignaría ahora mismo. Lo usa el
+  // formulario para avisar, antes de guardar, de cómo cambiará la URL de
+  // una subsección que se mueve de raíz. También va antes de `:id`.
+  @Get('siguiente-codigo')
+  obtenerSiguienteCodigo(@Query() consulta: ConsultaSiguienteCodigoDto) {
+    return this.categoriasItspService.obtenerSiguienteCodigo(consulta.idCategoriaPadre ?? null);
   }
 
   @Get(':id')

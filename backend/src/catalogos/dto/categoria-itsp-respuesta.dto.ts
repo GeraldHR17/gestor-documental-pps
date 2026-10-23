@@ -38,3 +38,12 @@ export class CategoriaItspNodoArbolDto {
     Object.assign(this, datos);
   }
 }
+
+/** Respuesta de `GET /categorias-itsp/siguiente-codigo`. */
+export class SiguienteCodigoCategoriaRespuestaDto {
+  codigo: string;
+
+  constructor(datos: SiguienteCodigoCategoriaRespuestaDto) {
+    Object.assign(this, datos);
+  }
+}

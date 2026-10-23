@@ -1,4 +1,7 @@
 // src/catalogos/dto/actualizar-categoria-itsp.dto.ts
+//
+// Sin `codigo`: es inmutable salvo al mover una subsección a otra raíz, y
+// entonces lo recalcula el servicio (spec-ajustes-posdespliegue RN-1).
 import { IsInt, IsOptional, IsString, Matches, Min, MaxLength } from 'class-validator';
 import {
   LONGITUD_MAXIMA_DESCRIPCION,
@@ -15,20 +18,16 @@ export class ActualizarCategoriaItspDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(50, { message: 'El código no puede superar los 50 caracteres' })
-  codigo?: string;
-
-  @IsOptional()
-  @IsString()
   @MaxLength(LONGITUD_MAXIMA_DESCRIPCION, {
     message: 'La descripción no puede superar los 255 caracteres',
   })
   descripcion?: string;
 
   /**
-   * `null` explícito convierte la subsección en categoría raíz; omitirlo
-   * deja el padre como estaba. Por eso el campo admite el nulo en vez de
-   * tratarse como "no enviado".
+   * Sólo sirve para mover una subsección a otra raíz; omitirlo deja el
+   * padre como estaba. Se admite el nulo para poder rechazarlo con un
+   * mensaje claro: una subsección no puede pasar a raíz, ni una raíz a
+   * subsección (C-2).
    */
   @IsOptional()
   @IsInt()
