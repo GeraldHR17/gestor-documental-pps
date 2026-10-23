@@ -78,6 +78,7 @@ $ErrorActionPreference = 'Stop'
 # ------------------------------------------------------------
 $TABLA_CONTROL = 'scripts_aplicados'
 $SCRIPT_USUARIO_SEMILLA = '06-usuario-superadministrador.sql'
+$SCRIPT_MIGRACION = '10-codigos-categorias-autogenerados.sql'
 $CODIGO_CONTINUAR = 0
 $CODIGO_ERROR = 1
 $CODIGO_DETENERSE = 2
@@ -356,6 +357,7 @@ try {
     # --------------------------------------------------------
     Escribir-Paso "1b. Tabla de control $TABLA_CONTROL"
     $motivosParaDetenerse = New-Object System.Collections.ArrayList
+    $migracionRegistrada = $false
 
     $existeControl = Obtener-ValorMysql -Sentencia ("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = '{0}' AND TABLE_NAME = '{1}';" -f $BaseDatos, $TABLA_CONTROL)
     $esperados = @(Obtener-ScriptsEsperados)
@@ -373,6 +375,7 @@ try {
             foreach ($nombre in $registrados) {
                 Escribir-Detalle ("REGISTRADO  {0}" -f $nombre)
             }
+            $migracionRegistrada = ($registrados -contains $SCRIPT_MIGRACION)
 
             # Ultimo registrado entre los esperados: lo que falte antes de
             # el es un hueco; lo que falte despues, un pendiente.
@@ -428,9 +431,17 @@ try {
         exit $CODIGO_DETENERSE
     }
 
-    Write-Host 'CONTINUAR: se puede aplicar la migracion con preparar-base-datos.ps1 -SoloScripts.' -ForegroundColor Green
-    if ($nulosVacios -eq 0) {
-        Write-Host '(No hay codigos nulos ni vacios: la migracion no rellenara ninguno.)'
+    if ($migracionRegistrada) {
+        # Es la comprobacion de despues de migrar (15.3, paso 7).
+        Write-Host ("CONTINUAR: {0} ya esta aplicada." -f $SCRIPT_MIGRACION) -ForegroundColor Green
+        if ($nulosVacios -gt 0) {
+            Write-Host ("AVISO: aun hay {0} codigos nulos o vacios; revise el bloque 2." -f $nulosVacios) -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host 'CONTINUAR: se puede aplicar la migracion con preparar-base-datos.ps1 -SoloScripts.' -ForegroundColor Green
+        if ($nulosVacios -eq 0) {
+            Write-Host '(No hay codigos nulos ni vacios: la migracion no rellenara ninguno.)'
+        }
     }
     exit $CODIGO_CONTINUAR
 
