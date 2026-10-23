@@ -217,3 +217,19 @@ distinta en cada caso:
 | `RewriteBase` en `frontend/public/.htaccess` | Las rutas profundas dejan de resolverse al recargar |
 | `ProxyPass` en `despliegue/apache/munidata.conf` | La API deja de responder |
 | Estos cuatro snippets | Los iframes salen en blanco en WordPress |
+
+### Códigos de sección y subsección en los enlaces
+
+Desde la actualización de los códigos automáticos
+(`spec-ajustes-posdespliegue.md`), Muni Data asigna el código de cada
+sección y subsección (`itsp-05`, `itsp-05-01`...), y ese código es la
+parte final de la dirección del recuadro. No cambia nunca, **salvo un
+caso**: si en Muni Data se mueve una subsección a otra sección, su código y
+su dirección cambian. El sistema lo avisa antes de guardar, con el código
+viejo y el nuevo, y queda registrado en la bitácora.
+
+Si alguna página o enlace de WordPress apunta directamente a esa
+subsección, hay que actualizarlo con la dirección nueva. El número que deja
+libre la subsección movida puede volver a usarse para la siguiente
+subsección que se cree en la sección de origen, así que un enlace viejo que
+no se actualice podría terminar mostrando otra subsección.

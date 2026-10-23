@@ -582,13 +582,133 @@ powershell -ExecutionPolicy Bypass -File .\despliegue\desplegar.ps1 -RutaHtdocs 
 que siempre existe una versión a la que volver. No hace falta tocar Apache
 otra vez.
 
-Si la actualización trae scripts SQL nuevos, ejecute también:
+Si la actualización trae scripts SQL nuevos, aplíquelos **antes** de
+`desplegar.ps1` y con `-SoloScripts`:
 
 ```
-powershell -ExecutionPolicy Bypass -File .\despliegue\preparar-base-datos.ps1
+powershell -ExecutionPolicy Bypass -File .\despliegue\preparar-base-datos.ps1 -SoloScripts
 ```
 
 Aplicará solo los que falten, según la tabla `scripts_aplicados`.
+`-SoloScripts` es importante en una base que ya está en uso: sin él, el
+script pide una contraseña **nueva** para `munidata_app` y la cambia, y si
+no se escribe exactamente la de `.env.produccion` el backend deja de
+conectar. Con `-SoloScripts` no la pide ni la toca.
+
+Si la base ya tiene datos y la tabla `scripts_aplicados` falta, está vacía
+o tiene huecos, el script se detiene **sin hacer ningún cambio**. Vea la
+sección 6.1.
+
+### 6.1 Actualización sobre datos reales
+
+Es el procedimiento para cualquier actualización que traiga scripts SQL
+nuevos sobre la base que ya está en uso. La primera fue la de los códigos
+automáticos de categoría (`10-codigos-categorias-autogenerados.sql`). El
+orden no se altera:
+
+**respaldo → `git status` limpio → `git pull` → diagnóstico →
+`preparar-base-datos.ps1 -SoloScripts` → `desplegar.ps1` → verificación**
+
+> **Cuándo NO se migra.** Deténgase y consulte antes de seguir si:
+>
+> - **(a)** el **bloque 5** del diagnóstico («Grafia») muestra una raíz con
+>   **prefijo ITPS**;
+> - **(b)** el **bloque 1b** del diagnóstico («Tabla de control
+>   scripts_aplicados») **no** muestra registrados `01` a `05` y `07` a `09`
+>   (el `06` se omite siempre en producción);
+> - **(c)** el diagnóstico termina en **DETENERSE**.
+>
+> Si `preparar-base-datos.ps1` se detiene con «Se detiene sin ejecutar
+> nada», **no** se resuelve registrando scripts a mano en
+> `scripts_aplicados`: hay que averiguar antes qué tiene aplicado la base
+> de verdad.
+
+1. **Respaldo previo.** Ejecute `respaldar.ps1` y compruebe que se creó la
+   carpeta del día con `base-datos.sql.gz` y `documentos.zip`.
+2. **`git status` limpio.** Si muestra cambios, deténgase: no haga
+   `git pull` encima de cambios locales.
+3. **`git pull`.** Antes, anote el commit actual con `git rev-parse HEAD`:
+   es el que necesitará para volver atrás.
+4. **Diagnóstico** (solo lectura, no cambia nada):
+   `diagnosticar-codigos-categorias.ps1`. Pide la contraseña de `root` en
+   MySQL. Revise:
+   - el bloque 1b: deben figurar `01` a `05` y `07` a `09` como
+     `REGISTRADO` y el `10` como `PENDIENTE`;
+   - el bloque 4 (duplicados): debe estar vacío. Si no, la migración
+     abortaría; corríjalos a mano con el PO antes de seguir;
+   - el bloque 5 (grafía): ninguna raíz con prefijo `ITPS`;
+   - el bloque 6: los códigos que se asignarán a las categorías que hoy no
+     tienen;
+   - el veredicto final: **CONTINUAR** (código de salida 0) o
+     **DETENERSE** (código 2).
+
+   Los códigos irregulares del bloque 3 no impiden seguir: se conservan
+   tal cual. Anótelos.
+5. **Migración.** `preparar-base-datos.ps1 -SoloScripts`. Debe mostrar
+   `APLICANDO 10-codigos-categorias-autogenerados.sql` y terminar con
+   «Base de datos preparada correctamente». No pide la contraseña de
+   `munidata_app`.
+6. **Despliegue.** `desplegar.ps1`, con los mismos parámetros de siempre.
+7. **Verificación.** No cree categorías de prueba en la base real: no hay
+   borrado físico y quedarían para siempre.
+   - `verificar-despliegue.ps1 -UrlPublica ...` (las diez comprobaciones).
+   - Repita el diagnóstico: el bloque 2 debe salir vacío, el resumen debe
+     dar 0 nulos o vacíos, y el veredicto debe decir que el `10` ya está
+     aplicado.
+   - En el panel, abra **Catálogos → Categorías ITSP → Nueva**: el código
+     debe decir «Se asignará automáticamente». Cancele **sin guardar**.
+   - Abra **Editar** de una categoría existente: el código se ve en solo
+     lectura. Cancele **sin guardar**.
+   - Recorra la lista de categorías y la de documentos.
+   - Abra `iframes/prueba-vista.html` por https y recorra las cuatro
+     secciones: deben verse oscuras, sin destello blanco al cargar.
+   - Si ya está desplegado el modo oscuro, altérnelo en la barra superior.
+
+   La generación de códigos (crear, mover, colisiones) se probó en la base
+   local; en la real solo se verifica sin escribir.
+
+Comandos, en orden (en el paso 6, use la misma ruta de `nssm.exe` que en el
+despliegue inicial):
+
+```
+cd C:\munidata\gestor-documental-pps
+powershell -ExecutionPolicy Bypass -File .\despliegue\respaldar.ps1
+git status
+git rev-parse HEAD
+git pull
+powershell -ExecutionPolicy Bypass -File .\despliegue\diagnosticar-codigos-categorias.ps1
+powershell -ExecutionPolicy Bypass -File .\despliegue\preparar-base-datos.ps1 -SoloScripts
+powershell -ExecutionPolicy Bypass -File .\despliegue\desplegar.ps1 -RutaHtdocs "C:\Apache24\htdocs" -RutaNssm "C:\ruta\a\nssm.exe"
+powershell -ExecutionPolicy Bypass -File .\despliegue\verificar-despliegue.ps1 -UrlPublica "https://su-servidor-real/munipalmares/wp-munidata"
+powershell -ExecutionPolicy Bypass -File .\despliegue\diagnosticar-codigos-categorias.ps1
+```
+
+**Si la migración aborta.** Termina con código 1 y no queda registrada, así
+que se puede volver a ejecutar después de corregir la causa. Los datos no
+cambian. Puede quedar creado un procedimiento almacenado temporal,
+`migrar_codigos_categorias_10`, que no hace nada por sí solo: la siguiente
+ejecución lo reemplaza.
+
+**Reversión.**
+
+1. `revertir.ps1` (sección 7) restaura el backend y el frontend anteriores.
+2. Solo si el problema es la propia migración, restaure la base desde el
+   `base-datos.sql.gz` del paso 1 (sección 8.2).
+3. Deje el repositorio en el commit anotado en el paso 3, con
+   `git checkout` seguido del hash completo que imprimió `git rev-parse HEAD`.
+4. Cuando ya no necesite ese código, vuelva a la rama con:
+
+   ```
+   git checkout main
+   ```
+
+   Sin esto, el repositorio queda en "HEAD separado" y el siguiente
+   `git pull` no actualiza nada.
+
+El backend anterior funciona sobre la base migrada, con una excepción: su
+formulario permitía crear una categoría sin código, y ahora la columna es
+`NOT NULL`. Mientras esté revertido, al crear una categoría hay que escribir
+el código a mano.
 
 ---
 

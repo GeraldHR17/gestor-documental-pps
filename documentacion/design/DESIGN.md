@@ -171,3 +171,18 @@ The shape language is consistently **Rounded** to balance the aggressive color p
 
 ### Lists
 - List items must have a minimum height of 48px. Dividers should be 1px solid #F0F0F1.
+
+## Excepción: vistas públicas del portal de transparencia
+
+Las vistas públicas (`/vista/...`), que se embeben en la portada de
+WordPress, **no** siguen este sistema: replican el aspecto del Observatorio
+Municipal de Datos, que ya está en esa portada (spec-ajustes-posdespliegue
+§9.2). Allí, y **solo allí**, la forma de píldora se usa también en los
+botones ("Ver", "Descargar", paginación) y en la píldora de contexto con el
+nombre de la sección (decisión P-3). Las etiquetas de los documentos siguen
+siendo rectangulares. Sus colores viven en las variables `--portal-*` de
+`.tema-portal` (`frontend/src/assets/main.css`) y no alteran los tokens de
+este documento.
+
+En el sistema interno la regla no cambia: la píldora es exclusiva de las
+insignias de estado.

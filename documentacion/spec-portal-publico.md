@@ -1355,6 +1355,12 @@ persona.
 
 ### 16.2 Cómo validar el aspecto claro dentro de una portada oscura
 
+> **Sustituido por `spec-ajustes-posdespliegue.md` §9.2.** El portal ya no
+> es un panel claro: usa el estilo oscuro del Observatorio de Datos
+> (tarjeta `#1d2327`, recuadros `#2b3338`, botones en píldora `#ba0911` y
+> Poppins), siempre oscuro. Lo que sigue en esta sección y la decisión 5 del
+> resumen quedan como registro histórico; D-7 también queda sustituida.
+
 `DESIGN.md` **ya es un sistema claro** ("High-Contrast Civic Modern", superficie
 `#f9f9f9`), así que D-7 no obliga a inventar nada: el portal público se ve como
 el resto de Muni Data. El problema es otro: la portada de WordPress es casi negra
