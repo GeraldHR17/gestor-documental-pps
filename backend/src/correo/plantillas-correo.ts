@@ -59,7 +59,7 @@ export function construirCorreoInstitucional(contenido: ContenidoCorreoInstituci
           <tr>
             <td style="background-color:${COLOR_PRIMARIO};padding:20px 32px;">
               <p style="margin:0;font-size:18px;line-height:24px;font-weight:bold;color:#ffffff;">${NOMBRE_INSTITUCION}</p>
-              <p style="margin:4px 0 0 0;font-size:13px;line-height:18px;color:#ffe0e0;">Sistema Integral de Gestión Documental</p>
+              <p style="margin:4px 0 0 0;font-size:13px;line-height:18px;color:#ffe0e0;">Muni Data</p>
             </td>
           </tr>
           <tr>

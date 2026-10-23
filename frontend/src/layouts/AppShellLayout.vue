@@ -147,7 +147,7 @@ async function manejarCerrarSesion(): Promise<void> {
           <span aria-hidden="true" class="material-symbols-outlined">account_balance</span>
         </div>
         <div class="min-w-0">
-          <p class="font-headline-sm text-headline-sm leading-tight">Gestión Municipal</p>
+          <p class="font-headline-sm text-headline-sm leading-tight">Muni Data</p>
           <p class="text-label-sm text-pure-white/70 truncate">Municipalidad de Palmares</p>
         </div>
       </div>
@@ -267,7 +267,7 @@ async function manejarCerrarSesion(): Promise<void> {
         <span>© {{ anioActual }} Municipalidad de Palmares — Portal de Gobierno Abierto</span>
         <span class="flex items-center gap-1">
           <span aria-hidden="true" class="material-symbols-outlined text-[16px]">shield</span>
-          Sistema Integral de Gestión Documental
+          Muni Data
         </span>
       </footer>
     </div>

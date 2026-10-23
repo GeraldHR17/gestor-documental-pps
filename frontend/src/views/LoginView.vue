@@ -79,7 +79,7 @@ async function manejarIniciarSesion(): Promise<void> {
 
       <div class="hidden md:block">
         <h1 class="font-headline-lg text-headline-lg text-pure-white mb-gutter-sm">
-          Sistema Integral de Gestión Documental
+          Muni Data
         </h1>
         <p class="font-body-lg text-body-lg text-inverse-on-surface" style="opacity: 0.85">
           Acceso restringido a funcionarios autorizados. Toda operación queda registrada en la bitácora

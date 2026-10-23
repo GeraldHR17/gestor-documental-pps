@@ -286,7 +286,7 @@ async function principal(): Promise<number> {
   const contenido: ContenidoCorreoInstitucional = {
     titulo: 'Prueba de configuración de correo',
     parrafos: [
-      'Este mensaje confirma que el servidor de correo saliente del sistema de gestión documental quedó bien configurado.',
+      'Este mensaje confirma que el servidor de correo saliente de Muni Data quedó bien configurado.',
       'No requiere ninguna acción: es una prueba técnica.',
     ],
     textoBoton: 'Ir al sistema',
