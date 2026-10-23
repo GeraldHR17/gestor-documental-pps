@@ -26,6 +26,13 @@
     visibles en la lista de procesos). Se escriben en un archivo de
     opciones temporal con permisos restringidos, que se borra al terminar.
 
+    Guardia: si la base ya tiene tablas, la tabla de control debe existir
+    y registrar, sin huecos, todo lo anterior al primer script pendiente.
+    Si falta, esta vacia o tiene huecos, el script se detiene ANTES de
+    tocar nada (ni volcado, ni usuario de aplicacion, ni scripts): aplicar
+    scripts viejos encima de datos reales podria duplicar filas o dejar la
+    base a medias. Vale con y sin -SoloScripts.
+
 .PARAMETER BaseDatos
     Nombre de la base de datos a crear.
 
@@ -50,11 +57,21 @@
 .PARAMETER IncluirUsuarioSemilla
     Aplica tambien 06-usuario-superadministrador.sql. Solo para pruebas.
 
+.PARAMETER SoloScripts
+    Para actualizar una base que ya esta en uso: aplica los scripts
+    pendientes sin pedir ni cambiar la contrasena del usuario de
+    aplicacion (omite CREATE USER, ALTER USER y GRANT). Sin esto, el script
+    siempre redefine esa contrasena, y si no se escribe exactamente la de
+    .env.produccion el backend deja de conectar. Exige que la base exista.
+
 .PARAMETER Simular
     Imprime lo que haria sin ejecutar nada ni pedir contrasenas.
 
 .EJEMPLO
     powershell -ExecutionPolicy Bypass -File .\despliegue\preparar-base-datos.ps1
+
+.EJEMPLO
+    powershell -ExecutionPolicy Bypass -File .\despliegue\preparar-base-datos.ps1 -SoloScripts
 #>
 
 [CmdletBinding()]
@@ -67,6 +84,7 @@ param(
     [string] $RutaScripts = '',
     [string] $RutaRespaldos = 'C:\munidata\respaldos',
     [switch] $IncluirUsuarioSemilla,
+    [switch] $SoloScripts,
     [switch] $Simular
 )
 
@@ -320,6 +338,47 @@ function Invocar-ArchivoSql {
     }
 }
 
+function Obtener-MotivoRegistroNoFiable {
+    <#
+        Guardia ante una base poblada: devuelve '' si la tabla de control
+        es fiable o, si no, la explicacion de por que no lo es.
+
+        Fiable significa que registra, sin huecos, todo lo que deberia
+        estar aplicado: un script esperado sin registrar solo es aceptable
+        si va despues del ultimo registrado (es un pendiente). Esperados
+        son los de init/ en orden de nombre, sin el 06 salvo con
+        -IncluirUsuarioSemilla, que es el mismo criterio con el que se
+        aplican.
+
+        No lee nada si la tabla no existe: consultarla daria error. Por eso
+        se pregunta antes a information_schema.
+    #>
+    param([Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]] $Esperados)
+
+    $existeControl = Obtener-ConteoMysql -Sentencia ("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = '{0}' AND TABLE_NAME = '{1}';" -f $BaseDatos, $TABLA_CONTROL)
+    if ($existeControl -eq 0) {
+        return "no existe la tabla de control $TABLA_CONTROL"
+    }
+
+    $filas = @(Invocar-Mysql -Sentencia ("SELECT nombre_script FROM ``{0}``;" -f $TABLA_CONTROL) -Base $BaseDatos)
+    $registrados = @($filas | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
+
+    $ultimoRegistrado = ''
+    foreach ($nombre in $Esperados) {
+        if ($registrados -contains $nombre) { $ultimoRegistrado = $nombre }
+    }
+    if ($ultimoRegistrado -eq '') {
+        return "la tabla de control $TABLA_CONTROL no registra ninguno de los scripts de init/"
+    }
+
+    $huecos = @($Esperados | Where-Object { ($registrados -notcontains $_) -and ([string]::CompareOrdinal($_, $ultimoRegistrado) -lt 0) })
+    if ($huecos.Count -gt 0) {
+        return ("la tabla de control {0} tiene huecos: registra {1}, pero no {2}" -f $TABLA_CONTROL, $ultimoRegistrado, ($huecos -join ', '))
+    }
+
+    return ''
+}
+
 # ------------------------------------------------------------
 # Inicio
 # ------------------------------------------------------------
@@ -360,13 +419,28 @@ if ($Simular) {
     Write-Host '[SIMULACION] No se pediran contrasenas ni se tocara la base de datos.'
     Write-Host '[SIMULACION] En una ejecucion real este script haria:'
     Write-Host '[SIMULACION]   1. Pedir la contrasena administrativa de MySQL.'
-    Write-Host ('[SIMULACION]   2. Pedir la contrasena del usuario {0}.' -f $UsuarioAplicacion)
+    if ($SoloScripts) {
+        Write-Host ('[SIMULACION]   2. (-SoloScripts) NO pedir ni cambiar la contrasena del usuario {0}.' -f $UsuarioAplicacion)
+    } else {
+        Write-Host ('[SIMULACION]   2. Pedir la contrasena del usuario {0}.' -f $UsuarioAplicacion)
+    }
     Write-Host '[SIMULACION]   3. Escribir un archivo de opciones temporal con permisos restringidos.'
-    Write-Host ('[SIMULACION]   4. CREATE DATABASE {0} con utf8mb4_unicode_ci si no existe.' -f $BaseDatos)
-    Write-Host ('[SIMULACION]   5. CREATE USER {0} y GRANT solo sobre esa base.' -f $UsuarioAplicacion)
+    if ($SoloScripts) {
+        Write-Host ('[SIMULACION]   4. (-SoloScripts) Exigir que la base {0} exista; no crearla.' -f $BaseDatos)
+    } else {
+        Write-Host ('[SIMULACION]   4. CREATE DATABASE {0} con utf8mb4_unicode_ci si no existe.' -f $BaseDatos)
+    }
+    Write-Host ('[SIMULACION]   5. Si la base tiene tablas, detenerse sin tocar nada si {0} falta, esta vacia o tiene huecos.' -f $TABLA_CONTROL)
     Write-Host ('[SIMULACION]   6. mysqldump previo a {0} si la base ya tuviera datos.' -f $RutaRespaldos)
-    Write-Host ('[SIMULACION]   7. Crear la tabla de control {0} y aplicar los scripts pendientes.' -f $TABLA_CONTROL)
-    Write-Host '[SIMULACION]   8. Borrar el archivo de opciones temporal.'
+    if ($SoloScripts) {
+        Write-Host ('[SIMULACION]   7. (-SoloScripts) Omitir CREATE USER, ALTER USER y GRANT de {0}.' -f $UsuarioAplicacion)
+    } else {
+        Write-Host ('[SIMULACION]   7. CREATE USER {0}, ALTER USER con la contrasena nueva y GRANT solo sobre esa base.' -f $UsuarioAplicacion)
+    }
+    Write-Host ('[SIMULACION]   8. Crear la tabla de control {0} y aplicar los scripts pendientes.' -f $TABLA_CONTROL)
+    Write-Host '[SIMULACION]   9. Borrar el archivo de opciones temporal.'
+    Write-Host ''
+    Write-Host '[SIMULACION] Sin conexion no se puede evaluar la guardia del paso 5.'
     Write-Host ''
     Write-Host '[SIMULACION] Terminado sin cambios.' -ForegroundColor Green
     exit 0
@@ -404,21 +478,28 @@ try {
         throw 'La contrasena administrativa tiene caracteres fuera del ASCII imprimible (acentos, ene u otros). El cliente de MySQL no puede recibirla por archivo de opciones.'
     }
 
-    $contrasenaApp = Read-Host -Prompt ("Contrasena NUEVA para el usuario {0}" -f $UsuarioAplicacion) -AsSecureString
-    $contrasenaAppConfirmada = Read-Host -Prompt 'Reptala para confirmar' -AsSecureString
+    # Con -SoloScripts la contrasena del usuario de aplicacion ni se pide
+    # ni se toca: es la que ya usa el backend en produccion.
+    $textoApp = ''
+    if ($SoloScripts) {
+        Escribir-Detalle ("-SoloScripts: no se pide ni se cambia la contrasena de {0}." -f $UsuarioAplicacion)
+    } else {
+        $contrasenaApp = Read-Host -Prompt ("Contrasena NUEVA para el usuario {0}" -f $UsuarioAplicacion) -AsSecureString
+        $contrasenaAppConfirmada = Read-Host -Prompt 'Reptala para confirmar' -AsSecureString
 
-    $textoApp = Convertir-ASecreto -Segura $contrasenaApp
-    $textoAppConfirmado = Convertir-ASecreto -Segura $contrasenaAppConfirmada
-    if ($textoApp -ne $textoAppConfirmado) {
-        throw 'Las dos contrasenas del usuario de aplicacion no coinciden.'
-    }
-    if ($textoApp.Length -lt 12) {
-        throw 'La contrasena del usuario de aplicacion debe tener al menos 12 caracteres.'
-    }
-    # Una comilla simple rompe la sentencia CREATE USER y, peor, abre la
-    # puerta a inyeccion. Es mas simple exigir que no la contenga.
-    if ($textoApp.Contains("'") -or $textoApp.Contains('\')) {
-        throw "La contrasena del usuario de aplicacion no debe contener comillas simples ni barras invertidas."
+        $textoApp = Convertir-ASecreto -Segura $contrasenaApp
+        $textoAppConfirmado = Convertir-ASecreto -Segura $contrasenaAppConfirmada
+        if ($textoApp -ne $textoAppConfirmado) {
+            throw 'Las dos contrasenas del usuario de aplicacion no coinciden.'
+        }
+        if ($textoApp.Length -lt 12) {
+            throw 'La contrasena del usuario de aplicacion debe tener al menos 12 caracteres.'
+        }
+        # Una comilla simple rompe la sentencia CREATE USER y, peor, abre la
+        # puerta a inyeccion. Es mas simple exigir que no la contenga.
+        if ($textoApp.Contains("'") -or $textoApp.Contains('\')) {
+            throw "La contrasena del usuario de aplicacion no debe contener comillas simples ni barras invertidas."
+        }
     }
 
     $archivoOpciones = Nuevo-ArchivoOpciones -Usuario $UsuarioAdministrador -Contrasena $textoAdmin
@@ -441,9 +522,51 @@ try {
 
     if ($baseYaExistia) {
         Escribir-Detalle 'Ya existe; no se recrea.'
+    } elseif ($SoloScripts) {
+        # -SoloScripts es para actualizar una base en uso. Sin base no hay
+        # nada que actualizar, y crearla aqui dejaria una base sin usuario
+        # de aplicacion.
+        throw "No existe la base de datos $BaseDatos. -SoloScripts solo actualiza una base existente; para una instalacion nueva ejecute el script sin -SoloScripts."
     } else {
         $null = Invocar-Mysql -Sentencia ("CREATE DATABASE `{0}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" -f $BaseDatos)
         Escribir-Detalle 'Creada con utf8mb4 / utf8mb4_unicode_ci.'
+    }
+
+    # --------------------------------------------------------
+    # Guardia: base poblada sin registro fiable de scripts
+    # --------------------------------------------------------
+    # Va ANTES del volcado, del usuario de aplicacion y de la tabla de
+    # control: si se detiene, no deja ningun efecto. Antes esta
+    # comprobacion iba despues del ALTER USER (la contrasena ya habia
+    # cambiado) y solo miraba si existia la tabla 'usuarios'; tampoco
+    # detectaba una tabla de control con huecos, en cuyo caso se volvian
+    # a aplicar scripts viejos encima de los datos.
+    if ($baseYaExistia) {
+        $tablasDeDatos = Obtener-ConteoMysql -Sentencia ("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = '{0}' AND TABLE_NAME <> '{1}';" -f $BaseDatos, $TABLA_CONTROL)
+
+        if ($tablasDeDatos -gt 0) {
+            $esperados = @($scripts | ForEach-Object { $_.Name } | Where-Object { $IncluirUsuarioSemilla -or $_ -ne $SCRIPT_USUARIO_SEMILLA })
+            $motivo = Obtener-MotivoRegistroNoFiable -Esperados $esperados
+
+            if ($motivo -ne '') {
+                throw @"
+Se detiene sin ejecutar nada: la base $BaseDatos ya tiene $tablasDeDatos tablas, pero $motivo.
+
+No se puede saber que scripts estan aplicados de verdad, y aplicarlos otra vez
+encima de los datos podria duplicar filas o dejar la base a medias. No se hizo
+ningun cambio: ni volcado, ni usuario de aplicacion, ni tabla de control, ni
+scripts.
+
+Que hacer:
+  - Ejecute despliegue\diagnosticar-codigos-categorias.ps1 y revise el
+    bloque 1b (tabla de control).
+  - Revise con quien administra la base que scripts de
+    base-datos\scripts\init tiene aplicados en realidad, antes de registrar
+    ninguno a mano.
+"@
+            }
+            Escribir-Detalle ("Tabla de control {0} sin huecos." -f $TABLA_CONTROL)
+        }
     }
 
     # --------------------------------------------------------
@@ -476,32 +599,36 @@ try {
     # Usuario de aplicacion
     # --------------------------------------------------------
     Escribir-Paso "Usuario de aplicacion $UsuarioAplicacion"
-    Escribir-Detalle 'Se concede privilegio solo sobre esta base (minimo privilegio).'
-    Escribir-Detalle "Hosts permitidos: localhost y 127.0.0.1 unicamente, nunca '%'."
+    if ($SoloScripts) {
+        Escribir-Detalle 'Omitido (-SoloScripts): ni CREATE USER, ni ALTER USER, ni GRANT.'
+    } else {
+        Escribir-Detalle 'Se concede privilegio solo sobre esta base (minimo privilegio).'
+        Escribir-Detalle "Hosts permitidos: localhost y 127.0.0.1 unicamente, nunca '%'."
 
-    # IF NOT EXISTS mantiene la idempotencia sin tocar la contrasena de un
-    # usuario que ya estuviera en uso.
-    #
-    # La lista de hosts es deliberadamente local: 'localhost' y
-    # '127.0.0.1', porque MySQL los trata como hosts distintos y el
-    # backend se conecta por el segundo. NUNCA se usa '%': en esta VM el
-    # servicio de MySQL escucha en 0.0.0.0 (lo dejo otro sistema, y no se
-    # modifica), de modo que un usuario con host '%' quedaria alcanzable
-    # desde la red con permisos sobre toda la base. Acotarlo al propio
-    # equipo es lo que mantiene la exposicion en cero sin tocar la
-    # configuracion compartida de MySQL.
-    foreach ($hostUsuario in @('localhost', '127.0.0.1')) {
-        $null = Invocar-Mysql -Sentencia ("CREATE USER IF NOT EXISTS '{0}'@'{1}' IDENTIFIED BY '{2}';" -f $UsuarioAplicacion, $hostUsuario, $textoApp)
-        # ALTER USER para el caso de que ya existiera con otra contrasena:
-        # sin esto, repetir el despliegue con una contrasena nueva dejaria
-        # al backend sin poder conectarse.
-        $null = Invocar-Mysql -Sentencia ("ALTER USER '{0}'@'{1}' IDENTIFIED BY '{2}';" -f $UsuarioAplicacion, $hostUsuario, $textoApp)
-        # Sin GRANT ALL: el backend nunca altera el esquema (TypeORM corre
-        # con synchronize: false), asi que no necesita DDL.
-        $null = Invocar-Mysql -Sentencia ("GRANT SELECT, INSERT, UPDATE, DELETE ON `{0}`.* TO '{1}'@'{2}';" -f $BaseDatos, $UsuarioAplicacion, $hostUsuario)
-        Escribir-Detalle "Concedido a '$UsuarioAplicacion'@'$hostUsuario'."
+        # IF NOT EXISTS mantiene la idempotencia sin tocar la contrasena de un
+        # usuario que ya estuviera en uso.
+        #
+        # La lista de hosts es deliberadamente local: 'localhost' y
+        # '127.0.0.1', porque MySQL los trata como hosts distintos y el
+        # backend se conecta por el segundo. NUNCA se usa '%': en esta VM el
+        # servicio de MySQL escucha en 0.0.0.0 (lo dejo otro sistema, y no se
+        # modifica), de modo que un usuario con host '%' quedaria alcanzable
+        # desde la red con permisos sobre toda la base. Acotarlo al propio
+        # equipo es lo que mantiene la exposicion en cero sin tocar la
+        # configuracion compartida de MySQL.
+        foreach ($hostUsuario in @('localhost', '127.0.0.1')) {
+            $null = Invocar-Mysql -Sentencia ("CREATE USER IF NOT EXISTS '{0}'@'{1}' IDENTIFIED BY '{2}';" -f $UsuarioAplicacion, $hostUsuario, $textoApp)
+            # ALTER USER para el caso de que ya existiera con otra contrasena:
+            # sin esto, repetir el despliegue con una contrasena nueva dejaria
+            # al backend sin poder conectarse.
+            $null = Invocar-Mysql -Sentencia ("ALTER USER '{0}'@'{1}' IDENTIFIED BY '{2}';" -f $UsuarioAplicacion, $hostUsuario, $textoApp)
+            # Sin GRANT ALL: el backend nunca altera el esquema (TypeORM corre
+            # con synchronize: false), asi que no necesita DDL.
+            $null = Invocar-Mysql -Sentencia ("GRANT SELECT, INSERT, UPDATE, DELETE ON `{0}`.* TO '{1}'@'{2}';" -f $BaseDatos, $UsuarioAplicacion, $hostUsuario)
+            Escribir-Detalle "Concedido a '$UsuarioAplicacion'@'$hostUsuario'."
+        }
+        $null = Invocar-Mysql -Sentencia 'FLUSH PRIVILEGES;'
     }
-    $null = Invocar-Mysql -Sentencia 'FLUSH PRIVILEGES;'
 
     # --------------------------------------------------------
     # Tabla de control
@@ -517,34 +644,13 @@ CREATE TABLE IF NOT EXISTS ``$TABLA_CONTROL`` (
     $null = Invocar-Mysql -Sentencia $sentenciaControl -Base $BaseDatos
     Escribir-Detalle 'Lista. Registra que script se aplico y cuando.'
 
-    # Si la base ya tenia esquema pero NO la tabla de control, significa
-    # que se poblo por otra via (por ejemplo restaurando un volcado de
-    # desarrollo). Aplicar los scripts encima fallaria a medias y dejaria
-    # la base en un estado incierto, asi que se detiene.
-    # La tabla acaba de crearse vacia en una instalacion nueva: la
-    # consulta no devuelve filas y el filtro recibiria un elemento nulo
-    # si no se envolviera la llamada en @(...).
+    # Una base poblada sin registro fiable ya se detuvo en la guardia de
+    # arriba; aqui la tabla o registra todo sin huecos o es de una
+    # instalacion nueva y acaba de crearse vacia. En ese caso la consulta
+    # no devuelve filas y el filtro recibiria un elemento nulo si no se
+    # envolviera la llamada en @(...).
     $filasControl = @(Invocar-Mysql -Sentencia ("SELECT nombre_script FROM ``{0}``;" -f $TABLA_CONTROL) -Base $BaseDatos)
     $aplicadosPrevios = @($filasControl | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
-
-    if ($aplicadosPrevios.Count -eq 0) {
-        $tablasUsuarios = Obtener-ConteoMysql -Sentencia ("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = '{0}' AND TABLE_NAME = 'usuarios';" -f $BaseDatos)
-        if ($tablasUsuarios -gt 0) {
-            throw @"
-La base $BaseDatos ya contiene el esquema (existe la tabla 'usuarios') pero no hay
-registro de los scripts aplicados. No se puede saber que falta aplicar sin
-riesgo de dejar la base a medias.
-
-Que hacer:
-  - Si la base es correcta y esta completa, registre los scripts como ya
-    aplicados ejecutando, por cada uno:
-        INSERT INTO $TABLA_CONTROL (nombre_script) VALUES ('01-esquema.sql');
-  - Si la base es desechable, borrela y vuelva a ejecutar este script:
-        DROP DATABASE $BaseDatos;
-    El volcado previo quedo en $RutaRespaldos
-"@
-        }
-    }
 
     # --------------------------------------------------------
     # Aplicacion de los scripts
@@ -606,7 +712,9 @@ Que hacer:
 
     Write-Host ''
     Write-Host 'Base de datos preparada correctamente.' -ForegroundColor Green
-    Write-Host ("Anote estos valores para .env.produccion: BD_NOMBRE={0}, BD_USUARIO={1}" -f $BaseDatos, $UsuarioAplicacion)
+    if (-not $SoloScripts) {
+        Write-Host ("Anote estos valores para .env.produccion: BD_NOMBRE={0}, BD_USUARIO={1}" -f $BaseDatos, $UsuarioAplicacion)
+    }
     exit 0
 
 } catch {
