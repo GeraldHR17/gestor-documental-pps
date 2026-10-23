@@ -401,7 +401,7 @@ export class CategoriasItspService {
     }
 
     const codigoRaiz =
-      todas.find((otra) => otra.idCategoriaItsp === idCategoriaPadre)?.codigo?.trim() ?? '';
+      todas.find((otra) => otra.idCategoriaItsp === idCategoriaPadre)?.codigo.trim() ?? '';
     if (codigoRaiz === '') {
       // Sólo antes de la migración 10, que rellena los códigos vacíos.
       throw new CategoriaPadreInvalidaException(

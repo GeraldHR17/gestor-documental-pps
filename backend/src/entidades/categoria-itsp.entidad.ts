@@ -30,14 +30,15 @@ export class CategoriaItsp {
   })
   idCategoriaPadre: number | null;
 
+  // NOT NULL desde 10-codigos-categorias-autogenerados.sql: lo asigna
+  // CategoriasItspService y forma parte de la URL pública.
   @Column({
     name: 'codigo',
     type: 'varchar',
     length: 50,
-    nullable: true,
     unique: true,
   })
-  codigo: string | null;
+  codigo: string;
 
   @Column({
     name: 'nombre',

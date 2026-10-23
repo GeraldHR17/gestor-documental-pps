@@ -3,7 +3,7 @@
 /** Fila de la lista plana. Ya viene ordenada para pintarse con indentación. */
 export class CategoriaItspRespuestaDto {
   id: number;
-  codigo: string | null;
+  codigo: string;
   nombre: string;
   descripcion: string | null;
   nivel: number;
@@ -26,7 +26,7 @@ export class CategoriaItspRespuestaDto {
  */
 export class CategoriaItspNodoArbolDto {
   id: number;
-  codigo: string | null;
+  codigo: string;
   nombre: string;
   descripcion: string | null;
   nivel: number;

@@ -33,7 +33,7 @@ function categoria(datos: Partial<CategoriaItsp>): CategoriaItsp {
   return {
     idCategoriaItsp: 0,
     idCategoriaPadre: null,
-    codigo: null,
+    codigo: '',
     nombre: '',
     descripcion: null,
     nivel: 1,

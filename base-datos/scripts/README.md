@@ -15,6 +15,18 @@ al crearse por primera vez el volumen `mysql_data` del contenedor MySQL.
 | `06-usuario-superadministrador.sql`  | Fase 4: usuario semilla para el primer inicio de sesión         |
 | `07-datos-catalogos-fase5.sql`       | Fase 5: 30 tipos de documento (dependencias y etiquetas vacías) |
 | `08-ajuste-dependencia-y-paginas.sql`| Pulido F6: dependencia única (1:N) en documentos y usuarios, `numero_paginas` |
+| `09-permiso-reportes.sql`            | MF-08: permiso `reportes.consultar`                             |
+| `10-codigos-categorias-autogenerados.sql` | Rellena los códigos de categoría nulos o vacíos y aplica `NOT NULL` (aborta si hay duplicados) |
+
+## Diagnóstico (`diagnostico/`, solo lectura)
+
+Los scripts de `diagnostico/` **no** se aplican ni se registran: están
+fuera de `init/` a propósito, porque `preparar-base-datos.ps1` aplica todo
+lo que hay ahí. Solo hacen `SELECT`.
+
+| Archivo                                   | Para qué                                                         |
+|-------------------------------------------|------------------------------------------------------------------|
+| `10-diagnostico-codigos-categorias.sql`   | Antes de la migración 10: nulos, irregulares, duplicados y vista previa de los códigos. Se ejecuta con `despliegue/diagnosticar-codigos-categorias.ps1`. |
 
 ### Credenciales del usuario semilla
 
