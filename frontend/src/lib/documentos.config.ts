@@ -19,6 +19,14 @@ export const TAMANO_MAXIMO_ARCHIVO_MB = TAMANO_MAXIMO_ARCHIVO_BYTES / (1024 * 10
  */
 export const CODIGO_CATEGORIA_RAIZ_EXCLUIDA = 'ITSP-03';
 
+/**
+ * Niveles que admite la jerarquía de categorías, contando la raíz. Es el
+ * mismo tope que impone el backend (PROFUNDIDAD_MAXIMA_CATEGORIAS en
+ * backend/src/comun/constantes/categorias-itsp.ts): si cambia allá, cambia
+ * aquí. El formulario lo usa para no ofrecer un padre que lo superaría.
+ */
+export const PROFUNDIDAD_MAXIMA_CATEGORIAS = 10;
+
 export const ETIQUETAS_ESTADO_DOCUMENTO = {
   BORRADOR: 'Borrador',
   PUBLICADO: 'Publicado',

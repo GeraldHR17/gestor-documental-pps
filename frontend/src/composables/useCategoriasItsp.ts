@@ -2,6 +2,7 @@
 
 import { computed, reactive, toRefs } from 'vue';
 import { categoriasItspService } from '@/services/catalogos.service';
+import { JerarquiaCategorias } from '@/lib/categorias';
 import type {
   CategoriaItspDto,
   EstadoCatalogo,
@@ -10,7 +11,15 @@ import type {
 } from '@/types/catalogo.types';
 
 interface EstadoCategorias {
+  /** Las filas que pide la pantalla, con sus filtros. */
   categorias: CategoriaItspDto[];
+  /**
+   * El catálogo entero, sin filtros. Con N niveles, preguntas como «¿tiene
+   * una superior inactiva?» o «¿cuáles son sus subcategorías?» necesitan el
+   * árbol completo aunque la tabla muestre solo lo que coincide con la
+   * búsqueda (spec-ajustes-niveles-y-estados).
+   */
+  todas: CategoriaItspDto[];
   cargando: boolean;
   error: string | null;
 }
@@ -18,6 +27,7 @@ interface EstadoCategorias {
 export function useCategoriasItsp() {
   const estado = reactive<EstadoCategorias>({
     categorias: [],
+    todas: [],
     cargando: false,
     error: null,
   });
@@ -26,10 +36,16 @@ export function useCategoriasItsp() {
     estado.cargando = true;
     estado.error = null;
     try {
-      // El backend ya devuelve la lista en orden de despliegue (cada raíz
-      // seguida de sus subsecciones), así que la tabla sólo tiene que
-      // indentar según el nivel.
-      estado.categorias = await categoriasItspService.listar(filtros);
+      // El backend ya devuelve la lista en orden de despliegue (cada nodo
+      // seguido de su subárbol), así que la tabla sólo tiene que indentar
+      // según el nivel. Sin filtros, la misma respuesta sirve de árbol.
+      const conFiltros = Object.values(filtros).some((valor) => valor !== undefined && valor !== '');
+      const [filas, todas] = await Promise.all([
+        categoriasItspService.listar(filtros),
+        conFiltros ? categoriasItspService.listar() : null,
+      ]);
+      estado.categorias = filas;
+      estado.todas = todas ?? filas;
     } catch (error) {
       estado.error = 'No se pudo cargar el catálogo de categorías ITSP';
       throw error;
@@ -38,10 +54,7 @@ export function useCategoriasItsp() {
     }
   }
 
-  /** Sólo las raíces pueden ser categoría padre: la jerarquía es de dos niveles. */
-  const categoriasRaiz = computed(() =>
-    estado.categorias.filter((categoria) => categoria.idCategoriaPadre === null),
-  );
+  const jerarquia = computed(() => new JerarquiaCategorias(estado.todas));
 
   // Devuelven la categoría guardada porque el código lo asigna el backend:
   // el formulario lo necesita para decir cuál quedó.
@@ -59,13 +72,18 @@ export function useCategoriasItsp() {
 
   async function cambiarEstado(id: number, nuevoEstado: EstadoCatalogo): Promise<void> {
     await categoriasItspService.cambiarEstado(id, nuevoEstado);
-    const categoria = estado.categorias.find((fila) => fila.id === id);
-    if (categoria) categoria.estado = nuevoEstado;
+    // Las dos listas pueden ser objetos distintos (si la tabla está
+    // filtrada): se actualizan ambas para que el estado efectivo de las
+    // subcategorías se recalcule al momento.
+    for (const lista of [estado.categorias, estado.todas]) {
+      const categoria = lista.find((fila) => fila.id === id);
+      if (categoria) categoria.estado = nuevoEstado;
+    }
   }
 
   return {
     ...toRefs(estado),
-    categoriasRaiz,
+    jerarquia,
     listar,
     crear,
     actualizar,

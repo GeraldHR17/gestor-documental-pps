@@ -11,6 +11,7 @@ import { useNotificaciones } from '@/composables/useNotificaciones';
 import { useAutenticacion } from '@/composables/useAutenticacion';
 import ModalConfirmacion from '@/components/ModalConfirmacion.vue';
 import BadgeEstadoDocumento from '@/components/BadgeEstadoDocumento.vue';
+import SelectorBusqueda, { type OpcionBusqueda } from '@/components/SelectorBusqueda.vue';
 import { bloquearNegativos } from '@/lib/validaciones';
 import { ETIQUETAS_ESTADO_DOCUMENTO, formatearFecha } from '@/lib/documentos.config';
 import { TRANSICIONES_PERMITIDAS } from '@/services/documentos.service';
@@ -91,13 +92,17 @@ function irAPagina(destino: number): void {
   recargar();
 }
 
-/** Opciones planas del filtro de categoría: raíces y subsecciones indentadas. */
-const opcionesCategoria = computed(() =>
-  clasificacion.arbolCategorias.value.flatMap((raiz) => [
-    { id: raiz.id, etiqueta: raiz.nombre },
-    ...raiz.hijos.map((hijo) => ({ id: hijo.id, etiqueta: `\u00A0\u00A0\u00A0\u00A0${hijo.nombre}` })),
-  ]),
-);
+/**
+ * Filtro de categoría de cualquier nivel, con la ruta completa. Filtra por
+ * esa categoría exacta, no por su subárbol (spec D-19), igual que la API.
+ */
+function buscarCategoriasFiltro(texto: string): Promise<OpcionBusqueda[]> {
+  return Promise.resolve(clasificacion.buscarEn(clasificacion.opcionesFiltro.value, texto));
+}
+
+function resolverRutaFiltro(id: number): Promise<string | null> {
+  return Promise.resolve(clasificacion.rutaDe(id));
+}
 
 // ---------- Transiciones de estado ----------
 
@@ -209,17 +214,14 @@ onMounted(() => {
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-gutter-sm">
-        <select
-          v-if="opcionesCategoria.length"
+        <SelectorBusqueda
+          v-if="clasificacion.opcionesFiltro.value.length"
           v-model="filtroCategoria"
-          aria-label="Filtrar por categoría ITSP"
-          class="h-touch-target px-3 rounded-secondary border border-outline bg-surface-container-lowest text-on-surface font-body-md text-body-md"
-        >
-          <option :value="null">Todas las categorías</option>
-          <option v-for="opcion in opcionesCategoria" :key="opcion.id" :value="opcion.id">
-            {{ opcion.etiqueta }}
-          </option>
-        </select>
+          etiqueta-accesible="Filtrar por categoría ITSP"
+          placeholder="Todas las categorías"
+          :buscar="buscarCategoriasFiltro"
+          :resolver-etiqueta="resolverRutaFiltro"
+        />
 
         <select
           v-if="clasificacion.tiposDocumentos.value.length"

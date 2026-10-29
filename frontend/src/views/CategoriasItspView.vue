@@ -1,19 +1,25 @@
 <script setup lang="ts">
 // Catálogo de la taxonomía ITSP. A diferencia de los tres catálogos planos,
-// aquí la tabla refleja la jerarquía con indentación (nivel 1 = raíz,
-// nivel 2 = subsección). No hay árbol arrastrable: la relación se cambia
-// desde el selector de "categoría padre" del formulario.
+// aquí la tabla refleja la jerarquía con indentación: un escalón por nivel,
+// hasta 10 (spec-ajustes-niveles-y-estados, D-20). No hay árbol
+// arrastrable: la relación se cambia desde el selector de "categoría
+// superior" del formulario.
+//
+// El estado que se ve es el EFECTIVO: una categoría activa bajo una
+// superior inactiva se muestra Inactiva, con la aclaración «por una
+// categoría superior», sin que cambie su estado propio. Al reactivar la
+// superior vuelve a verse activa (ajuste 1 de la Fase 2, D-25).
 //
 // El backend ya devuelve las filas en orden de despliegue, así que esta
 // vista sólo indenta, no reordena.
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useCategoriasItsp } from '@/composables/useCategoriasItsp';
 import { useNotificaciones } from '@/composables/useNotificaciones';
 import ModalConfirmacion from '@/components/ModalConfirmacion.vue';
 import BadgeEstadoRegistro from '@/components/BadgeEstadoRegistro.vue';
 import type { CategoriaItspDto, EstadoCatalogo } from '@/types/catalogo.types';
 
-const { categorias, cargando, error, listar, cambiarEstado } = useCategoriasItsp();
+const { categorias, jerarquia, cargando, error, listar, cambiarEstado } = useCategoriasItsp();
 const { notificarExito, notificarError } = useNotificaciones();
 
 const textoBusqueda = ref('');
@@ -37,6 +43,26 @@ function manejarBuscar(): void {
 }
 
 watch(estadoFiltro, recargar);
+
+/** Activa por sí misma, pero apagada por una superior inactiva. */
+function inactivaPorSuperior(categoria: CategoriaItspDto): boolean {
+  return jerarquia.value.inactivaPorSuperior(categoria.id);
+}
+
+function estadoVisible(categoria: CategoriaItspDto): EstadoCatalogo {
+  return inactivaPorSuperior(categoria) ? 'INACTIVO' : categoria.estado;
+}
+
+function etiquetaNivel(nivel: number): string {
+  return nivel === 1 ? 'Raíz' : `Nivel ${nivel}`;
+}
+
+/** Subcategorías que dejarán de verse en el portal al inactivar esta. */
+const subcategoriasAfectadas = computed(() => {
+  const categoria = categoriaPendienteDeConfirmar.value;
+  if (!categoria || categoria.estado !== 'ACTIVO') return 0;
+  return jerarquia.value.descendientes(categoria.id).length;
+});
 
 async function confirmarCambioEstado(): Promise<void> {
   const categoria = categoriaPendienteDeConfirmar.value;
@@ -82,7 +108,7 @@ onMounted(recargar);
         </h1>
         <p class="font-body-lg text-body-lg text-secondary mt-2">
           Administre la taxonomía del Índice de Transparencia del Sector Público: categorías raíz y
-          sus subsecciones.
+          sus subcategorías, hasta 10 niveles.
         </p>
       </div>
       <router-link
@@ -165,17 +191,17 @@ onMounted(recargar);
                 v-for="categoria in categorias"
                 :key="categoria.id"
                 class="hover:bg-surface-container-low transition-colors"
-                :class="{ '[&>td:not(.celda-estado)]:opacity-60': categoria.estado === 'INACTIVO' }"
+                :class="{ '[&>td:not(.celda-estado)]:opacity-60': estadoVisible(categoria) === 'INACTIVO' }"
               >
                 <td class="py-gutter-sm px-gutter-lg">
-                  <!-- La indentación es lo que comunica la jerarquía: las
-                       subsecciones entran un nivel y llevan un conector. -->
+                  <!-- La indentación es lo que comunica la jerarquía: cada
+                       nivel entra un escalón y lleva un conector. -->
                   <div
                     class="flex items-center gap-2 min-h-list-row"
-                    :class="categoria.nivel === 2 ? 'pl-gutter-lg' : ''"
+                    :style="{ paddingLeft: `calc(${categoria.nivel - 1} * var(--spacing-gutter-lg))` }"
                   >
                     <span
-                      v-if="categoria.nivel === 2"
+                      v-if="categoria.nivel > 1"
                       aria-hidden="true"
                       class="material-symbols-outlined text-[18px] text-tertiary"
                       >subdirectory_arrow_right</span
@@ -193,10 +219,16 @@ onMounted(recargar);
                   {{ categoria.codigo }}
                 </td>
                 <td class="py-gutter-sm px-gutter-lg text-secondary whitespace-nowrap">
-                  {{ categoria.nivel === 1 ? 'Raíz' : 'Subsección' }}
+                  {{ etiquetaNivel(categoria.nivel) }}
                 </td>
                 <td class="celda-estado py-gutter-sm px-gutter-lg">
-                  <BadgeEstadoRegistro :estado="categoria.estado" />
+                  <BadgeEstadoRegistro :estado="estadoVisible(categoria)" />
+                  <span
+                    v-if="inactivaPorSuperior(categoria)"
+                    class="block mt-1 font-body-md text-body-md text-secondary whitespace-nowrap"
+                  >
+                    por una categoría superior
+                  </span>
                 </td>
                 <td class="py-gutter-sm px-gutter-lg text-right space-x-1 whitespace-nowrap">
                   <router-link
@@ -245,6 +277,14 @@ onMounted(recargar);
       {{ categoriaPendienteDeConfirmar.estado === 'ACTIVO' ? 'inactivar' : 'activar' }}
       <strong class="text-on-surface">{{ categoriaPendienteDeConfirmar.nombre }}</strong
       >?
+      <template v-if="subcategoriasAfectadas === 1">
+        Su subcategoría se verá inactiva y dejará de mostrarse en el portal, sin perder su estado
+        propio.
+      </template>
+      <template v-else-if="subcategoriasAfectadas > 1">
+        Sus {{ subcategoriasAfectadas }} subcategorías se verán inactivas y dejarán de mostrarse en
+        el portal, sin perder su estado propio.
+      </template>
     </ModalConfirmacion>
   </div>
 </template>

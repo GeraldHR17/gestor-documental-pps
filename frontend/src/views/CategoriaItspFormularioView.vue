@@ -1,21 +1,26 @@
 <script setup lang="ts">
 // Formulario de categoría ITSP. Lo propio frente a los catálogos planos es
 // el selector de "categoría padre": al crear, dejarlo vacío crea una
-// categoría raíz y elegir una raíz crea una subsección. El nivel no se pide
-// nunca, lo deriva el backend del padre, así que aquí no hay campo para él.
+// categoría raíz y elegir cualquier otra crea una subcategoría debajo,
+// hasta PROFUNDIDAD_MAXIMA_CATEGORIAS niveles. El nivel no se pide nunca,
+// lo deriva el backend del padre, así que aquí no hay campo para él.
 //
-// El código tampoco se escribe: lo asigna el backend (máximo + 1 de su
-// nivel) y forma parte de la URL pública que se pega en WordPress. Al crear
+// El código tampoco se escribe: lo asigna el backend (código del padre +
+// "-MM") y forma parte de la URL pública que se pega en WordPress. Al crear
 // sólo se muestra el previsto; al editar se ve en solo lectura. Por la
-// misma razón, al editar una raíz no se ofrece padre, y al editar una
-// subsección sólo se puede mover a otra raíz, avisando antes de que su
-// código y su URL cambiarán (spec-ajustes-posdespliegue §9.1, RF-8 a RF-10).
+// misma razón, al editar una raíz no se ofrece padre, y una subcategoría
+// puede moverse bajo cualquier otra categoría salvo ella misma y su
+// subárbol, avisando antes de cuántas direcciones públicas cambiarán
+// (spec-ajustes-posdespliegue §9.1; spec-ajustes-niveles-y-estados D-18).
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { onBeforeRouteLeave, useRouter } from 'vue-router';
 import { useCategoriasItsp } from '@/composables/useCategoriasItsp';
 import { categoriasItspService } from '@/services/catalogos.service';
 import { useNotificaciones, obtenerMensajeError } from '@/composables/useNotificaciones';
 import ModalConfirmacion from '@/components/ModalConfirmacion.vue';
+import SelectorBusqueda, { type OpcionBusqueda } from '@/components/SelectorBusqueda.vue';
+import { PROFUNDIDAD_MAXIMA_CATEGORIAS } from '@/lib/documentos.config';
+import { normalizarParaBuscar } from '@/lib/categorias';
 import type { GuardarCategoriaItspDto } from '@/types/catalogo.types';
 import {
   bloquearNegativos,
@@ -30,7 +35,7 @@ const LONGITUD_MAXIMA_NOMBRE = 200;
 const props = defineProps<{ id?: string }>();
 const router = useRouter();
 
-const { categoriasRaiz, listar, crear, actualizar, obtenerSiguienteCodigo } = useCategoriasItsp();
+const { jerarquia, listar, crear, actualizar, obtenerSiguienteCodigo } = useCategoriasItsp();
 const { notificarExito, notificarError } = useNotificaciones();
 
 const modoEdicion = computed(() => props.id !== undefined);
@@ -83,6 +88,7 @@ async function actualizarCodigoPrevisto(): Promise<void> {
 }
 
 watch(idCategoriaPadre, () => {
+  marcarTocado('padre');
   if (!modoEdicion.value) void actualizarCodigoPrevisto();
 });
 
@@ -96,22 +102,74 @@ function sanearOrden(evento: Event): void {
 }
 
 /**
- * Sólo raíces: la jerarquía es de dos niveles. Al editar, la propia
- * categoría nunca aparece, porque una raíz no tiene selector y una
- * subsección no es raíz. El servidor aplica las mismas reglas; se filtran
- * aquí para que la persona no las descubra por un error.
+ * Por qué una categoría no puede ser la superior de esta, o `null` si
+ * puede. Son las reglas del servidor: ni ella misma ni su subárbol, y sin
+ * pasar del tope contando los niveles que trae consigo (al editar, su
+ * altura). Se muestran aquí para que la persona no las descubra por un
+ * error; las inactivas sí se ofrecen (D-18).
  */
-const opcionesCategoriaPadre = computed(() =>
-  categoriasRaiz.value.filter((categoria) => categoria.id !== idCategoria.value),
+function motivoPadreNoValido(idDestino: number): string | null {
+  const j = jerarquia.value;
+  const propia = modoEdicion.value ? idCategoria.value : null;
+  if (propia !== null && j.estaEnSubarbol(idDestino, propia)) {
+    return 'es esta misma categoría o una de sus subcategorías';
+  }
+  const nivelesQueOcupa = propia !== null ? j.altura(propia) : 1;
+  if (j.profundidad(idDestino) + nivelesQueOcupa > PROFUNDIDAD_MAXIMA_CATEGORIAS) {
+    return `se superaría el máximo de ${PROFUNDIDAD_MAXIMA_CATEGORIAS} niveles`;
+  }
+  return null;
+}
+
+const opcionesCategoriaPadre = computed<OpcionBusqueda[]>(() =>
+  jerarquia.value.ordenDeDespliegue().map((categoria) => {
+    const motivo = motivoPadreNoValido(categoria.id);
+    return {
+      id: categoria.id,
+      etiqueta: jerarquia.value.rutaComoTexto(categoria.id),
+      detalle: categoria.estado === 'ACTIVO' ? categoria.codigo : `${categoria.codigo} · inactiva`,
+      ...(motivo ? { deshabilitada: true, motivo } : {}),
+    };
+  }),
+);
+
+function buscarCategoriaPadre(texto: string): Promise<OpcionBusqueda[]> {
+  const termino = normalizarParaBuscar(texto);
+  return Promise.resolve(
+    termino
+      ? opcionesCategoriaPadre.value.filter(
+          (opcion) =>
+            normalizarParaBuscar(opcion.etiqueta).includes(termino) ||
+            normalizarParaBuscar(opcion.detalle ?? '').includes(termino),
+        )
+      : opcionesCategoriaPadre.value,
+  );
+}
+
+function resolverRutaPadre(id: number): Promise<string | null> {
+  return Promise.resolve(jerarquia.value.obtener(id) ? jerarquia.value.rutaComoTexto(id) : null);
+}
+
+/** Nivel en el que quedará la categoría con el padre elegido. */
+const nivelResultante = computed(() =>
+  idCategoriaPadre.value === null ? 1 : jerarquia.value.profundidad(idCategoriaPadre.value) + 1,
+);
+
+/** Al editar: cuántas subcategorías se mueven con ella (y cambian de URL). */
+const subcategoriasQueSeMueven = computed(() =>
+  modoEdicion.value && idCategoria.value !== null
+    ? jerarquia.value.descendientes(idCategoria.value).length
+    : 0,
 );
 
 // ---------- Validación en tiempo real ----------
 
-type CampoValidado = 'nombre' | 'descripcion';
+type CampoValidado = 'nombre' | 'descripcion' | 'padre';
 
 const camposTocados = reactive<Record<CampoValidado, boolean>>({
   nombre: false,
   descripcion: false,
+  padre: false,
 });
 
 function marcarTocado(campo: CampoValidado): void {
@@ -121,7 +179,20 @@ function marcarTocado(campo: CampoValidado): void {
 const errores = computed<Record<CampoValidado, string | null>>(() => ({
   nombre: validarNombreCatalogo(nombre.value, LONGITUD_MAXIMA_NOMBRE),
   descripcion: validarDescripcionCatalogo(descripcion.value),
+  padre: validarPadre(),
 }));
+
+function validarPadre(): string | null {
+  if (esRaizEnEdicion.value) return null;
+  if (idCategoriaPadre.value === null) {
+    // Una subcategoría no pasa a raíz (ni al revés): su código cambiaría de forma.
+    return modoEdicion.value
+      ? 'Una subcategoría no puede pasar a ser raíz: elija su categoría superior.'
+      : null;
+  }
+  const motivo = motivoPadreNoValido(idCategoriaPadre.value);
+  return motivo ? `No se puede elegir esa categoría: ${motivo}.` : null;
+}
 
 function errorVisible(campo: CampoValidado): string | null {
   return camposTocados[campo] ? errores.value[campo] : null;
@@ -181,8 +252,8 @@ async function cargarDatosIniciales(): Promise<void> {
   cargando.value = true;
   error.value = null;
   try {
-    // La lista completa hace falta para llenar el desplegable de categoría
-    // padre con las raíces.
+    // La lista completa hace falta para el selector de categoría padre y
+    // para saber qué subcategorías se moverían con esta.
     await listar();
 
     if (modoEdicion.value && idCategoria.value !== null) {
@@ -208,17 +279,25 @@ async function cargarDatosIniciales(): Promise<void> {
 const mostrarModalGuardar = ref(false);
 const preparandoGuardado = ref(false);
 
-/** Al mover una subsección: el código que tendría en la raíz nueva. */
+/** Al mover una subcategoría: el código que tendría bajo la superior nueva. */
 const codigoNuevoPrevisto = ref<string | null>(null);
 
 const tituloModalGuardar = computed(() => {
-  if (cambiaDePadre.value) return 'Mover subsección';
+  if (cambiaDePadre.value) return 'Mover categoría';
   return modoEdicion.value ? 'Guardar cambios' : 'Crear categoría';
 });
 const mensajeModalGuardar = computed(() => {
   if (cambiaDePadre.value) {
-    // Texto de RF-10, con los códigos reales.
-    return `El código y la URL cambiarán de ${codigoActual.value} a ${codigoNuevoPrevisto.value}; el enlace en WordPress deberá actualizarse.`;
+    // Texto de RF-10, con los códigos reales y cuántas direcciones cambian
+    // (el subárbol entero se recodifica con ella).
+    const cambio = `El código y la URL cambiarán de ${codigoActual.value} a ${codigoNuevoPrevisto.value}`;
+    const subcategorias = subcategoriasQueSeMueven.value;
+    if (subcategorias === 0) return `${cambio}; el enlace en WordPress deberá actualizarse.`;
+    const arrastre =
+      subcategorias === 1
+        ? 'y también los de su subcategoría'
+        : `y también los de sus ${subcategorias} subcategorías`;
+    return `${cambio}, ${arrastre}: cambiarán ${subcategorias + 1} direcciones públicas en total. Los enlaces en WordPress deberán actualizarse.`;
   }
   return modoEdicion.value
     ? '¿Confirma que desea guardar los cambios de esta categoría?'
@@ -230,12 +309,12 @@ async function solicitarGuardado(): Promise<void> {
 
   if (cambiaDePadre.value) {
     // El aviso necesita el código nuevo antes de guardar: lo calcula el
-    // servidor con las subsecciones actuales de la raíz destino.
+    // servidor con las hijas actuales de la categoría destino.
     preparandoGuardado.value = true;
     try {
       codigoNuevoPrevisto.value = await obtenerSiguienteCodigo(idCategoriaPadre.value);
     } catch (err) {
-      notificarError(err, 'No se pudo calcular el código nuevo de la subsección.');
+      notificarError(err, 'No se pudo calcular el código nuevo de la categoría.');
       return;
     } finally {
       preparandoGuardado.value = false;
@@ -254,8 +333,8 @@ function construirDatos(): GuardarCategoriaItspDto {
     orden: Number.isFinite(orden.value) ? orden.value : 0,
   };
   // Al crear, el padre decide el nivel. Al editar sólo se envía si la
-  // subsección cambió de raíz: así la bitácora no lo anota como cambiado
-  // cuando no lo fue.
+  // subcategoría cambió de superior: así la bitácora no lo anota como
+  // cambiado cuando no lo fue.
   if (!modoEdicion.value || cambiaDePadre.value) {
     datos.idCategoriaPadre = idCategoriaPadre.value;
   }
@@ -272,11 +351,13 @@ async function confirmarGuardado(): Promise<void> {
     let mensajeExito: string;
     if (modoEdicion.value && idCategoria.value !== null) {
       const movida = cambiaDePadre.value;
+      const subcategorias = subcategoriasQueSeMueven.value;
       const guardada = await actualizar(idCategoria.value, datos);
       // El código final puede no ser el previsto si otra persona guardó
-      // una subsección en esa raíz entre medio: se informa el real.
+      // una categoría en ese destino entre medio: se informa el real.
+      const arrastre = subcategorias > 0 ? ' (también cambiaron los de sus subcategorías)' : '';
       mensajeExito = movida
-        ? `Cambios guardados. El nuevo código es ${guardada.codigo}: actualice el enlace en WordPress.`
+        ? `Cambios guardados. El nuevo código es ${guardada.codigo}${arrastre}: actualice los enlaces en WordPress.`
         : 'Cambios guardados correctamente.';
     } else {
       const creada = await crear(datos);
@@ -320,7 +401,7 @@ onMounted(cargarDatosIniciales);
       </h1>
       <p v-if="!modoEdicion" class="font-body-lg text-body-lg text-secondary mt-2">
         Deje la categoría padre vacía para crear una categoría raíz, o elija una para crear una
-        subsección.
+        subcategoría debajo (hasta {{ PROFUNDIDAD_MAXIMA_CATEGORIAS }} niveles).
       </p>
     </div>
 
@@ -424,36 +505,51 @@ onMounted(cargarDatosIniciales);
       <div v-if="esRaizEnEdicion">
         <p class="block font-body-md text-body-md text-on-surface mb-2">Categoría padre</p>
         <p class="font-body-md text-body-md text-secondary">
-          Es una categoría raíz. No puede convertirse en subsección: su código y su dirección pública
-          dejarían de tener sentido.
+          Es una categoría raíz. No puede convertirse en subcategoría: su código y su dirección
+          pública dejarían de tener sentido.
         </p>
       </div>
       <div v-else>
         <label for="idCategoriaPadre" class="block font-body-md text-body-md text-on-surface mb-2">
           Categoría padre
         </label>
-        <select
-          id="idCategoriaPadre"
+        <!-- Vacío = «Ninguna»: al crear, es una raíz; al editar una
+             subcategoría no se admite (no pasa a raíz) y lo dice el error. -->
+        <SelectorBusqueda
           v-model="idCategoriaPadre"
-          aria-describedby="ayuda-padre"
-          class="w-full h-touch-target px-3 rounded-secondary border border-outline bg-surface-container-lowest text-on-surface font-body-md text-body-md disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          <!-- Una subsección no puede pasar a raíz: al editarla no hay "ninguna". -->
-          <option v-if="!modoEdicion" :value="null">Ninguna — es una categoría raíz</option>
-          <option v-for="raiz in opcionesCategoriaPadre" :key="raiz.id" :value="raiz.id">
-            {{ raiz.nombre }}
-          </option>
-        </select>
+          id-entrada="idCategoriaPadre"
+          etiqueta-accesible="Categoría padre"
+          :placeholder="
+            modoEdicion
+              ? 'Escriba para buscar la categoría superior'
+              : 'Ninguna — es una categoría raíz. Escriba para buscar una superior'
+          "
+          :buscar="buscarCategoriaPadre"
+          :resolver-etiqueta="resolverRutaPadre"
+        />
         <p
-          v-if="cambiaDePadre"
+          v-if="errorVisible('padre')"
+          id="ayuda-padre"
+          class="font-body-md text-body-md text-error mt-2"
+        >
+          {{ errorVisible('padre') }}
+        </p>
+        <p
+          v-else-if="cambiaDePadre"
           id="ayuda-padre"
           class="font-body-md text-body-md text-on-surface mt-2"
         >
-          Al moverla a otra categoría raíz cambiarán su código y su dirección pública. Antes de
-          guardar se mostrará el código nuevo.
+          Al moverla cambiarán su código y su dirección pública<template
+            v-if="subcategoriasQueSeMueven > 0"
+            >, y los de sus {{ subcategoriasQueSeMueven }}
+            {{ subcategoriasQueSeMueven === 1 ? 'subcategoría' : 'subcategorías' }}</template
+          >. Quedará en el nivel {{ nivelResultante }}. Antes de guardar se mostrará el código
+          nuevo.
         </p>
         <p v-else id="ayuda-padre" class="font-body-md text-body-md text-secondary mt-2">
-          Sólo las categorías raíz pueden aparecer en esta lista.
+          Quedará en el nivel {{ nivelResultante }} de {{ PROFUNDIDAD_MAXIMA_CATEGORIAS }}. Se
+          muestra la ruta completa; las que no se pueden elegir aparecen deshabilitadas con el
+          motivo.
         </p>
       </div>
 

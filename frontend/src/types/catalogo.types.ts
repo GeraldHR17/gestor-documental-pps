@@ -30,14 +30,14 @@ export interface FiltrosCatalogoDto {
 export interface CategoriaItspDto {
   id: number;
   /**
-   * Lo asigna el backend (máximo + 1 de su nivel) y forma parte de la URL
-   * pública: `/vista/itsp-05`. No se edita; sólo cambia cuando una
-   * subsección se mueve a otra raíz.
+   * Lo asigna el backend (código del padre + "-MM") y forma parte de la URL
+   * pública: `/vista/itsp-05`. No se edita; sólo cambia cuando la categoría
+   * o una superior se mueve de lugar.
    */
   codigo: string;
   nombre: string;
   descripcion: string | null;
-  /** 1 = categoría raíz, 2 = subsección. Lo deriva el backend del padre. */
+  /** 1 = categoría raíz, hasta PROFUNDIDAD_MAXIMA_CATEGORIAS. Lo deriva el backend del padre. */
   nivel: number;
   orden: number;
   estado: EstadoCatalogo;
@@ -45,7 +45,7 @@ export interface CategoriaItspDto {
   nombreCategoriaPadre: string | null;
 }
 
-/** Nodo de `GET /categorias-itsp/arbol`: raíces con sus subsecciones anidadas. */
+/** Nodo de `GET /categorias-itsp/arbol`: raíces con sus subcategorías anidadas, a cualquier profundidad. */
 export interface CategoriaItspNodoArbolDto {
   id: number;
   codigo: string;
@@ -62,8 +62,9 @@ export interface GuardarCategoriaItspDto {
   nombre: string;
   descripcion?: string;
   /**
-   * Al crear, `null` = categoría raíz. Al editar sólo sirve para mover una
-   * subsección a otra raíz: una raíz no puede pasar a subsección ni al revés.
+   * Al crear, `null` = categoría raíz. Al editar sirve para mover una
+   * subcategoría (con su subárbol) bajo otra categoría: una raíz no puede
+   * pasar a subcategoría ni al revés.
    */
   idCategoriaPadre?: number | null;
   orden?: number;

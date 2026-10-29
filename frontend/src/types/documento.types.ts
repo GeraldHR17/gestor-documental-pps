@@ -40,6 +40,11 @@ export interface DocumentoDto {
   nombreCategoriaItsp: string;
   /** Raíz de la categoría; `null` cuando la categoría ya es una raíz. */
   nombreCategoriaRaiz: string | null;
+  /**
+   * Nombres de las categorías superiores, de la raíz al padre; vacío si es
+   * una raíz (spec-ajustes-niveles-y-estados, D-8).
+   */
+  rutaCategoria: string[];
 
   idTipoDocumento: number;
   nombreTipoDocumento: string;

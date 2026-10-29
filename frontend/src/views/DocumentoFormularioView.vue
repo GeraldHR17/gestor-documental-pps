@@ -13,6 +13,7 @@ import { useClasificacionDocumental } from '@/composables/useClasificacionDocume
 import { useNotificaciones, obtenerMensajeError } from '@/composables/useNotificaciones';
 import ModalConfirmacion from '@/components/ModalConfirmacion.vue';
 import SelectorMultiple from '@/components/SelectorMultiple.vue';
+import SelectorBusqueda, { type OpcionBusqueda } from '@/components/SelectorBusqueda.vue';
 import documentosService from '@/services/documentos.service';
 import {
   LONGITUD_MAXIMA_DESCRIPCION_DOCUMENTO,
@@ -39,39 +40,21 @@ const error = ref<string | null>(null);
 const titulo = ref('');
 const descripcion = ref('');
 const anio = ref(String(new Date().getFullYear()));
-const idCategoriaRaiz = ref<number | null>(null);
-const idSubseccion = ref<number | null>(null);
+const idCategoria = ref<number | null>(null);
 const idTipoDocumento = ref<number | null>(null);
 const idDependencia = ref<number | null>(null);
 const etiquetas = ref<number[]>([]);
 
-const subseccionesDisponibles = computed(() =>
-  clasificacion.subseccionesDe(idCategoriaRaiz.value),
-);
-
-/**
- * La categoría que se guarda es la subsección cuando la raíz tiene
- * subsecciones, y la raíz misma cuando no las tiene.
- */
-const idCategoriaEfectiva = computed(() =>
-  subseccionesDisponibles.value.length > 0 ? idSubseccion.value : idCategoriaRaiz.value,
-);
-
-// Cambiar de raíz invalida la subsección elegida: pertenecía a la anterior.
-watch(idCategoriaRaiz, (nueva, anterior) => {
-  if (anterior !== null && nueva !== anterior) idSubseccion.value = null;
-});
 
 // ---------- Validación en tiempo real ----------
 
-type CampoValidado = 'titulo' | 'descripcion' | 'anio' | 'categoria' | 'subseccion' | 'tipo';
+type CampoValidado = 'titulo' | 'descripcion' | 'anio' | 'categoria' | 'tipo';
 
 const camposTocados = reactive<Record<CampoValidado, boolean>>({
   titulo: false,
   descripcion: false,
   anio: false,
   categoria: false,
-  subseccion: false,
   tipo: false,
 });
 
@@ -83,13 +66,32 @@ const errores = computed<Record<CampoValidado, string | null>>(() => ({
   titulo: validarTituloDocumento(titulo.value),
   descripcion: validarDescripcionDocumento(descripcion.value),
   anio: validarAnioDocumento(anio.value),
-  categoria: idCategoriaRaiz.value === null ? 'Debe seleccionar una categoría ITSP.' : null,
-  subseccion:
-    subseccionesDisponibles.value.length > 0 && idSubseccion.value === null
-      ? 'Debe seleccionar una subsección.'
-      : null,
+  categoria: validarCategoria(),
   tipo: idTipoDocumento.value === null ? 'Debe seleccionar un tipo documental.' : null,
 }));
+
+/**
+ * Una sola categoría, de cualquier nivel (spec-ajustes-niveles-y-estados
+ * §9.3): reemplaza la cascada raíz → subsección. Las que no admiten
+ * documentos aparecen deshabilitadas con el motivo.
+ */
+function validarCategoria(): string | null {
+  if (idCategoria.value === null) return 'Debe seleccionar una categoría ITSP.';
+  const motivo = clasificacion.motivoNoClasificable(idCategoria.value);
+  return motivo ? `Esta categoría no admite documentos: ${motivo}.` : null;
+}
+
+function buscarCategorias(texto: string): Promise<OpcionBusqueda[]> {
+  return Promise.resolve(
+    clasificacion.buscarEn(clasificacion.opcionesClasificacion.value, texto),
+  );
+}
+
+function resolverRutaCategoria(id: number): Promise<string | null> {
+  return Promise.resolve(clasificacion.rutaDe(id));
+}
+
+watch(idCategoria, () => marcarTocado('categoria'));
 
 function errorVisible(campo: CampoValidado): string | null {
   return camposTocados[campo] ? errores.value[campo] : null;
@@ -104,8 +106,7 @@ function instantaneaActual(): string {
     titulo: titulo.value,
     descripcion: descripcion.value,
     anio: anio.value,
-    idCategoriaRaiz: idCategoriaRaiz.value,
-    idSubseccion: idSubseccion.value,
+    idCategoria: idCategoria.value,
     idTipoDocumento: idTipoDocumento.value,
     idDependencia: idDependencia.value,
     etiquetas: [...etiquetas.value].sort((a, b) => a - b),
@@ -151,9 +152,7 @@ async function cargarDatosIniciales(): Promise<void> {
     idDependencia.value = documento.idDependencia;
     etiquetas.value = documento.etiquetas.map((fila) => fila.id);
 
-    const ubicacion = clasificacion.ubicarCategoria(documento.idCategoriaItsp);
-    idCategoriaRaiz.value = ubicacion.idRaiz;
-    idSubseccion.value = ubicacion.idSubseccion;
+    idCategoria.value = documento.idCategoriaItsp;
 
     valoresIniciales.value = instantaneaActual();
   } catch (err) {
@@ -171,7 +170,7 @@ function solicitarGuardado(): void {
 }
 
 async function confirmarGuardado(): Promise<void> {
-  if (idCategoriaEfectiva.value === null || idTipoDocumento.value === null) return;
+  if (idCategoria.value === null || idTipoDocumento.value === null) return;
 
   guardando.value = true;
   error.value = null;
@@ -181,7 +180,7 @@ async function confirmarGuardado(): Promise<void> {
       titulo: titulo.value.trim(),
       descripcion: descripcion.value.trim() || undefined,
       anio: Number(anio.value),
-      idCategoriaItsp: idCategoriaEfectiva.value,
+      idCategoriaItsp: idCategoria.value,
       idTipoDocumento: idTipoDocumento.value,
       idDependencia: idDependencia.value,
       etiquetas: etiquetas.value,
@@ -319,56 +318,24 @@ onMounted(cargarDatosIniciales);
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-gutter-lg">
-        <div>
-          <label for="categoria-raiz" class="block font-body-md text-body-md text-on-surface mb-2">
+        <div class="sm:col-span-2">
+          <label for="categoria" class="block font-body-md text-body-md text-on-surface mb-2">
             Categoría ITSP
           </label>
-          <select
-            id="categoria-raiz"
-            v-model="idCategoriaRaiz"
-            :aria-invalid="errorVisible('categoria') !== null"
-            class="w-full h-touch-target px-3 border rounded-primary bg-surface-container-lowest text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg"
-            :class="errorVisible('categoria') ? 'border-error' : 'border-outline focus:border-on-surface'"
-            @change="marcarTocado('categoria')"
-            @blur="marcarTocado('categoria')"
-          >
-            <option :value="null">Seleccione una categoría</option>
-            <option v-for="raiz in clasificacion.raicesSeleccionables.value" :key="raiz.id" :value="raiz.id">
-              {{ raiz.nombre }}
-            </option>
-          </select>
+          <SelectorBusqueda
+            v-model="idCategoria"
+            id-entrada="categoria"
+            etiqueta-accesible="Categoría ITSP"
+            placeholder="Escriba para buscar o elija de la lista"
+            :buscar="buscarCategorias"
+            :resolver-etiqueta="resolverRutaCategoria"
+          />
           <p v-if="errorVisible('categoria')" class="font-body-md text-body-md text-error mt-2">
             {{ errorVisible('categoria') }}
           </p>
-        </div>
-
-        <div>
-          <label for="subseccion" class="block font-body-md text-body-md text-on-surface mb-2">Subsección</label>
-          <select
-            id="subseccion"
-            v-model="idSubseccion"
-            :disabled="subseccionesDisponibles.length === 0"
-            :aria-invalid="errorVisible('subseccion') !== null"
-            class="w-full h-touch-target px-3 border rounded-primary bg-surface-container-lowest text-on-surface focus:border-2 focus:outline-none transition-colors font-body-lg text-body-lg disabled:opacity-60 disabled:cursor-not-allowed"
-            :class="errorVisible('subseccion') ? 'border-error' : 'border-outline focus:border-on-surface'"
-            @change="marcarTocado('subseccion')"
-            @blur="marcarTocado('subseccion')"
-          >
-            <option :value="null">
-              {{
-                idCategoriaRaiz === null
-                  ? 'Seleccione primero una categoría'
-                  : subseccionesDisponibles.length === 0
-                    ? 'Esta categoría no tiene subsecciones'
-                    : 'Seleccione una subsección'
-              }}
-            </option>
-            <option v-for="subseccion in subseccionesDisponibles" :key="subseccion.id" :value="subseccion.id">
-              {{ subseccion.nombre }}
-            </option>
-          </select>
-          <p v-if="errorVisible('subseccion')" class="font-body-md text-body-md text-error mt-2">
-            {{ errorVisible('subseccion') }}
+          <p v-else class="font-body-md text-body-md text-secondary mt-2">
+            Se muestra la ruta completa. Las categorías que no admiten documentos aparecen
+            deshabilitadas, con el motivo.
           </p>
         </div>
       </div>

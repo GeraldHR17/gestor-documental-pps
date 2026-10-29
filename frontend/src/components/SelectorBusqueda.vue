@@ -8,6 +8,11 @@
 // si hay un valor preseleccionado (por ejemplo desde la URL), la función
 // `resolverEtiqueta` para mostrar su nombre sin que la persona tenga que
 // volver a buscarlo.
+//
+// Una opción puede venir `deshabilitada` con su `motivo`: se ve en la
+// lista, pero no se puede elegir. Así quien busca una categoría que no
+// admite documentos entiende por qué, en vez de no encontrarla
+// (spec-ajustes-niveles-y-estados, ajuste 4).
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
 export interface OpcionBusqueda {
@@ -15,6 +20,10 @@ export interface OpcionBusqueda {
   etiqueta: string;
   /** Línea secundaria opcional, ej. el correo debajo del nombre. */
   detalle?: string;
+  /** Visible pero no elegible. */
+  deshabilitada?: boolean;
+  /** Por qué no se puede elegir; se muestra debajo. */
+  motivo?: string;
 }
 
 const props = withDefaults(
@@ -27,12 +36,15 @@ const props = withDefaults(
     deshabilitado?: boolean;
     /** Texto cuando está deshabilitado, ej. "Elija primero un tipo de entidad". */
     placeholderDeshabilitado?: string;
+    /** `id` de la entrada, para asociarla a un <label for>. */
+    idEntrada?: string;
   }>(),
   {
     placeholder: 'Escriba para buscar...',
     deshabilitado: false,
     resolverEtiqueta: undefined,
     placeholderDeshabilitado: undefined,
+    idEntrada: undefined,
   },
 );
 
@@ -84,6 +96,7 @@ function manejarFoco(): void {
 }
 
 function elegir(opcion: OpcionBusqueda): void {
+  if (opcion.deshabilitada) return;
   etiquetaSeleccionada.value = opcion.etiqueta;
   texto.value = '';
   opciones.value = [];
@@ -179,6 +192,7 @@ onBeforeUnmount(() => clearTimeout(temporizador));
 
     <template v-else>
       <input
+        :id="idEntrada"
         ref="entrada"
         v-model="texto"
         type="text"
@@ -211,13 +225,21 @@ onBeforeUnmount(() => clearTimeout(temporizador));
           :key="opcion.id"
           role="option"
           :aria-selected="indice === indiceActivo"
-          class="px-3 py-2 cursor-pointer font-body-md text-body-md"
-          :class="indice === indiceActivo ? 'bg-surface-container-low text-on-surface' : 'text-on-surface hover:bg-surface-container-low'"
+          :aria-disabled="opcion.deshabilitada ? 'true' : undefined"
+          class="px-3 py-2 font-body-md text-body-md"
+          :class="[
+            opcion.deshabilitada ? 'cursor-not-allowed text-secondary' : 'cursor-pointer text-on-surface',
+            indice === indiceActivo ? 'bg-surface-container-low' : 'hover:bg-surface-container-low',
+          ]"
           @mousedown.prevent="elegir(opcion)"
           @mousemove="indiceActivo = indice"
         >
-          <span class="block truncate">{{ opcion.etiqueta }}</span>
+          <!-- Sin truncar: una ruta de categorías larga tiene que leerse entera. -->
+          <span class="block break-words">{{ opcion.etiqueta }}</span>
           <span v-if="opcion.detalle" class="block truncate text-secondary">{{ opcion.detalle }}</span>
+          <span v-if="opcion.deshabilitada && opcion.motivo" class="block text-secondary italic">
+            No disponible: {{ opcion.motivo }}
+          </span>
         </li>
       </ul>
     </template>

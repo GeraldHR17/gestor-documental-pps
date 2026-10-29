@@ -716,3 +716,21 @@ Sin `CHECK` ni disparadores. Sin migración.
 
 `base-datos/scripts/README.md`, líneas 36 (correo) y 37 (contraseña) del usuario
 semilla de desarrollo.
+
+## Anexo B — Ajustes y decisiones de la Fase 2
+
+Decisiones tomadas durante la implementación. Continúan la numeración de §3;
+las que vienen de un pedido de Gerald lo citan. Se completa al cerrar cada
+paso.
+
+| Id | Tema | Decisión | Motivo |
+|---|---|---|---|
+| D-23 | Filas inactivas atenuadas (`opacity-60`) en usuarios, catálogos, categorías y documentos. | La atenuación se aplica a todas las celdas de la fila salvo la del estado (`.celda-estado`); el resto de la fila se ve igual que antes. | Con la fila entera atenuada, «Inactivo» bajaba a 3.07:1 en claro y 4.33:1 en oscuro, por debajo de 4.5:1. Aprobada en el punto de control del paso 2. |
+| D-24 | Resumen del formulario de usuario. | Crece 4 px de alto porque la insignia es más alta que el texto que reemplaza. | Efecto de D-12; aprobado en el punto de control del paso 2. |
+| D-25 | Estado efectivo en la vista de categorías (ajuste 1). | Un nodo activo con una superior inactiva se muestra con la insignia «Inactivo», el texto auxiliar «por una categoría superior» y la fila atenuada como las inactivas. Su estado propio no cambia: el botón sigue ofreciendo «Inactivar» y el filtro por estado sigue usando el estado propio, como la API. Al reactivar la superior se ve activo otra vez, sin recargar. El modal de inactivar avisa cuántas subcategorías se verán inactivas. Para calcularlo con la tabla filtrada, la vista carga además el catálogo completo (una consulta más, solo si hay filtros). | Pedido de Gerald; coherente con D-5 (sin escrituras en cascada). |
+| D-26 | Tamaño de `detalles` en la bitácora al mover un subárbol (ajuste 2). | La columna es `JSON` (01-esquema.sql), cuyo límite es `max_allowed_packet` (64 MB por defecto en MySQL 8): no se desborda en la práctica. Aun así, `cambiosDescendientes` se recorta a 100 pares (`MAXIMO_CAMBIOS_DETALLADOS_EN_BITACORA`); lo que pasa del tope queda como `cambiosDescendientesOmitidos` y `cantidadUrlCambiadas` conserva el total exacto. Prueba con un subárbol de 123 descendientes. Commit aparte. | Una fila con miles de pares es pesada de leer y de mostrar, y el límite depende de la configuración del servidor. |
+| D-27 | Selectores de categoría del registro y la edición de documentos (ajuste 4). | Las categorías que no admiten documentos se ven en la lista deshabilitadas, con «No disponible:» y el motivo, y no se pueden elegir: Participación ciudadana y su subárbol, las que tienen una superior inactiva y las raíces con subcategorías (D-4). Las inactivas por sí mismas siguen sin ofrecerse, como cualquier catálogo inactivo. Si un documento ya está en una categoría que dejó de admitirlos, su ruta se ve igual y el error dice el motivo. | Pedido de Gerald: que no se oculten. |
+| D-28 | Selector de categoría padre (precisa D-18). | Vacío equivale a «Ninguna (raíz)», y lo dice el texto del campo. Al editar una subcategoría, dejarlo vacío da el error «Una subcategoría no puede pasar a ser raíz». La propia categoría, sus descendientes y los destinos que superarían el tope (contando la altura del subárbol) se ven deshabilitados con el motivo en vez de omitirse, igual que en D-27. | El selector con búsqueda no tiene una opción «Ninguna» propia; mostrar el motivo explica la regla. |
+| D-29 | `SelectorBusqueda`. | Admite opciones `deshabilitada` con `motivo` e `idEntrada` (para el `<label for>`), y la etiqueta de cada opción ya no se trunca: una ruta larga se lee entera. Lo demás no cambia. | Necesario para D-27 y D-28. |
+| D-30 | Regla raíz ↔ subsección (ajuste 3). | Sigue cubierta: «rechaza convertir una subsección en raíz», «rechaza convertir una raíz sin hijas en subsección» y la prueba que impedía colgar una raíz con hijas, cuyo título hablaba de un «tercer nivel»; ahora nombra la regla y comprueba el mensaje exacto. | Con N niveles el motivo ya no es la profundidad. |
+| D-31 | Verificación del frontend. | El frontend no tiene linter configurado (ni eslint ni script de lint): se verifica con `vue-tsc`, el build y las pruebas en el navegador. | No añadir dependencias sin justificarlas. |

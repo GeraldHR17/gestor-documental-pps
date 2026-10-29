@@ -391,8 +391,8 @@ onMounted(cargar);
             <div>
               <dt class="text-tertiary font-label-sm text-label-sm uppercase">Categoría ITSP</dt>
               <dd class="text-on-surface">
-                <span v-if="documento.nombreCategoriaRaiz" class="text-secondary">
-                  {{ documento.nombreCategoriaRaiz }} ›
+                <span v-for="(superior, indice) in documento.rutaCategoria" :key="indice" class="text-secondary">
+                  {{ superior }} ›
                 </span>
                 {{ documento.nombreCategoriaItsp }}
               </dd>
