@@ -172,6 +172,26 @@ The shape language is consistently **Rounded** to balance the aggressive color p
 ### Lists
 - List items must have a minimum height of 48px. Dividers should be 1px solid #F0F0F1.
 
+## Excepción: colores de las insignias de estado
+
+Por decisión del PO (spec-ajustes-niveles-y-estados, C-1, C-2 y D-14), las
+insignias de estado del sistema interno **no** usan neutros: Activo y
+Publicado van en verde, Borrador en amarillo, e Inactivo en rojo. Es la
+única excepción a la regla de *Chips & Badges* de arriba, y se acota así:
+
+- Solo en las insignias de estado (`InsigniaEstado`, `BadgeEstadoRegistro`,
+  `BadgeEstadoDocumento`). El rojo sigue reservado, en todo lo demás, a los
+  errores y a las acciones destructivas.
+- La insignia conserva su texto y su forma de píldora: el color nunca es la
+  única señal.
+- Los colores son los tokens `exito`, `advertencia` y `peligro` (contenedor,
+  texto, borde y punto) de `frontend/src/assets/main.css`, con su variante
+  para el modo oscuro. Todos los textos superan 4.5:1 sobre su fondo, en
+  claro y en oscuro (tabla en la spec, §12.2).
+- En una fila atenuada por estar inactiva, la celda del estado no se
+  atenúa, para no perder ese contraste (D-23).
+- Las vistas públicas no tienen insignias de estado y no cambian.
+
 ## Excepción: vistas públicas del portal de transparencia
 
 Las vistas públicas (`/vista/...`), que se embeben en la portada de

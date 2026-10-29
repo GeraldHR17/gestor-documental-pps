@@ -134,11 +134,18 @@ Abra el sitio **como lo vería un visitante**: en una ventana de
 incógnito, sin haber iniciado sesión.
 
 1. En el menú aparece **Transparencia** con sus cuatro opciones.
-2. Al entrar en una, se ve un recuadro claro con el nombre de la sección y
+2. Al entrar en una, se ve un recuadro oscuro con el nombre de la sección y
    unos cuadros con las subsecciones.
-3. Al pulsar una subsección, aparece la lista de documentos.
+3. Al pulsar una subsección, aparece la lista de documentos. Si la
+   subsección tiene a su vez subcategorías, aparecen sus cuadros, y así
+   hacia abajo.
 4. Los botones **Ver** y **Descargar** de un documento funcionan.
 5. Pruébelo también desde un teléfono.
+
+Dentro del recuadro no hay una línea de «migas» (Transparencia › Sección ›
+...) encima del título: la pequeña etiqueta sobre el título dice dónde está
+el visitante. Para volver atrás se usan las flechas del navegador o el menú
+**Transparencia** del sitio.
 
 **Participación ciudadana** mostrará «Contenido próximamente». Es lo
 esperado: esa sección todavía no tiene contenido (vea el paso 6).
@@ -218,18 +225,38 @@ distinta en cada caso:
 | `ProxyPass` en `despliegue/apache/munidata.conf` | La API deja de responder |
 | Estos cuatro snippets | Los iframes salen en blanco en WordPress |
 
-### Códigos de sección y subsección en los enlaces
+### Códigos de sección, subsección y subcategorías en los enlaces
 
 Desde la actualización de los códigos automáticos
 (`spec-ajustes-posdespliegue.md`), Muni Data asigna el código de cada
 sección y subsección (`itsp-05`, `itsp-05-01`...), y ese código es la
-parte final de la dirección del recuadro. No cambia nunca, **salvo un
-caso**: si en Muni Data se mueve una subsección a otra sección, su código y
-su dirección cambian. El sistema lo avisa antes de guardar, con el código
-viejo y el nuevo, y queda registrado en la bitácora.
+parte final de la dirección del recuadro.
 
-Si alguna página o enlace de WordPress apunta directamente a esa
-subsección, hay que actualizarlo con la dirección nueva. El número que deja
-libre la subsección movida puede volver a usarse para la siguiente
-subsección que se cree en la sección de origen, así que un enlace viejo que
-no se actualice podría terminar mostrando otra subsección.
+Desde la actualización 2 (`spec-ajustes-niveles-y-estados.md`) las
+categorías admiten subcategorías hasta 10 niveles, y cada una tiene el
+código de su superior más dos cifras (`itsp-05-01-03`,
+`itsp-05-01-03-01`...). Hay dos formas de dirección, y las dos sirven:
+
+| Dirección | Qué abre |
+|---|---|
+| `/munipalmares/wp-munidata/vista/itsp-05` | Una sección (como los cuatro snippets de arriba) |
+| `/munipalmares/wp-munidata/vista/itsp-05/itsp-05-01` | Una subsección de esa sección, como siempre |
+| `/munipalmares/wp-munidata/vista/itsp-05-01-03` | **Cualquier** categoría, de cualquier nivel, por su código |
+
+La última forma es la que conviene para enlazar desde WordPress una
+subcategoría concreta. El código se puede escribir en mayúsculas o en
+minúsculas. Si la categoría o alguna superior está inactiva, el recuadro
+dice «Esta sección no está disponible». Las direcciones que ya estaban
+pegadas no cambian.
+
+Los códigos no cambian nunca, **salvo un caso**: si en Muni Data se mueve
+una subcategoría bajo otra categoría, cambian su código y su dirección **y
+los de todo lo que cuelga de ella**. El sistema lo avisa antes de guardar,
+con el código viejo, el nuevo y cuántas direcciones cambian en total, y
+queda registrado en la bitácora.
+
+Si alguna página o enlace de WordPress apunta directamente a una de esas
+categorías, hay que actualizarlo con la dirección nueva. El número que deja
+libre la categoría movida puede volver a usarse para la siguiente que se
+cree en el lugar de origen, así que un enlace viejo que no se actualice
+podría terminar mostrando otra categoría.

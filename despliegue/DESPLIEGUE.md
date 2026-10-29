@@ -710,6 +710,85 @@ formulario permitía crear una categoría sin código, y ahora la columna es
 `NOT NULL`. Mientras esté revertido, al crear una categoría hay que escribir
 el código a mano.
 
+### 6.2 Actualización 2: estados con color, iframes sin migas y subniveles
+
+Trae tres cambios (detalle en `documentacion/spec-ajustes-niveles-y-estados.md`):
+
+- las insignias de estado con color: Activo en verde e Inactivo en rojo;
+  en documentos, Publicado verde, Borrador amarillo e Inactivo rojo;
+- las vistas públicas (iframes) sin la línea de migas de pan, y una URL
+  `/vista/codigo` que abre cualquier categoría por su código;
+- categorías a cualquier profundidad, hasta 10 niveles, y la posibilidad de
+  mover una subcategoría con todo lo que cuelga de ella.
+
+**No trae scripts SQL.** El esquema ya admitía N niveles: no se ejecuta
+`preparar-base-datos.ps1` y no hay base que migrar ni que restaurar. Las
+URL de las cuatro secciones y de sus subsecciones no cambian, así que no
+hay que tocar nada en WordPress.
+
+1. **Respaldo previo.** `respaldar.ps1`, y compruebe que se creó la carpeta
+   del día con `base-datos.sql.gz` y `documentos.zip`.
+2. **`git status` limpio.** Si muestra cambios, deténgase.
+3. **Anote el commit actual** con `git rev-parse HEAD` y haga `git pull`.
+4. **Comprobación de solo lectura.** `diagnosticar-codigos-categorias.ps1`:
+   el veredicto debe decir que el `10` ya está aplicado y el bloque 4
+   (duplicados) debe estar vacío. No cambia nada; si falla porque no
+   encuentra `mysql.exe`, agregue la carpeta `bin` de MySQL al `PATH`
+   **solo en esa consola**.
+5. **Despliegue.** `desplegar.ps1`, con los mismos parámetros de siempre.
+6. **Verificación automática.** `verificar-despliegue.ps1 -UrlPublica ...`.
+7. **Verificación manual.** No cree categorías ni documentos de prueba en la
+   base real (no hay borrado físico) salvo que el PO lo autorice.
+   - **Estados.** En Usuarios, en los tres catálogos, en Categorías ITSP y en
+     Documentos, «Activo» y «Publicado» se ven en verde, «Borrador» en
+     amarillo e «Inactivo» en rojo, con su texto. Repita con el modo oscuro.
+   - **Categorías.** La lista muestra «Raíz» o «Nivel N» y la sangría por
+     nivel. Si una categoría cuelga de una inactiva, se ve «Inactivo» con
+     «por una categoría superior». Abra **Nueva**: el selector de categoría
+     padre busca por nombre o código y muestra la ruta completa; elija una
+     subcategoría y compruebe que dice «Quedará en el nivel 3 de 10».
+     Cancele **sin guardar**.
+   - **Documentos.** En **Registrar documento**, paso 2, el campo «Categoría
+     ITSP» es uno solo, con la ruta completa; Participación ciudadana y sus
+     subcategorías aparecen deshabilitadas con el motivo. Salga sin guardar.
+   - **Iframes.** Abra `iframes/prueba-vista.html` por https y recorra las
+     cuatro secciones y una subsección: sin la línea de migas, con la
+     píldora y el título, y con las mismas tarjetas que antes. Para volver
+     se usan las flechas del navegador o la página de WordPress (nunca hubo
+     botón «Volver» en el portal).
+   - **Consola del navegador** (F12) sin errores en esas páginas.
+
+Comandos, en orden:
+
+```
+cd C:\munidata\gestor-documental-pps
+powershell -ExecutionPolicy Bypass -File .\despliegue\respaldar.ps1
+git status
+git rev-parse HEAD
+git pull
+powershell -ExecutionPolicy Bypass -File .\despliegue\diagnosticar-codigos-categorias.ps1
+powershell -ExecutionPolicy Bypass -File .\despliegue\desplegar.ps1 -RutaHtdocs "C:\Apache24\htdocs" -RutaNssm "C:\ruta\a\nssm.exe"
+powershell -ExecutionPolicy Bypass -File .\despliegue\verificar-despliegue.ps1 -UrlPublica "https://su-servidor-real/munipalmares/wp-munidata"
+```
+
+**Mover una categoría cambia URL.** Al mover una subcategoría, cambian su
+código y los de todo lo que cuelga de ella; el aviso previo dice cuántas
+direcciones públicas cambian. Si alguna estaba enlazada desde WordPress,
+hay que actualizar ese enlace (`documentacion/portal-publico/INTEGRACION-WORDPRESS.md`).
+La bitácora guarda el código anterior y el nuevo.
+
+**Reversión.**
+
+1. `revertir.ps1` (sección 7) restaura el backend y el frontend anteriores.
+   No hay base que restaurar: esta actualización no cambió el esquema.
+2. Deje el repositorio en el commit anotado en el paso 3 con `git checkout`
+   y el hash completo; cuando ya no lo necesite, `git checkout main`.
+
+Si con el código nuevo se llegaron a crear categorías de nivel 3 o más, el
+código anterior las lista pero sus selectores de documento solo saben de
+dos niveles, y su portal no las muestra. No se pierde nada: los datos
+siguen en la base y vuelven a verse al desplegar otra vez esta versión.
+
 ---
 
 ## 7. Rollback
