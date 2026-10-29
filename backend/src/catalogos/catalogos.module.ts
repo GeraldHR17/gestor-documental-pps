@@ -13,6 +13,7 @@ import { CategoriaItsp } from '../entidades/categoria-itsp.entidad';
 import { TipoDocumento } from '../entidades/tipo-documento.entidad';
 import { Dependencia } from '../entidades/dependencia.entidad';
 import { Etiqueta } from '../entidades/etiqueta.entidad';
+import { Documento } from '../entidades/documento.entidad';
 import { BitacoraModule } from '../bitacora/bitacora.module';
 
 import { CategoriasItspController } from './categorias-itsp.controller';
@@ -26,7 +27,9 @@ import { EtiquetasService } from './etiquetas.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([CategoriaItsp, TipoDocumento, Dependencia, Etiqueta]),
+    // Documento solo para contar: no se mueve una categoría con documentos
+    // al subárbol de Participación ciudadana (spec-ajustes-niveles-y-estados D-7).
+    TypeOrmModule.forFeature([CategoriaItsp, TipoDocumento, Dependencia, Etiqueta, Documento]),
     BitacoraModule,
   ],
   controllers: [

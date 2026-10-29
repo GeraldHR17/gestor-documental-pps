@@ -1,8 +1,8 @@
 // src/catalogos/dto/crear-categoria-itsp.dto.ts
 //
-// `nivel` NO se recibe: lo deriva el servicio de si viene o no un padre
-// (sin padre = raíz nivel 1, con padre = subsección nivel 2). Dejarlo en
-// manos del cliente permitiría guardar una subsección marcada como raíz.
+// `nivel` NO se recibe: lo deriva el servicio del padre (sin padre = raíz
+// nivel 1; con padre = el nivel del padre + 1). Dejarlo en manos del
+// cliente permitiría guardar una subcategoría marcada como raíz.
 //
 // `codigo` tampoco: lo asigna el servicio (spec-ajustes-posdespliegue
 // §7). Si un cliente viejo lo sigue enviando, el ValidationPipe global

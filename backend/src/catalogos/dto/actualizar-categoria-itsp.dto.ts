@@ -24,10 +24,10 @@ export class ActualizarCategoriaItspDto {
   descripcion?: string;
 
   /**
-   * Sólo sirve para mover una subsección a otra raíz; omitirlo deja el
-   * padre como estaba. Se admite el nulo para poder rechazarlo con un
-   * mensaje claro: una subsección no puede pasar a raíz, ni una raíz a
-   * subsección (C-2).
+   * Sólo sirve para mover una subcategoría (con su subárbol) bajo otra
+   * categoría, raíz o no; omitirlo deja el padre como estaba. Se admite el
+   * nulo para poder rechazarlo con un mensaje claro: una subcategoría no
+   * puede pasar a raíz, ni una raíz a subcategoría.
    */
   @IsOptional()
   @IsInt()

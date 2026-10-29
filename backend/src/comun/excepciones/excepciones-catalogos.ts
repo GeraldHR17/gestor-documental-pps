@@ -34,11 +34,11 @@ export class CodigoCategoriaNoAsignadoException extends HttpException {
 }
 
 /**
- * La taxonomía ITSP es de exactamente dos niveles (raíz -> subsección),
- * porque así la consumen los selects en cascada del formulario de
- * documentos. Cubre los modos de romperla: padre inexistente, padre que ya
- * es subsección, y cambiar de nivel (una raíz no pasa a subsección ni una
- * subsección a raíz, porque su código y su URL dejarían de tener sentido).
+ * Modos de romper la jerarquía ITSP: padre inexistente, superar el tope de
+ * niveles, moverse dentro de su propio subárbol, un código que no cabe en
+ * la columna, llevar documentos a Participación ciudadana, y cambiar de
+ * nivel (una raíz no pasa a subsección ni una subsección a raíz, porque su
+ * código y su URL dejarían de tener sentido).
  */
 export class CategoriaPadreInvalidaException extends HttpException {
   constructor(motivo: string) {

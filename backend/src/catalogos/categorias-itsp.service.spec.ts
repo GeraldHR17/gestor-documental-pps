@@ -13,6 +13,7 @@ import { CategoriasItspService } from './categorias-itsp.service';
 import { CrearCategoriaItspDto } from './dto/crear-categoria-itsp.dto';
 import { ActualizarCategoriaItspDto } from './dto/actualizar-categoria-itsp.dto';
 import { CategoriaItsp } from '../entidades/categoria-itsp.entidad';
+import { Documento } from '../entidades/documento.entidad';
 import { BitacoraService } from '../bitacora/bitacora.service';
 import type { PayloadJwt } from '../autenticacion/estrategias/jwt.strategy';
 import {
@@ -137,13 +138,20 @@ function montarRepositorio(datos: CategoriaItsp[]) {
       ),
     ),
 
-    save: jest.fn((entidad: CategoriaItsp) => {
-      const guardada = { ...entidad } as CategoriaItsp;
-      if (guardada.idCategoriaItsp === undefined) {
-        guardada.idCategoriaItsp = proximoId++;
-      }
-      almacen.set(guardada.idCategoriaItsp, guardada);
-      return Promise.resolve(guardada);
+    // Como TypeORM: acepta una entidad o un arreglo (mover un subárbol
+    // guarda todas sus filas de una vez).
+    save: jest.fn((entidades: CategoriaItsp | CategoriaItsp[]) => {
+      const guardar = (entidad: CategoriaItsp): CategoriaItsp => {
+        const guardada = { ...entidad } as CategoriaItsp;
+        if (guardada.idCategoriaItsp === undefined) {
+          guardada.idCategoriaItsp = proximoId++;
+        }
+        almacen.set(guardada.idCategoriaItsp, guardada);
+        return guardada;
+      };
+      return Promise.resolve(
+        Array.isArray(entidades) ? entidades.map(guardar) : guardar(entidades),
+      );
     }),
 
     create: jest.fn((datosNuevos: Partial<CategoriaItsp>) => ({ ...datosNuevos })),
@@ -165,15 +173,19 @@ describe('CategoriasItspService', () => {
   let servicio: CategoriasItspService;
   let repositorio: ReturnType<typeof montarRepositorio>;
   let bitacoraService: { registrar: jest.Mock };
+  /** Solo se usa para contar documentos al mover a Participación ciudadana. */
+  let repositorioDocumentos: { count: jest.Mock };
 
   async function construirCon(datos: CategoriaItsp[]): Promise<void> {
     repositorio = montarRepositorio(datos);
     bitacoraService = { registrar: jest.fn() };
+    repositorioDocumentos = { count: jest.fn().mockResolvedValue(0) };
 
     const modulo: TestingModule = await Test.createTestingModule({
       providers: [
         CategoriasItspService,
         { provide: getRepositoryToken(CategoriaItsp), useValue: repositorio },
+        { provide: getRepositoryToken(Documento), useValue: repositorioDocumentos },
         { provide: BitacoraService, useValue: bitacoraService },
       ],
     }).compile();
@@ -262,10 +274,15 @@ describe('CategoriasItspService', () => {
       );
     });
 
-    it('rechaza colgar de una subsección: la jerarquía es de dos niveles', async () => {
-      await expect(
-        servicio.crear({ nombre: 'Tercer nivel', idCategoriaPadre: 5 }, usuarioAutenticado),
-      ).rejects.toBeInstanceOf(CategoriaPadreInvalidaException);
+    // Antes se rechazaba: la jerarquía era de dos niveles. Desde
+    // spec-ajustes-niveles-y-estados una subsección puede tener hijas.
+    it('permite colgar de una subsección: crea el nivel 3 con el código del padre', async () => {
+      const creada = await servicio.crear(
+        { nombre: 'Tercer nivel', idCategoriaPadre: 5 },
+        usuarioAutenticado,
+      );
+
+      expect(creada).toMatchObject({ nivel: 3, idCategoriaPadre: 5, codigo: 'ITSP-01-01-01' });
     });
 
     it('rechaza una categoría padre inexistente', async () => {
@@ -397,10 +414,14 @@ describe('CategoriasItspService', () => {
       });
     });
 
-    it('rechaza un padre que es subsección o que no existe', async () => {
-      await expect(servicio.obtenerSiguienteCodigo(5)).rejects.toBeInstanceOf(
-        CategoriaPadreInvalidaException,
-      );
+    // Antes un padre subsección se rechazaba (dos niveles). Ahora es válido.
+    it('con una subsección devuelve su siguiente hija', async () => {
+      await expect(servicio.obtenerSiguienteCodigo(5)).resolves.toEqual({
+        codigo: 'ITSP-01-01-01',
+      });
+    });
+
+    it('rechaza un padre que no existe', async () => {
       await expect(servicio.obtenerSiguienteCodigo(999)).rejects.toBeInstanceOf(
         CategoriaPadreInvalidaException,
       );
@@ -453,6 +474,7 @@ describe('CategoriasItspService', () => {
             camposActualizados: ['idCategoriaPadre'],
             codigoAnterior: 'ITSP-01-01',
             codigoNuevo: 'ITSP-02-03',
+            cantidadUrlCambiadas: 1,
           },
         }),
       );
@@ -530,6 +552,251 @@ describe('CategoriasItspService', () => {
       await expect(
         servicio.actualizar(999, { nombre: 'Fantasma' }, usuarioAutenticado),
       ).rejects.toBeInstanceOf(RegistroCatalogoNoEncontradoException);
+    });
+  });
+
+  describe('jerarquía de N niveles (spec-ajustes-niveles-y-estados)', () => {
+    // Bajo ITSP-01-01 (id 5): nivel 3 con una hija regular y una irregular.
+    const NIVEL_3 = categoria({
+      idCategoriaItsp: 50,
+      idCategoriaPadre: 5,
+      codigo: 'ITSP-01-01-01',
+      nombre: 'Organigramas',
+      nivel: 3,
+    });
+    const NIVEL_4 = categoria({
+      idCategoriaItsp: 51,
+      idCategoriaPadre: 50,
+      codigo: 'ITSP-01-01-01-01',
+      nombre: '2026',
+      nivel: 4,
+      orden: 1,
+    });
+    const NIVEL_4_IRREGULAR = categoria({
+      idCategoriaItsp: 52,
+      idCategoriaPadre: 50,
+      codigo: 'ORGANIGRAMA-VIEJO',
+      nombre: 'Histórico',
+      nivel: 4,
+      orden: 2,
+    });
+    const PARTICIPACION = categoria({
+      idCategoriaItsp: 30,
+      codigo: 'ITSP-03',
+      nombre: 'Participación ciudadana',
+      orden: 3,
+    });
+    const SUB_PARTICIPACION = categoria({
+      idCategoriaItsp: 31,
+      idCategoriaPadre: 30,
+      codigo: 'ITSP-03-01',
+      nombre: 'Información',
+      nivel: 2,
+    });
+    const PROFUNDA = [
+      ...TODAS,
+      NIVEL_3,
+      NIVEL_4,
+      NIVEL_4_IRREGULAR,
+      PARTICIPACION,
+      SUB_PARTICIPACION,
+    ];
+
+    /** Una rama de `niveles` niveles colgando de la raíz 1 (ids 100+). */
+    function rama(niveles: number): CategoriaItsp[] {
+      const filas: CategoriaItsp[] = [];
+      let codigo = 'ITSP-01';
+      let idPadre = 1;
+      for (let nivel = 2; nivel <= niveles; nivel++) {
+        codigo = `${codigo}-09`;
+        const id = 100 + nivel;
+        filas.push(
+          categoria({ idCategoriaItsp: id, idCategoriaPadre: idPadre, codigo, nombre: `N${nivel}`, nivel }),
+        );
+        idPadre = id;
+      }
+      return filas;
+    }
+
+    beforeEach(async () => {
+      await construirCon(PROFUNDA);
+    });
+
+    it('arma el árbol recursivo a cualquier profundidad', async () => {
+      const arbol = await servicio.obtenerArbol();
+      const institucional = arbol.find((raiz) => raiz.id === 1);
+      const nivel3 = institucional?.hijos.find((hijo) => hijo.id === 5)?.hijos[0];
+
+      expect(nivel3).toMatchObject({ id: 50, codigo: 'ITSP-01-01-01' });
+      expect(nivel3?.hijos.map((hijo) => hijo.id)).toEqual([51, 52]);
+    });
+
+    it('con estado=ACTIVO poda en cualquier nivel lo que cuelga de un inactivo', async () => {
+      await construirCon(PROFUNDA.map((c) => (c.idCategoriaItsp === 50 ? { ...c, estado: 'INACTIVO' } : c)));
+
+      const arbol = await servicio.obtenerArbol({ estado: 'ACTIVO' });
+      const sub = arbol.find((raiz) => raiz.id === 1)?.hijos.find((hijo) => hijo.id === 5);
+
+      // 51 y 52 siguen ACTIVO en la base, pero su padre no: no aparecen.
+      expect(sub?.hijos).toEqual([]);
+    });
+
+    it('lista cada categoría seguida de todo su subárbol', async () => {
+      const lista = await servicio.listar();
+      const ids = lista.map((fila) => fila.id);
+
+      expect(ids.slice(0, 5)).toEqual([1, 5, 50, 51, 52]);
+      expect(lista.find((fila) => fila.id === 51)?.nombreCategoriaPadre).toBe('Organigramas');
+    });
+
+    it('crea hasta el nivel 10 y rechaza el 11 con un mensaje claro', async () => {
+      await construirCon([...TODAS, ...rama(10)]);
+
+      await expect(
+        servicio.crear({ nombre: 'Nivel 10 bis', idCategoriaPadre: 109 }, usuarioAutenticado),
+      ).resolves.toMatchObject({ nivel: 10, codigo: 'ITSP-01-09-09-09-09-09-09-09-09-10' }); // hermana del 110, que ya usa -09
+
+      await expect(
+        servicio.crear({ nombre: 'Nivel 11', idCategoriaPadre: 110 }, usuarioAutenticado),
+      ).rejects.toThrow(
+        new CategoriaPadreInvalidaException(
+          'La jerarquía admite como máximo 10 niveles; esta operación la dejaría en 11',
+        ),
+      );
+    });
+
+    it('mueve un subárbol: el nodo toma el siguiente número y sus descendientes conservan el sufijo', async () => {
+      const movida = await servicio.actualizar(50, { idCategoriaPadre: 6 }, usuarioAutenticado);
+
+      expect(movida).toMatchObject({ idCategoriaPadre: 6, codigo: 'ITSP-02-01-01', nivel: 3 });
+      const lista = await servicio.listar();
+      expect(lista.find((fila) => fila.id === 51)).toMatchObject({
+        codigo: 'ITSP-02-01-01-01',
+        nivel: 4,
+      });
+      // La irregular toma el máximo + 1 bajo su padre ya recodificado.
+      expect(lista.find((fila) => fila.id === 52)?.codigo).toBe('ITSP-02-01-01-02');
+      // Nada fuera del subárbol cambia.
+      expect(lista.find((fila) => fila.id === 5)?.codigo).toBe('ITSP-01-01');
+      expect(lista.find((fila) => fila.id === 6)?.codigo).toBe('ITSP-02-01');
+    });
+
+    it('al mover, recalcula el nivel de todo el subárbol', async () => {
+      await servicio.actualizar(50, { idCategoriaPadre: 2 }, usuarioAutenticado);
+
+      const lista = await servicio.listar();
+      expect(lista.find((fila) => fila.id === 50)).toMatchObject({ nivel: 2, codigo: 'ITSP-02-03' });
+      expect(lista.find((fila) => fila.id === 51)).toMatchObject({ nivel: 3, codigo: 'ITSP-02-03-01' });
+    });
+
+    it('registra en la bitácora cuántas URL cambian y cuáles', async () => {
+      await servicio.actualizar(50, { idCategoriaPadre: 6 }, usuarioAutenticado);
+
+      expect(bitacoraService.registrar).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accion: 'ACTUALIZAR_CATEGORIA_ITSP',
+          idRegistro: 50,
+          detalles: {
+            camposActualizados: ['idCategoriaPadre'],
+            codigoAnterior: 'ITSP-01-01-01',
+            codigoNuevo: 'ITSP-02-01-01',
+            cantidadUrlCambiadas: 3,
+            cambiosDescendientes: [
+              { id: 51, codigoAnterior: 'ITSP-01-01-01-01', codigoNuevo: 'ITSP-02-01-01-01' },
+              { id: 52, codigoAnterior: 'ORGANIGRAMA-VIEJO', codigoNuevo: 'ITSP-02-01-01-02' },
+            ],
+          },
+        }),
+      );
+    });
+
+    it('rechaza mover una categoría dentro de sí misma o de sus descendientes', async () => {
+      for (const destino of [50, 51]) {
+        await expect(
+          servicio.actualizar(5, { idCategoriaPadre: destino }, usuarioAutenticado),
+        ).rejects.toThrow(
+          new CategoriaPadreInvalidaException(
+            'Una categoría no puede moverse dentro de sí misma ni de sus subcategorías',
+          ),
+        );
+      }
+      expect(repositorio.save).not.toHaveBeenCalled();
+    });
+
+    it('valida el tope con la altura del subárbol completo', async () => {
+      // Rama de 9 niveles (hasta el id 109) y el subárbol 50 ocupa 2.
+      await construirCon([...PROFUNDA, ...rama(9)]);
+
+      await expect(
+        servicio.actualizar(50, { idCategoriaPadre: 108 }, usuarioAutenticado),
+      ).resolves.toBeDefined();
+
+      await construirCon([...PROFUNDA, ...rama(9)]);
+      await expect(
+        servicio.actualizar(50, { idCategoriaPadre: 109 }, usuarioAutenticado),
+      ).rejects.toThrow(
+        new CategoriaPadreInvalidaException(
+          'La jerarquía admite como máximo 10 niveles; esta operación la dejaría en 11',
+        ),
+      );
+    });
+
+    it('ante una colisión reintenta y el intento fallido no deja nada a medias', async () => {
+      repositorio.save.mockRejectedValueOnce(errorCodigoDuplicado());
+
+      await servicio.actualizar(50, { idCategoriaPadre: 6 }, usuarioAutenticado);
+
+      expect(repositorio.manager.transaction).toHaveBeenCalledTimes(2);
+      const lista = await servicio.listar();
+      expect(lista.find((fila) => fila.id === 51)?.codigo).toBe('ITSP-02-01-01-01');
+    });
+
+    it('responde 409 tras tres colisiones al mover un subárbol', async () => {
+      repositorio.save
+        .mockRejectedValueOnce(errorCodigoDuplicado())
+        .mockRejectedValueOnce(errorCodigoDuplicado())
+        .mockRejectedValueOnce(errorCodigoDuplicado());
+
+      await expect(
+        servicio.actualizar(50, { idCategoriaPadre: 6 }, usuarioAutenticado),
+      ).rejects.toBeInstanceOf(CodigoCategoriaNoAsignadoException);
+
+      const lista = await servicio.listar();
+      expect(lista.find((fila) => fila.id === 50)?.codigo).toBe('ITSP-01-01-01');
+      expect(lista.find((fila) => fila.id === 51)?.codigo).toBe('ITSP-01-01-01-01');
+    });
+
+    it('rechaza llevar documentos al subárbol de Participación ciudadana (D-7)', async () => {
+      repositorioDocumentos.count.mockResolvedValue(2);
+
+      await expect(
+        servicio.actualizar(50, { idCategoriaPadre: 31 }, usuarioAutenticado),
+      ).rejects.toThrow(
+        new CategoriaPadreInvalidaException(
+          "No se puede mover a 'Participación ciudadana' una categoría con documentos: esa sección no los admite",
+        ),
+      );
+    });
+
+    it('sí permite mover a Participación ciudadana un subárbol sin documentos', async () => {
+      await expect(
+        servicio.actualizar(50, { idCategoriaPadre: 31 }, usuarioAutenticado),
+      ).resolves.toMatchObject({ codigo: 'ITSP-03-01-01', nivel: 3 });
+    });
+
+    it('rechaza un código que no cabe en la columna', async () => {
+      await construirCon([
+        ...TODAS,
+        categoria({ idCategoriaItsp: 60, codigo: 'X'.repeat(48), nombre: 'Irregular larga', orden: 9 }),
+      ]);
+
+      await expect(
+        servicio.crear({ nombre: 'Hija', idCategoriaPadre: 60 }, usuarioAutenticado),
+      ).rejects.toThrow(
+        new CategoriaPadreInvalidaException(
+          'El código resultante supera los 50 caracteres; elija otra categoría superior',
+        ),
+      );
     });
   });
 

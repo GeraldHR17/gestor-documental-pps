@@ -6,6 +6,7 @@
 
 import {
   formatearNumero,
+  recodificarSubarbol,
   siguienteCodigoHija,
   siguienteCodigoRaiz,
 } from './codigos-categoria';
@@ -81,6 +82,65 @@ describe('codigos-categoria', () => {
     it('escapa los caracteres especiales del código de la raíz', () => {
       // Con el punto sin escapar, 'AXB-07' contaría como hija de 'A.B'.
       expect(siguienteCodigoHija('A.B', ['AXB-07', 'A.B-02'])).toBe('A.B-03');
+    });
+  });
+
+  describe('siguienteCodigoHija a cualquier profundidad', () => {
+    it('usa el código del padre aunque no sea una raíz', () => {
+      expect(siguienteCodigoHija('ITSP-01-02-03', ['ITSP-01-02-03-01'])).toBe(
+        'ITSP-01-02-03-02',
+      );
+    });
+
+    it('no confunde las hijas con las nietas', () => {
+      expect(
+        siguienteCodigoHija('ITSP-01', ['ITSP-01-02', 'ITSP-01-02-07']),
+      ).toBe('ITSP-01-03');
+    });
+  });
+
+  describe('recodificarSubarbol', () => {
+    it('los descendientes regulares conservan su sufijo bajo el código nuevo', () => {
+      const nuevos = recodificarSubarbol(10, 'ITSP-01-02', 'ITSP-04-05', [
+        { id: 11, idPadre: 10, codigo: 'ITSP-01-02-03' },
+        { id: 12, idPadre: 11, codigo: 'ITSP-01-02-03-01' },
+        { id: 13, idPadre: 10, codigo: 'ITSP-01-02-07' },
+      ]);
+
+      expect(Object.fromEntries(nuevos)).toEqual({
+        11: 'ITSP-04-05-03',
+        12: 'ITSP-04-05-03-01',
+        13: 'ITSP-04-05-07',
+      });
+    });
+
+    it('un irregular toma el máximo + 1 contando a las regulares, aunque vaya antes', () => {
+      const nuevos = recodificarSubarbol(10, 'ITSP-01-02', 'ITSP-04-05', [
+        { id: 11, idPadre: 10, codigo: 'VIEJO' },
+        { id: 12, idPadre: 10, codigo: 'ITSP-01-02-03' },
+      ]);
+
+      expect(nuevos.get(12)).toBe('ITSP-04-05-03');
+      expect(nuevos.get(11)).toBe('ITSP-04-05-04');
+    });
+
+    it('los hijos de un irregular cuelgan de su código nuevo', () => {
+      const nuevos = recodificarSubarbol(10, 'ITSP-01-02', 'ITSP-04-05', [
+        { id: 11, idPadre: 10, codigo: 'VIEJO' },
+        { id: 12, idPadre: 11, codigo: 'VIEJO-02' },
+      ]);
+
+      expect(nuevos.get(11)).toBe('ITSP-04-05-01');
+      expect(nuevos.get(12)).toBe('ITSP-04-05-01-02');
+    });
+
+    it('no incluye a la categoría movida y respeta los números de tres dígitos', () => {
+      const nuevos = recodificarSubarbol(10, 'ITSP-01-02', 'ITSP-04-05', [
+        { id: 11, idPadre: 10, codigo: 'ITSP-01-02-100' },
+      ]);
+
+      expect(nuevos.has(10)).toBe(false);
+      expect(nuevos.get(11)).toBe('ITSP-04-05-100');
     });
   });
 

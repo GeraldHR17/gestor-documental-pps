@@ -1,23 +1,28 @@
 // src/catalogos/categorias-itsp.service.ts
 //
-// La taxonomía ITSP es jerárquica de exactamente dos niveles: categorías
-// raíz (nivel 1) y sus subsecciones (nivel 2). Ese límite no es decorativo:
-// el formulario de registro de documento (Fase 6) la consume con dos
-// selects en cascada, así que un tercer nivel no tendría dónde mostrarse.
-// Por eso el nivel nunca lo envía el cliente, lo deriva este servicio del
-// padre, y las formas de romper la jerarquía se rechazan explícitamente
-// (ver `resolverPadre` y `actualizar`).
+// La taxonomía ITSP es jerárquica: categorías raíz (nivel 1) y, desde
+// spec-ajustes-niveles-y-estados, subcategorías a cualquier profundidad
+// hasta PROFUNDIDAD_MAXIMA_CATEGORIAS niveles contando la raíz. El nivel
+// nunca lo envía el cliente: lo deriva este servicio del padre, y las
+// formas de romper la jerarquía (ciclos, tope, raíz que pasa a subsección
+// o al revés) se rechazan explícitamente (ver `validarPadreParaCrear`,
+// `validarMovimiento` y `actualizar`).
 //
 // El código tampoco lo envía el cliente: lo asigna este servicio como
-// "máximo + 1" de su nivel (ver codigos-categoria.ts). Es la parte de la
+// "máximo + 1" bajo su padre (ver codigos-categoria.ts). Es la parte de la
 // URL pública (/vista/itsp-05) que se pega en WordPress, así que no
-// cambia nunca, salvo cuando una subsección se mueve a otra raíz.
+// cambia nunca, salvo cuando una subcategoría se mueve: entonces cambian
+// el suyo y los de todo su subárbol, en una sola transacción.
+//
+// El árbol se arma en memoria desde una lectura plana de la tabla
+// (JerarquiaCategorias): son decenas de filas.
 
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { In, QueryFailedError, Repository } from 'typeorm';
 
 import { CategoriaItsp } from '../entidades/categoria-itsp.entidad';
+import { Documento } from '../entidades/documento.entidad';
 import { BitacoraService } from '../bitacora/bitacora.service';
 import type { PayloadJwt } from '../autenticacion/estrategias/jwt.strategy';
 
@@ -29,7 +34,12 @@ import {
   CategoriaItspRespuestaDto,
   SiguienteCodigoCategoriaRespuestaDto,
 } from './dto/categoria-itsp-respuesta.dto';
-import { siguienteCodigoHija, siguienteCodigoRaiz } from './codigos-categoria';
+import { recodificarSubarbol, siguienteCodigoHija, siguienteCodigoRaiz } from './codigos-categoria';
+import { JerarquiaCategorias } from './jerarquia-categorias';
+import {
+  LONGITUD_MAXIMA_CODIGO_CATEGORIA,
+  PROFUNDIDAD_MAXIMA_CATEGORIAS,
+} from '../comun/constantes/categorias-itsp';
 import {
   CategoriaPadreInvalidaException,
   CodigoCategoriaNoAsignadoException,
@@ -43,6 +53,14 @@ const ENTIDAD_BITACORA = 'categorias_itsp';
 
 const MENSAJE_CAMBIO_DE_NIVEL =
   'Una categoría raíz no puede convertirse en subsección ni una subsección en raíz';
+const MENSAJE_CICLO =
+  'Una categoría no puede moverse dentro de sí misma ni de sus subcategorías';
+const MENSAJE_EXCLUIDA_CON_DOCUMENTOS =
+  "No se puede mover a 'Participación ciudadana' una categoría con documentos: esa sección no los admite";
+
+function mensajeProfundidad(niveles: number): string {
+  return `La jerarquía admite como máximo ${PROFUNDIDAD_MAXIMA_CATEGORIAS} niveles; esta operación la dejaría en ${niveles}`;
+}
 
 /** Intentos de asignar código antes de responder 409 (spec §7.2). */
 const INTENTOS_ASIGNACION_CODIGO = 3;
@@ -61,85 +79,73 @@ function esCodigoDuplicado(error: unknown): boolean {
   );
 }
 
+/** Un código recalculado al mover un subárbol, para la bitácora. */
+interface CambioDeCodigo {
+  id: number;
+  codigoAnterior: string;
+  codigoNuevo: string;
+}
+
 @Injectable()
 export class CategoriasItspService {
   constructor(
     @InjectRepository(CategoriaItsp)
     private readonly repositorioCategorias: Repository<CategoriaItsp>,
+    @InjectRepository(Documento)
+    private readonly repositorioDocumentos: Repository<Documento>,
     private readonly bitacoraService: BitacoraService,
   ) {}
 
   /**
-   * Lista plana, pero ya en orden de despliegue: cada raíz seguida de sus
-   * subsecciones. Así la tabla sólo tiene que indentar según `nivel`, sin
+   * Lista plana, pero ya en orden de despliegue: cada categoría seguida de
+   * su subárbol. Así la tabla sólo tiene que indentar según `nivel`, sin
    * reordenar nada en el cliente.
    */
   async listar(filtros: FiltrosCatalogoDto = {}): Promise<CategoriaItspRespuestaDto[]> {
     const todas = await this.repositorioCategorias.find();
-    const nombresPorId = new Map(todas.map((c) => [c.idCategoriaItsp, c.nombre]));
+    const jerarquia = new JerarquiaCategorias(todas);
 
     // El filtro se aplica DESPUÉS de ordenar, sobre el conjunto completo:
-    // si se ordenara sólo lo filtrado, una subsección cuyo padre no coincide
-    // con la búsqueda perdería su posición en la jerarquía.
-    const ordenadas = this.ordenarJerarquicamente(todas);
+    // si se ordenara sólo lo filtrado, una subcategoría cuyo padre no
+    // coincide con la búsqueda perdería su posición en la jerarquía.
     const termino = filtros.nombre?.trim().toLowerCase();
 
-    return ordenadas
+    return jerarquia
+      .ordenDeDespliegue()
       .filter((categoria) => {
         if (filtros.estado && categoria.estado !== filtros.estado) return false;
         if (termino && !categoria.nombre.toLowerCase().includes(termino)) return false;
         return true;
       })
-      .map(
-        (categoria) =>
-          new CategoriaItspRespuestaDto({
-            id: categoria.idCategoriaItsp,
-            codigo: categoria.codigo,
-            nombre: categoria.nombre,
-            descripcion: categoria.descripcion,
-            nivel: categoria.nivel,
-            orden: categoria.orden,
-            estado: categoria.estado as 'ACTIVO' | 'INACTIVO',
-            idCategoriaPadre: categoria.idCategoriaPadre,
-            nombreCategoriaPadre:
-              categoria.idCategoriaPadre !== null
-                ? (nombresPorId.get(categoria.idCategoriaPadre) ?? null)
-                : null,
-          }),
+      .map((categoria) =>
+        this.mapearFila(categoria, jerarquia.obtener(categoria.idCategoriaPadre)?.nombre ?? null),
       );
   }
 
   /**
-   * Jerarquía agrupada por raíz, con las subsecciones anidadas en `hijos`.
-   * Es la forma que consumirán los selects en cascada de Fase 6 (elegir
-   * raíz -> el segundo select muestra sus hijos), por lo que devuelve el
-   * árbol ya armado y no una lista plana de dos niveles.
+   * Jerarquía completa, con los hijos anidados en `hijos` a cualquier
+   * profundidad. La consumen los selectores de categoría del registro de
+   * documentos y de los filtros.
    *
-   * El filtro `estado` permite pedir sólo lo activo sin tocar el endpoint:
-   * poda tanto raíces como subsecciones inactivas. Una subsección cuya raíz
-   * quedó podada no aparece suelta: el árbol siempre cuelga de una raíz.
+   * El filtro `estado` poda en cualquier nivel: un nodo solo aparece si él
+   * y todos sus ancestros cumplen el estado. Con `estado=ACTIVO` eso es
+   * exactamente el estado efectivo (spec D-5): lo que cuelga de una
+   * categoría inactiva no aparece suelto.
    */
   async obtenerArbol(filtros: FiltrosCatalogoDto = {}): Promise<CategoriaItspNodoArbolDto[]> {
     const todas = await this.repositorioCategorias.find();
+    const jerarquia = new JerarquiaCategorias(todas);
 
-    const visibles = filtros.estado
-      ? todas.filter((categoria) => categoria.estado === filtros.estado)
-      : todas;
+    const incluir = (categoria: CategoriaItsp): boolean =>
+      !filtros.estado || categoria.estado === filtros.estado;
 
-    const raices = this.ordenarPorOrdenYNombre(
-      visibles.filter((categoria) => categoria.idCategoriaPadre === null),
-    );
-
-    return raices.map((raiz) => {
-      const hijos = this.ordenarPorOrdenYNombre(
-        visibles.filter((categoria) => categoria.idCategoriaPadre === raiz.idCategoriaItsp),
+    const armar = (categoria: CategoriaItsp): CategoriaItspNodoArbolDto =>
+      this.mapearNodo(
+        categoria,
+        jerarquia.hijos(categoria.idCategoriaItsp).filter(incluir).map(armar),
       );
 
-      return this.mapearNodo(
-        raiz,
-        hijos.map((hijo) => this.mapearNodo(hijo, [])),
-      );
-    });
+    return jerarquia.raices().filter(incluir).map(armar);
   }
 
   async obtener(id: number): Promise<CategoriaItspRespuestaDto> {
@@ -151,17 +157,7 @@ export class CategoriasItspService {
           })
         : null;
 
-    return new CategoriaItspRespuestaDto({
-      id: categoria.idCategoriaItsp,
-      codigo: categoria.codigo,
-      nombre: categoria.nombre,
-      descripcion: categoria.descripcion,
-      nivel: categoria.nivel,
-      orden: categoria.orden,
-      estado: categoria.estado as 'ACTIVO' | 'INACTIVO',
-      idCategoriaPadre: categoria.idCategoriaPadre,
-      nombreCategoriaPadre: padre?.nombre ?? null,
-    });
+    return this.mapearFila(categoria, padre?.nombre ?? null);
   }
 
   async crear(
@@ -171,11 +167,12 @@ export class CategoriasItspService {
     const nombre = dto.nombre.trim();
     const idCategoriaPadre = dto.idCategoriaPadre ?? null;
 
-    await this.resolverPadre(idCategoriaPadre);
+    const nivel = await this.validarPadreParaCrear(idCategoriaPadre);
     await this.verificarNombreDisponibleEntreHermanas(nombre, idCategoriaPadre, null);
 
     const guardada = await this.conCodigoAsignado(async (repositorio) => {
       const codigo = await this.calcularSiguienteCodigo(repositorio, idCategoriaPadre);
+      this.verificarLongitudCodigo(codigo);
 
       return repositorio.save(
         repositorio.create({
@@ -183,8 +180,8 @@ export class CategoriasItspService {
           codigo,
           descripcion: this.normalizarTexto(dto.descripcion),
           idCategoriaPadre,
-          // Derivado, nunca recibido: sin padre es raíz, con padre es subsección.
-          nivel: idCategoriaPadre === null ? 1 : 2,
+          // Derivado, nunca recibido: el del padre + 1.
+          nivel,
           orden: dto.orden ?? 0,
           estado: 'ACTIVO',
         }),
@@ -207,7 +204,7 @@ export class CategoriasItspService {
   async obtenerSiguienteCodigo(
     idCategoriaPadre: number | null,
   ): Promise<SiguienteCodigoCategoriaRespuestaDto> {
-    await this.resolverPadre(idCategoriaPadre);
+    await this.validarPadreParaCrear(idCategoriaPadre);
 
     return new SiguienteCodigoCategoriaRespuestaDto({
       codigo: await this.calcularSiguienteCodigo(this.repositorioCategorias, idCategoriaPadre),
@@ -221,7 +218,7 @@ export class CategoriasItspService {
   ): Promise<CategoriaItspRespuestaDto> {
     const categoria = await this.buscarPorId(id);
     const codigoAnterior = categoria.codigo;
-    let cambiaDePadre = false;
+    let idPadreNuevo: number | null = null;
 
     if (dto.idCategoriaPadre !== undefined) {
       const nuevoPadre = dto.idCategoriaPadre ?? null;
@@ -232,30 +229,29 @@ export class CategoriasItspService {
         );
       }
 
-      // Una raíz sigue siendo raíz y una subsección sigue siendo
-      // subsección (C-2). Con códigos automáticos, cambiar de nivel dejaría
-      // una URL sin sentido (una raíz llamada ITSP-02-03, o al revés). Esto
-      // también impide el tercer nivel: una raíz con hijas nunca se cuelga
-      // de otra.
+      // Una raíz sigue siendo raíz y una subcategoría sigue siendo
+      // subcategoría (C-9). Con códigos automáticos, cambiar de nivel
+      // dejaría una URL sin sentido (una raíz llamada ITSP-02-03, o al
+      // revés). Una subcategoría sí puede moverse bajo cualquier otra
+      // categoría, raíz o no.
       const esRaiz = categoria.idCategoriaPadre === null;
       if (esRaiz !== (nuevoPadre === null)) {
         throw new CategoriaPadreInvalidaException(MENSAJE_CAMBIO_DE_NIVEL);
       }
 
-      if (nuevoPadre !== categoria.idCategoriaPadre) {
-        await this.resolverPadre(nuevoPadre);
-        categoria.idCategoriaPadre = nuevoPadre;
-        cambiaDePadre = true;
+      if (nuevoPadre !== null && nuevoPadre !== categoria.idCategoriaPadre) {
+        await this.validarMovimiento(categoria.idCategoriaItsp, nuevoPadre);
+        idPadreNuevo = nuevoPadre;
       }
     }
 
-    // También se revisa el nombre cuando cambió el padre: el nombre pudo no
+    // También se revisa el nombre cuando cambia el padre: el nombre pudo no
     // cambiar, pero el grupo de hermanas contra el que compite sí.
     const nombre = dto.nombre !== undefined ? dto.nombre.trim() : categoria.nombre;
-    if (nombre !== categoria.nombre || cambiaDePadre) {
+    if (nombre !== categoria.nombre || idPadreNuevo !== null) {
       await this.verificarNombreDisponibleEntreHermanas(
         nombre,
-        categoria.idCategoriaPadre,
+        idPadreNuevo ?? categoria.idCategoriaPadre,
         categoria.idCategoriaItsp,
       );
     }
@@ -269,18 +265,9 @@ export class CategoriasItspService {
       categoria.orden = dto.orden;
     }
 
-    if (cambiaDePadre) {
-      // Sólo cambia el código de esta subsección; las hermanas viejas y
-      // nuevas conservan el suyo (C-3).
-      const idPadreNuevo = categoria.idCategoriaPadre;
-      await this.conCodigoAsignado(async (repositorio) => {
-        categoria.codigo = await this.calcularSiguienteCodigo(
-          repositorio,
-          idPadreNuevo,
-          categoria.idCategoriaItsp,
-        );
-        return repositorio.save(categoria);
-      });
+    let cambiosDescendientes: CambioDeCodigo[] = [];
+    if (idPadreNuevo !== null) {
+      cambiosDescendientes = await this.moverConSubarbol(categoria, idPadreNuevo, codigoAnterior);
     } else {
       await this.repositorioCategorias.save(categoria);
     }
@@ -288,17 +275,24 @@ export class CategoriasItspService {
     await this.registrarEnBitacora('ACTUALIZAR', categoria, usuarioAutenticado, {
       camposActualizados: Object.keys(dto),
       ...(categoria.codigo !== codigoAnterior
-        ? { codigoAnterior, codigoNuevo: categoria.codigo }
+        ? {
+            codigoAnterior,
+            codigoNuevo: categoria.codigo,
+            // Cuántas direcciones públicas dejan de valer: la propia y las
+            // de sus descendientes (spec D-17).
+            cantidadUrlCambiadas: 1 + cambiosDescendientes.length,
+            ...(cambiosDescendientes.length > 0 ? { cambiosDescendientes } : {}),
+          }
         : {}),
     });
 
     return this.obtener(categoria.idCategoriaItsp);
   }
 
-  // Regla #1: nunca eliminación física, sólo estado -> INACTIVO. Las
-  // subsecciones de una raíz inactiva conservan su propio estado; al quedar
-  // la raíz fuera del árbol dejan de ser alcanzables desde los selects en
-  // cascada, y reactivar la raíz las devuelve tal como estaban.
+  // Regla #1: nunca eliminación física, sólo estado -> INACTIVO. Los
+  // descendientes de una categoría inactiva conservan su propio estado; al
+  // quedar ella fuera del árbol activo dejan de ser alcanzables (estado
+  // efectivo, spec D-5), y reactivarla los devuelve tal como estaban.
   async cambiarEstado(
     id: number,
     nuevoEstado: 'ACTIVO' | 'INACTIVO',
@@ -328,33 +322,145 @@ export class CategoriasItspService {
   }
 
   /**
-   * Valida el padre solicitado. `null` es válido (la categoría es raíz); si
-   * viene un id, debe existir y ser a su vez una raíz, porque colgar de una
-   * subsección crearía el tercer nivel que la jerarquía no admite.
+   * Valida el padre de una categoría nueva y devuelve el nivel que tendrá.
+   * `null` es válido (la categoría es raíz, nivel 1); si viene un id, debe
+   * existir y dejar espacio bajo el tope de profundidad.
    */
-  private async resolverPadre(idCategoriaPadre: number | null): Promise<CategoriaItsp | null> {
-    if (idCategoriaPadre === null) return null;
+  private async validarPadreParaCrear(idCategoriaPadre: number | null): Promise<number> {
+    if (idCategoriaPadre === null) return 1;
 
-    const padre = await this.repositorioCategorias.findOne({
-      where: { idCategoriaItsp: idCategoriaPadre },
-    });
-
-    if (!padre) {
+    const jerarquia = new JerarquiaCategorias(await this.repositorioCategorias.find());
+    if (!jerarquia.obtener(idCategoriaPadre)) {
       throw new CategoriaPadreInvalidaException('La categoría padre seleccionada no existe');
     }
 
-    if (padre.idCategoriaPadre !== null) {
-      throw new CategoriaPadreInvalidaException(
-        'Sólo una categoría raíz puede ser categoría padre: la jerarquía ITSP admite dos niveles',
-      );
+    // La profundidad sale de la cadena de padres, no de la columna `nivel`:
+    // si alguna fila tuviera un nivel guardado inconsistente, el tope se
+    // seguiría respetando.
+    const nivel = jerarquia.profundidad(idCategoriaPadre) + 1;
+    if (nivel > PROFUNDIDAD_MAXIMA_CATEGORIAS) {
+      throw new CategoriaPadreInvalidaException(mensajeProfundidad(nivel));
     }
-
-    return padre;
+    return nivel;
   }
 
   /**
-   * El nombre se exige único entre hermanas, no en toda la tabla: dos raíces
-   * distintas pueden tener cada una una subsección llamada "Información".
+   * Reglas para mover una subcategoría (con su subárbol) bajo otra
+   * categoría (spec §7.3): el destino existe, no está dentro de lo que se
+   * mueve, el subárbol entero cabe bajo el tope, y no se lleva documentos
+   * al subárbol de Participación ciudadana (D-7).
+   */
+  private async validarMovimiento(idMovida: number, idPadreNuevo: number): Promise<void> {
+    const jerarquia = new JerarquiaCategorias(await this.repositorioCategorias.find());
+
+    if (!jerarquia.obtener(idPadreNuevo)) {
+      throw new CategoriaPadreInvalidaException('La categoría padre seleccionada no existe');
+    }
+
+    if (jerarquia.estaEnSubarbol(idPadreNuevo, idMovida)) {
+      throw new CategoriaPadreInvalidaException(MENSAJE_CICLO);
+    }
+
+    const niveles = jerarquia.profundidad(idPadreNuevo) + jerarquia.altura(idMovida);
+    if (niveles > PROFUNDIDAD_MAXIMA_CATEGORIAS) {
+      throw new CategoriaPadreInvalidaException(mensajeProfundidad(niveles));
+    }
+
+    if (jerarquia.enSubarbolExcluido(idPadreNuevo) && !jerarquia.enSubarbolExcluido(idMovida)) {
+      const ids = [
+        idMovida,
+        ...jerarquia.descendientes(idMovida).map((categoria) => categoria.idCategoriaItsp),
+      ];
+      const documentos = await this.repositorioDocumentos.count({
+        where: { idCategoriaItsp: In(ids) },
+      });
+      if (documentos > 0) {
+        throw new CategoriaPadreInvalidaException(MENSAJE_EXCLUIDA_CON_DOCUMENTOS);
+      }
+    }
+  }
+
+  /**
+   * Mueve la categoría bajo su padre nuevo y recalcula el código y el nivel
+   * de todo su subárbol, en una transacción con reintento por colisión
+   * (spec C-8). Devuelve los códigos de descendientes que cambiaron.
+   *
+   * Lo que se guarda son copias: si un intento falla y se reintenta, las
+   * entidades leídas no quedan a medio modificar.
+   */
+  private async moverConSubarbol(
+    categoria: CategoriaItsp,
+    idPadreNuevo: number,
+    codigoAnterior: string,
+  ): Promise<CambioDeCodigo[]> {
+    const id = categoria.idCategoriaItsp;
+
+    const resultado = await this.conCodigoAsignado(async (repositorio) => {
+      const jerarquia = new JerarquiaCategorias(await repositorio.find());
+      const padre = jerarquia.obtener(idPadreNuevo) as CategoriaItsp;
+
+      const codigoNuevo = siguienteCodigoHija(
+        padre.codigo,
+        jerarquia
+          .hijos(idPadreNuevo)
+          .filter((hija) => hija.idCategoriaItsp !== id)
+          .map((hija) => hija.codigo),
+      );
+
+      const descendientes = jerarquia.descendientes(id);
+      const codigosNuevos = recodificarSubarbol(
+        id,
+        codigoAnterior,
+        codigoNuevo,
+        descendientes.map((descendiente) => ({
+          id: descendiente.idCategoriaItsp,
+          idPadre: descendiente.idCategoriaPadre as number,
+          codigo: descendiente.codigo,
+        })),
+      );
+
+      this.verificarLongitudCodigo(codigoNuevo);
+      for (const codigo of codigosNuevos.values()) this.verificarLongitudCodigo(codigo);
+
+      // El nivel se recalcula aunque el código no cambie: el subárbol
+      // entero sube o baja tantos niveles como la categoría movida.
+      const nivelNuevo = jerarquia.profundidad(idPadreNuevo) + 1;
+      const desplazamiento = nivelNuevo - jerarquia.profundidad(id);
+
+      const cambios: CambioDeCodigo[] = [];
+      const filas: CategoriaItsp[] = [
+        { ...categoria, idCategoriaPadre: idPadreNuevo, codigo: codigoNuevo, nivel: nivelNuevo },
+      ];
+      for (const descendiente of descendientes) {
+        const codigo = codigosNuevos.get(descendiente.idCategoriaItsp) as string;
+        if (codigo !== descendiente.codigo) {
+          cambios.push({
+            id: descendiente.idCategoriaItsp,
+            codigoAnterior: descendiente.codigo,
+            codigoNuevo: codigo,
+          });
+        }
+        filas.push({
+          ...descendiente,
+          codigo,
+          nivel: jerarquia.profundidad(descendiente.idCategoriaItsp) + desplazamiento,
+        });
+      }
+
+      await repositorio.save(filas);
+      return { codigoNuevo, nivelNuevo, cambios };
+    });
+
+    categoria.idCategoriaPadre = idPadreNuevo;
+    categoria.codigo = resultado.codigoNuevo;
+    categoria.nivel = resultado.nivelNuevo;
+    return resultado.cambios;
+  }
+
+  /**
+   * El nombre se exige único entre hermanas, no en toda la tabla: dos
+   * categorías distintas pueden tener cada una una hija llamada
+   * "Información".
    */
   private async verificarNombreDisponibleEntreHermanas(
     nombre: string,
@@ -376,23 +482,16 @@ export class CategoriasItspService {
   }
 
   /**
-   * Siguiente código para una categoría con ese padre, contando activas e
-   * inactivas (inactivar no libera el número, RN-3). Se leen todas las
-   * filas, como en `verificarNombreDisponibleEntreHermanas`: son decenas.
-   * El padre ya viene validado por `resolverPadre`.
-   *
-   * `idCategoriaExcluida` es la subsección que se está moviendo: no debe
-   * contarse a sí misma entre sus hermanas nuevas, aunque un reintento la
-   * encuentre ya con el padre o el código del intento anterior.
+   * Siguiente código para una categoría nueva con ese padre, contando
+   * activas e inactivas (inactivar no libera el número, RN-3). Se leen
+   * todas las filas, como en `verificarNombreDisponibleEntreHermanas`: son
+   * decenas. El padre ya viene validado por `validarPadreParaCrear`.
    */
   private async calcularSiguienteCodigo(
     repositorio: Repository<CategoriaItsp>,
     idCategoriaPadre: number | null,
-    idCategoriaExcluida: number | null = null,
   ): Promise<string> {
-    const todas = (await repositorio.find()).filter(
-      (otra) => otra.idCategoriaItsp !== idCategoriaExcluida,
-    );
+    const todas = await repositorio.find();
 
     if (idCategoriaPadre === null) {
       return siguienteCodigoRaiz(
@@ -400,19 +499,32 @@ export class CategoriasItspService {
       );
     }
 
-    const codigoRaiz =
+    const codigoPadre =
       todas.find((otra) => otra.idCategoriaItsp === idCategoriaPadre)?.codigo.trim() ?? '';
-    if (codigoRaiz === '') {
+    if (codigoPadre === '') {
       // Sólo antes de la migración 10, que rellena los códigos vacíos.
       throw new CategoriaPadreInvalidaException(
-        'La categoría padre no tiene código; no se puede numerar la subsección',
+        'La categoría padre no tiene código; no se puede numerar la subcategoría',
       );
     }
 
     return siguienteCodigoHija(
-      codigoRaiz,
+      codigoPadre,
       todas.filter((otra) => otra.idCategoriaPadre === idCategoriaPadre).map((hija) => hija.codigo),
     );
+  }
+
+  /**
+   * Con códigos de dos dígitos, 10 niveles caben con holgura en la columna
+   * (34 caracteres). Solo una raíz con un código irregular muy largo podría
+   * pasarse; entonces se responde 400 en vez de dejar que falle la base.
+   */
+  private verificarLongitudCodigo(codigo: string): void {
+    if (codigo.length > LONGITUD_MAXIMA_CODIGO_CATEGORIA) {
+      throw new CategoriaPadreInvalidaException(
+        `El código resultante supera los ${LONGITUD_MAXIMA_CODIGO_CATEGORIA} caracteres; elija otra categoría superior`,
+      );
+    }
   }
 
   /**
@@ -443,38 +555,21 @@ export class CategoriasItspService {
     return texto === '' ? null : texto;
   }
 
-  private ordenarPorOrdenYNombre(categorias: CategoriaItsp[]): CategoriaItsp[] {
-    return [...categorias].sort(
-      (a, b) => a.orden - b.orden || a.nombre.localeCompare(b.nombre, 'es'),
-    );
-  }
-
-  private ordenarJerarquicamente(categorias: CategoriaItsp[]): CategoriaItsp[] {
-    const raices = this.ordenarPorOrdenYNombre(
-      categorias.filter((categoria) => categoria.idCategoriaPadre === null),
-    );
-
-    const ordenadas: CategoriaItsp[] = [];
-    for (const raiz of raices) {
-      ordenadas.push(raiz);
-      ordenadas.push(
-        ...this.ordenarPorOrdenYNombre(
-          categorias.filter((categoria) => categoria.idCategoriaPadre === raiz.idCategoriaItsp),
-        ),
-      );
-    }
-
-    // Una subsección huérfana (su raíz fue borrada a mano en la base) no
-    // debe desaparecer de la administración: se agrega al final para que
-    // siga siendo visible y corregible.
-    const yaIncluidas = new Set(ordenadas.map((categoria) => categoria.idCategoriaItsp));
-    ordenadas.push(
-      ...this.ordenarPorOrdenYNombre(
-        categorias.filter((categoria) => !yaIncluidas.has(categoria.idCategoriaItsp)),
-      ),
-    );
-
-    return ordenadas;
+  private mapearFila(
+    categoria: CategoriaItsp,
+    nombreCategoriaPadre: string | null,
+  ): CategoriaItspRespuestaDto {
+    return new CategoriaItspRespuestaDto({
+      id: categoria.idCategoriaItsp,
+      codigo: categoria.codigo,
+      nombre: categoria.nombre,
+      descripcion: categoria.descripcion,
+      nivel: categoria.nivel,
+      orden: categoria.orden,
+      estado: categoria.estado as 'ACTIVO' | 'INACTIVO',
+      idCategoriaPadre: categoria.idCategoriaPadre,
+      nombreCategoriaPadre,
+    });
   }
 
   private mapearNodo(

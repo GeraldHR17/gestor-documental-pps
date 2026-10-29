@@ -18,3 +18,15 @@ export const CODIGO_CATEGORIA_RAIZ_EXCLUIDA = 'ITSP-03';
 
 export const MENSAJE_CATEGORIA_EXCLUIDA =
   "La categoría 'Participación ciudadana' no es válida para clasificar documentos.";
+
+/**
+ * Niveles que admite la jerarquía de categorías ITSP, contando la raíz
+ * (spec-ajustes-niveles-y-estados, C-6). Es un tope técnico, no una regla
+ * de negocio: con 10 niveles el código más largo (ITSP-01 más nueve
+ * "-MM") mide 34 caracteres y cabe con holgura en VARCHAR(50). El
+ * frontend mantiene el mismo valor en `src/lib/documentos.config.ts`.
+ */
+export const PROFUNDIDAD_MAXIMA_CATEGORIAS = 10;
+
+/** Largo de la columna `categorias_itsp.codigo`. */
+export const LONGITUD_MAXIMA_CODIGO_CATEGORIA = 50;
