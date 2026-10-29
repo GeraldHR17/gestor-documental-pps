@@ -1,13 +1,12 @@
 // src/composables/usePortalPublico.ts
 //
-// Estado de las tres vistas del portal. Mismo patrón que el resto de los
+// Estado de las vistas del portal. Mismo patrón que el resto de los
 // composables de datos (`reactive` + `toRefs`, sin Pinia).
 //
 // El árbol de secciones sí se guarda a nivel de módulo, como hacen
-// `useAutenticacion` y `useNotificaciones`: lo piden la portada, la página
-// de sección (para las migas de pan) y la de subsección, y no tiene
-// sentido volver a traerlo en cada navegación dentro del iframe. Lo demás
-// —el listado de documentos— es estado de una vista y nace con ella.
+// `useAutenticacion` y `useNotificaciones`: no tiene sentido volver a
+// traerlo en cada navegación dentro del iframe. Lo demás —el nodo abierto
+// y su listado de documentos— es estado de una vista y nace con ella.
 //
 // Este archivo NO importa useAutenticacion, tokenStore ni http.ts: el
 // portal no puede tocar la sesión ni por descuido.
@@ -15,9 +14,15 @@
 import { reactive, toRefs } from 'vue';
 
 import portalPublicoService from '@/services/portalPublico.service';
-import { LIMITE_POR_PAGINA, esNoDisponible, mensajeDeError } from '@/lib/portalPublico.config';
+import {
+  LIMITE_POR_PAGINA,
+  TEXTOS,
+  esNoDisponible,
+  mensajeDeError,
+} from '@/lib/portalPublico.config';
 import type {
   DocumentoPublicoDto,
+  NodoPublicoDto,
   SeccionPublicaDto,
 } from '@/types/portalPublico.types';
 
@@ -74,30 +79,31 @@ export function usePortalPublicoSecciones() {
   return { ...toRefs(arbol), cargarSecciones, seccionPorCodigo };
 }
 
-interface EstadoSeccion {
-  seccion: SeccionPublicaDto | null;
+interface EstadoNodo {
+  nodo: NodoPublicoDto | null;
   cargando: boolean;
   error: string | null;
   noDisponible: boolean;
 }
 
-export function usePortalPublicoSeccion() {
-  const estado = reactive<EstadoSeccion>({
-    seccion: null,
+/** Una categoría de cualquier nivel: la de la página que se está viendo. */
+export function usePortalPublicoNodo() {
+  const estado = reactive<EstadoNodo>({
+    nodo: null,
     cargando: false,
     error: null,
     noDisponible: false,
   });
 
-  async function cargarSeccion(codigoSeccion: string): Promise<void> {
+  async function cargarNodo(codigo: string): Promise<void> {
     estado.cargando = true;
     estado.error = null;
     estado.noDisponible = false;
     try {
-      estado.seccion = await portalPublicoService.obtenerSeccion(codigoSeccion);
+      estado.nodo = await portalPublicoService.obtenerNodo(codigo);
     } catch (error) {
-      console.error(`No se pudo cargar la sección ${codigoSeccion}`, error);
-      estado.seccion = null;
+      console.error(`No se pudo cargar la categoría ${codigo}`, error);
+      estado.nodo = null;
       estado.noDisponible = esNoDisponible(error);
       estado.error = mensajeDeError(error);
     } finally {
@@ -105,7 +111,18 @@ export function usePortalPublicoSeccion() {
     }
   }
 
-  return { ...toRefs(estado), cargarSeccion };
+  /**
+   * Para las URL de dos segmentos: el nodo no corresponde a esa dirección
+   * (la subsección no es hija directa de la sección). Se ve igual que
+   * cualquier página que no existe.
+   */
+  function marcarNoDisponible(): void {
+    estado.nodo = null;
+    estado.noDisponible = true;
+    estado.error = TEXTOS.errorNoDisponible;
+  }
+
+  return { ...toRefs(estado), cargarNodo, marcarNoDisponible };
 }
 
 interface EstadoDocumentos {
@@ -157,29 +174,15 @@ export function usePortalPublicoDocumentos() {
     }
   }
 
-  /** Documentos de una subsección. */
-  function cargarDeSubseccion(
-    codigoSeccion: string,
-    codigoSubseccion: string,
-    pagina = 1,
-  ): Promise<void> {
+  /** Documentos clasificados directamente en un nodo de cualquier nivel. */
+  function cargarDeNodo(codigo: string, pagina = 1): Promise<void> {
     return cargar(() =>
-      portalPublicoService.listarDocumentos(codigoSeccion, codigoSubseccion, {
+      portalPublicoService.listarDocumentosDeNodo(codigo, {
         pagina,
         limite: LIMITE_POR_PAGINA,
       }),
     );
   }
 
-  /** Documentos colgados directamente de la sección. */
-  function cargarDeSeccion(codigoSeccion: string, pagina = 1): Promise<void> {
-    return cargar(() =>
-      portalPublicoService.listarDocumentosDeSeccion(codigoSeccion, {
-        pagina,
-        limite: LIMITE_POR_PAGINA,
-      }),
-    );
-  }
-
-  return { ...toRefs(estado), cargarDeSubseccion, cargarDeSeccion };
+  return { ...toRefs(estado), cargarDeNodo };
 }

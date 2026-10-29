@@ -1,13 +1,20 @@
 // src/services/portalPublico.service.ts
 //
-// Acceso a las seis rutas de `/publico`. Mismo patrón que el resto de los
-// servicios, con una diferencia: las dos últimas no hacen ninguna petición.
+// Acceso a las rutas de `/publico` que usa el portal. Mismo patrón que el
+// resto de los servicios, con una diferencia: las dos últimas no hacen
+// ninguna petición.
+//
+// Desde spec-ajustes-niveles-y-estados las páginas de sección y de
+// subsección piden el nodo genérico (`/publico/categorias/:codigo`), que
+// sirve a cualquier nivel. Los endpoints `/publico/secciones/...` siguen en
+// el backend con el mismo contrato; aquí solo se usa el árbol de la portada.
 
 import clienteHttpPublico, { URL_BASE_API_PUBLICA } from '@/lib/httpPublico';
 import type {
   DocumentoPublicoDto,
   FiltrosListadoPublico,
   ListaPaginadaDocumentosPublicosDto,
+  NodoPublicoDto,
   SeccionPublicaDto,
 } from '@/types/portalPublico.types';
 
@@ -37,39 +44,25 @@ export const portalPublicoService = {
     return data;
   },
 
-  /** Una sección concreta. 404 si el código no existe o no es una raíz activa. */
-  async obtenerSeccion(codigoSeccion: string): Promise<SeccionPublicaDto> {
-    const { data } = await clienteHttpPublico.get<SeccionPublicaDto>(
-      `${BASE}/secciones/${encodeURIComponent(codigoSeccion)}`,
-    );
-    return data;
-  },
-
-  /** Documentos de una subsección. */
-  async listarDocumentos(
-    codigoSeccion: string,
-    codigoSubseccion: string,
-    filtros: FiltrosListadoPublico = {},
-  ): Promise<ListaPaginadaDocumentosPublicosDto> {
-    const { data } = await clienteHttpPublico.get<ListaPaginadaDocumentosPublicosDto>(
-      `${BASE}/secciones/${encodeURIComponent(codigoSeccion)}/${encodeURIComponent(codigoSubseccion)}/documentos`,
-      { params: filtros },
-    );
-    return data;
-  },
-
   /**
-   * Documentos colgados DIRECTAMENTE de una sección, no de sus
-   * subsecciones. El backend expone esta ruta porque el modelo permite esa
-   * clasificación; sin ella, esos documentos se contarían en el árbol y no
-   * habría forma de abrirlos.
+   * Cualquier categoría visible, de cualquier nivel, por su código (sin
+   * distinguir mayúsculas): sus hijas activas, la ruta de ancestros y los
+   * conteos. 404 si no existe o no está efectivamente activa.
    */
-  async listarDocumentosDeSeccion(
-    codigoSeccion: string,
+  async obtenerNodo(codigo: string): Promise<NodoPublicoDto> {
+    const { data } = await clienteHttpPublico.get<NodoPublicoDto>(
+      `${BASE}/categorias/${encodeURIComponent(codigo)}`,
+    );
+    return data;
+  },
+
+  /** Documentos clasificados DIRECTAMENTE en ese nodo, no en sus descendientes. */
+  async listarDocumentosDeNodo(
+    codigo: string,
     filtros: FiltrosListadoPublico = {},
   ): Promise<ListaPaginadaDocumentosPublicosDto> {
     const { data } = await clienteHttpPublico.get<ListaPaginadaDocumentosPublicosDto>(
-      `${BASE}/secciones/${encodeURIComponent(codigoSeccion)}/documentos`,
+      `${BASE}/categorias/${encodeURIComponent(codigo)}/documentos`,
       { params: filtros },
     );
     return data;

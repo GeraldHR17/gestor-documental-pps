@@ -36,6 +36,43 @@ export interface SeccionPublicaDto {
   subsecciones: SubseccionPublicaDto[];
 }
 
+/** Un ancestro de un nodo, de la raíz al padre. */
+export interface CategoriaEnRutaPublicaDto {
+  /** En minúsculas, como en la URL. */
+  codigo: string;
+  nombre: string;
+}
+
+/** Una hija activa de un nodo, para su tarjeta. */
+export interface HijaPublicaDto {
+  codigo: string;
+  nombre: string;
+  descripcion: string | null;
+  orden: number;
+  /** Documentos publicados de todo su subárbol visible. */
+  cantidadDocumentos: number;
+  /** Si tiene a su vez hijas activas. */
+  tieneHijos: boolean;
+}
+
+/**
+ * Cualquier categoría visible del índice, de cualquier nivel
+ * (`GET /publico/categorias/:codigo`, spec-ajustes-niveles-y-estados D-2).
+ */
+export interface NodoPublicoDto {
+  codigo: string;
+  nombre: string;
+  descripcion: string | null;
+  orden: number;
+  /** Documentos publicados de todo su subárbol visible. */
+  cantidadDocumentos: number;
+  /** Los clasificados directamente en este nodo, que lista `/documentos`. */
+  documentosPropios: number;
+  /** Ancestros de la raíz al padre; vacío si el nodo es una raíz. */
+  ruta: CategoriaEnRutaPublicaDto[];
+  hijos: HijaPublicaDto[];
+}
+
 /** Un documento, tal como lo ve el público: sin estado, sin autor, sin rutas. */
 export interface DocumentoPublicoDto {
   id: number;

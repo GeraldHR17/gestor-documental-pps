@@ -1,7 +1,10 @@
 <script setup lang="ts">
 // src/components/portal/TarjetaSubseccion.vue
 //
-// Recuadro seleccionable de una subsección (RFP-02, RFP-03).
+// Recuadro seleccionable de una categoría hija (RFP-02, RFP-03), de
+// cualquier nivel. Recibe el destino ya armado: quien lo usa decide la URL
+// (spec-ajustes-niveles-y-estados D-3), así que la tarjeta no necesita
+// saber en qué nivel está.
 //
 // Es un <RouterLink>, que genera un <a> de verdad, y no un <div @click>:
 // así se activa con Enter sin escribir una línea de código, sale en la
@@ -11,23 +14,20 @@
 //
 // Aspecto: recuadro del Observatorio (spec-ajustes-posdespliegue §9.2).
 
-import { RouterLink } from 'vue-router';
+import { RouterLink, type RouteLocationRaw } from 'vue-router';
 import { describirCantidad } from '@/lib/portalPublico.config';
-import type { SubseccionPublicaDto } from '@/types/portalPublico.types';
+import type { HijaPublicaDto } from '@/types/portalPublico.types';
 
 defineProps<{
-  subseccion: SubseccionPublicaDto;
-  codigoSeccion: string;
+  subseccion: Pick<HijaPublicaDto, 'nombre' | 'descripcion' | 'cantidadDocumentos'>;
+  destino: RouteLocationRaw;
 }>();
 </script>
 
 <template>
   <li>
     <RouterLink
-      :to="{
-        name: 'portal-subseccion',
-        params: { seccion: codigoSeccion.toLowerCase(), subseccion: subseccion.codigo.toLowerCase() },
-      }"
+      :to="destino"
       class="group flex h-full flex-col rounded-lg border border-(--portal-borde) bg-(--portal-recuadro) p-4 transition-colors hover:border-(--portal-contexto)"
     >
       <span class="flex items-start justify-between gap-3">

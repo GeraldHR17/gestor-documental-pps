@@ -171,12 +171,13 @@ export class PortalPublicoService {
    *
    * No es un endpoint hipotético: el modelo permite esa clasificación.
    * `DocumentosService.verificarClasificacion` comprueba que la categoría
-   * exista, esté activa y no sea la excluida, pero NO exige que sea una
-   * subsección; y en el frontend `idCategoriaEfectiva` cae a la raíz cuando
-   * esa raíz no tiene subsecciones. Hoy las cuatro tienen, así que el
-   * formulario siempre pide una, pero por la API se puede clasificar en la
-   * raíz. Sin este endpoint, esos documentos se contarían en el árbol y no
-   * habría manera de abrirlos.
+   * exista, esté efectivamente activa y no sea de la rama excluida, pero NO
+   * exige que sea una subsección; y el formulario deja elegir una raíz
+   * cuando no tiene subcategorías (spec-ajustes-niveles-y-estados D-4).
+   * Hoy las cuatro tienen, pero por la API se puede clasificar en la raíz.
+   * Sin este endpoint, esos documentos se contarían en el árbol y no
+   * habría manera de abrirlos. El portal ya no lo usa (pide
+   * `/publico/categorias/:codigo/documentos`), pero su contrato se mantiene.
    */
   async listarDocumentosDeSeccion(
     codigoSeccion: string,

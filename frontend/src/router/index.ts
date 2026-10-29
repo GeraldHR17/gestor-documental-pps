@@ -115,17 +115,22 @@ const router = createRouter({
           component: () => import('@/views/PortalSeccionesView.vue'),
           meta: { sinSesion: true },
         },
+        // Un segmento: CUALQUIER categoría visible por su código, de
+        // cualquier nivel (`/vista/itsp-01`, `/vista/itsp-01-02-01`). Dos
+        // segmentos: la URL de subsección de siempre, que exige que sea hija
+        // directa de la sección. Las dos usan la misma vista y conservan su
+        // nombre y sus parámetros (spec-ajustes-niveles-y-estados D-1).
         {
           path: ':seccion',
           name: 'portal-seccion',
-          component: () => import('@/views/PortalSeccionView.vue'),
+          component: () => import('@/views/PortalNodoView.vue'),
           props: true,
           meta: { sinSesion: true },
         },
         {
           path: ':seccion/:subseccion',
           name: 'portal-subseccion',
-          component: () => import('@/views/PortalSubseccionView.vue'),
+          component: () => import('@/views/PortalNodoView.vue'),
           props: true,
           meta: { sinSesion: true },
         },
