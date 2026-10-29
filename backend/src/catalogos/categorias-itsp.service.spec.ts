@@ -531,10 +531,17 @@ describe('CategoriasItspService', () => {
       ).rejects.toBeInstanceOf(CategoriaPadreInvalidaException);
     });
 
-    it('impide colgar una raíz que ya tiene subsecciones: crearía un tercer nivel', async () => {
+    // Antes el motivo era «crearía un tercer nivel»; con N niveles lo que
+    // la impide es la regla raíz ↔ subsección, que sigue vigente.
+    it('impide colgar una raíz con subsecciones bajo otra raíz: una raíz no pasa a subsección', async () => {
       await expect(
         servicio.actualizar(1, { idCategoriaPadre: 2 }, usuarioAutenticado),
-      ).rejects.toBeInstanceOf(CategoriaPadreInvalidaException);
+      ).rejects.toThrow(
+        new CategoriaPadreInvalidaException(
+          'Una categoría raíz no puede convertirse en subsección ni una subsección en raíz',
+        ),
+      );
+      expect(repositorio.save).not.toHaveBeenCalled();
     });
 
     it('deja renombrar una categoría con su mismo nombre sin marcarla como duplicada', async () => {
