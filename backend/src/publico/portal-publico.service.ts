@@ -26,13 +26,20 @@ import { Documento } from '../entidades/documento.entidad';
 import { VersionDocumento } from '../entidades/version-documento.entidad';
 
 import { AlmacenamientoDocumentosService } from '../documentos/almacenamiento-documentos.service';
+import { JerarquiaCategorias } from '../catalogos/jerarquia-categorias';
 
 import {
   DocumentoPublicoNoDisponibleException,
   RecursoPublicoNoDisponibleException,
 } from '../comun/excepciones/excepciones-portal-publico';
 
-import { SeccionPublicaDto, SubseccionPublicaDto } from './dto/seccion-publica.dto';
+import {
+  CategoriaEnRutaPublicaDto,
+  HijaPublicaDto,
+  NodoPublicoDto,
+  SeccionPublicaDto,
+  SubseccionPublicaDto,
+} from './dto/seccion-publica.dto';
 import {
   DocumentoPublicoDto,
   ListaPaginadaDocumentosPublicosDto,
@@ -86,27 +93,73 @@ export class PortalPublicoService {
    * olvido. Que la sección no tenga recuadros en pantalla lo decide la vista.
    */
   async obtenerArbol(): Promise<SeccionPublicaDto[]> {
-    const activas = await this.repositorioCategorias.find({
-      where: { estado: ESTADO_CATEGORIA_ACTIVA },
-    });
-
+    const jerarquia = await this.cargarJerarquia();
     const conteos = await this.contarDocumentosPublicadosPorCategoria();
 
-    const raices = this.ordenar(activas.filter((categoria) => categoria.idCategoriaPadre === null));
-
-    return raices.map((raiz) => this.armarSeccion(raiz, activas, conteos));
+    return jerarquia
+      .raices()
+      .filter((raiz) => raiz.estado === ESTADO_CATEGORIA_ACTIVA)
+      .map((raiz) => this.armarSeccion(raiz, jerarquia, conteos));
   }
 
   /** Una sección concreta, resuelta por su código. */
   async obtenerSeccion(codigoSeccion: string): Promise<SeccionPublicaDto> {
     const raiz = await this.buscarSeccionActiva(codigoSeccion);
 
-    const activas = await this.repositorioCategorias.find({
-      where: { estado: ESTADO_CATEGORIA_ACTIVA },
-    });
+    const jerarquia = await this.cargarJerarquia();
     const conteos = await this.contarDocumentosPublicadosPorCategoria();
 
-    return this.armarSeccion(raiz, activas, conteos);
+    return this.armarSeccion(raiz, jerarquia, conteos);
+  }
+
+  /**
+   * Cualquier categoría, de cualquier nivel, resuelta por su código: la
+   * dirección `/vista/:codigo` (spec-ajustes-niveles-y-estados D-1, D-2).
+   * Trae sus hijas activas como tarjetas, cuántos documentos tiene ella
+   * misma y la ruta de sus ancestros, que es lo que permite a la vista
+   * decir dónde se está sin migas y reconocer el subárbol de Participación
+   * ciudadana.
+   */
+  async obtenerNodo(codigo: string): Promise<NodoPublicoDto> {
+    const jerarquia = await this.cargarJerarquia();
+    const nodo = await this.buscarNodoVisible(codigo, jerarquia);
+    const conteos = await this.contarDocumentosPublicadosPorCategoria();
+
+    return new NodoPublicoDto({
+      codigo: this.codigoPublico(nodo),
+      nombre: nodo.nombre,
+      descripcion: nodo.descripcion,
+      orden: nodo.orden,
+      cantidadDocumentos: this.contarSubarbolVisible(nodo, jerarquia, conteos),
+      documentosPropios: conteos.get(nodo.idCategoriaItsp) ?? 0,
+      ruta: jerarquia.ancestros(nodo.idCategoriaItsp).map(
+        (ancestro) =>
+          new CategoriaEnRutaPublicaDto({
+            codigo: this.codigoPublico(ancestro),
+            nombre: ancestro.nombre,
+          }),
+      ),
+      hijos: this.hijasVisibles(nodo, jerarquia).map(
+        (hija) =>
+          new HijaPublicaDto({
+            codigo: this.codigoPublico(hija),
+            nombre: hija.nombre,
+            descripcion: hija.descripcion,
+            orden: hija.orden,
+            cantidadDocumentos: this.contarSubarbolVisible(hija, jerarquia, conteos),
+            tieneHijos: this.hijasVisibles(hija, jerarquia).length > 0,
+          }),
+      ),
+    });
+  }
+
+  /** Documentos clasificados directamente en un nodo de cualquier nivel. */
+  async listarDocumentosDeNodo(
+    codigo: string,
+    filtros: FiltrosListadoPublicoDto,
+  ): Promise<ListaPaginadaDocumentosPublicosDto> {
+    const nodo = await this.buscarNodoVisible(codigo, await this.cargarJerarquia());
+    return this.listarDocumentosDeCategoria(nodo.idCategoriaItsp, filtros);
   }
 
   // =====================================================================
@@ -174,10 +227,14 @@ export class PortalPublicoService {
   async resolverArchivoPublico(idDocumento: number): Promise<ArchivoPublicoResuelto> {
     const documento = await this.repositorioDocumentos.findOne({
       where: { idDocumento, estado: ESTADO_PUBLICADO },
-      relations: { categoriaItsp: { categoriaPadre: true } },
     });
 
-    if (!documento || !this.categoriaVisible(documento.categoriaItsp)) {
+    // Visible solo si su categoría y TODAS sus superiores están activas,
+    // a cualquier profundidad (estado efectivo, spec D-5).
+    if (
+      !documento ||
+      !(await this.cargarJerarquia()).efectivamenteActiva(documento.idCategoriaItsp)
+    ) {
       throw new RecursoPublicoNoDisponibleException();
     }
 
@@ -234,8 +291,9 @@ export class PortalPublicoService {
   /**
    * Busca una raíz activa por su código.
    *
-   * No se normaliza el código a minúsculas: la columna usa la colación
-   * `utf8mb4_0900_ai_ci`, insensible a mayúsculas y acentos, de modo que
+   * No se normaliza el código a minúsculas: la colación de la columna
+   * (`utf8mb4_unicode_ci` en la VM, `utf8mb4_0900_ai_ci` en el Docker de
+   * desarrollo) es insensible a mayúsculas, de modo que
    * `itsp-01` ya encuentra `ITSP-01`. Convertirlo sería trabajo inútil que
    * además daría a entender que la comparación es sensible. Hay una prueba
    * que fija ese comportamiento, para que un cambio de colación no lo rompa
@@ -256,39 +314,65 @@ export class PortalPublicoService {
   }
 
   /**
-   * Un documento solo es visible si su categoría está activa Y, cuando es
-   * una subsección, también su sección padre.
-   *
-   * Lo segundo no es un detalle: quien desactiva "Rendición de cuentas"
-   * desde el catálogo espera que desaparezca del portal con todo lo que
-   * cuelga de ella. Sin esta condición, sus subsecciones seguirían siendo
-   * alcanzables escribiendo la URL (spec 11.1).
+   * Cualquier categoría activa por su código, siempre que lo estén también
+   * todas sus superiores (estado efectivo, spec D-5). Lo segundo no es un
+   * detalle: quien desactiva "Rendición de cuentas" desde el catálogo
+   * espera que desaparezca del portal con todo lo que cuelga de ella, a
+   * cualquier profundidad. Sin esta condición, sus subcategorías seguirían
+   * siendo alcanzables escribiendo la URL (spec 11.1).
    */
-  private categoriaVisible(categoria: CategoriaItsp | null | undefined): boolean {
-    if (!categoria || categoria.estado !== ESTADO_CATEGORIA_ACTIVA) {
-      return false;
+  private async buscarNodoVisible(
+    codigo: string,
+    jerarquia: JerarquiaCategorias<CategoriaItsp>,
+  ): Promise<CategoriaItsp> {
+    const categoria = await this.repositorioCategorias.findOne({ where: { codigo } });
+
+    if (!categoria || !jerarquia.efectivamenteActiva(categoria.idCategoriaItsp)) {
+      throw new RecursoPublicoNoDisponibleException();
     }
-    if (categoria.idCategoriaPadre === null) {
-      return true;
-    }
-    return categoria.categoriaPadre?.estado === ESTADO_CATEGORIA_ACTIVA;
+
+    return categoria;
   }
 
-  /** Por `orden` y, a igualdad, por nombre, para que el resultado no dependa del motor. */
-  private ordenar(categorias: CategoriaItsp[]): CategoriaItsp[] {
-    return [...categorias].sort(
-      (a, b) => a.orden - b.orden || a.nombre.localeCompare(b.nombre, 'es'),
+  /** La tabla completa en memoria, para resolver ancestros (son decenas de filas). */
+  private async cargarJerarquia(): Promise<JerarquiaCategorias<CategoriaItsp>> {
+    return new JerarquiaCategorias(await this.repositorioCategorias.find());
+  }
+
+  /** Hijas activas, por `orden` y nombre. */
+  private hijasVisibles(
+    categoria: CategoriaItsp,
+    jerarquia: JerarquiaCategorias<CategoriaItsp>,
+  ): CategoriaItsp[] {
+    return jerarquia
+      .hijos(categoria.idCategoriaItsp)
+      .filter((hija) => hija.estado === ESTADO_CATEGORIA_ACTIVA);
+  }
+
+  /**
+   * Documentos publicados de la categoría y de todo su subárbol visible
+   * (spec D-10): una tarjeta que dice "3 documentos" debe llevar a donde
+   * están esos 3. Lo que cuelga de una categoría inactiva no se cuenta,
+   * porque no es alcanzable. Se llama solo sobre categorías visibles, así
+   * que basta con mirar el estado de cada hija al bajar.
+   */
+  private contarSubarbolVisible(
+    categoria: CategoriaItsp,
+    jerarquia: JerarquiaCategorias<CategoriaItsp>,
+    conteos: Map<number, number>,
+  ): number {
+    return this.hijasVisibles(categoria, jerarquia).reduce(
+      (total, hija) => total + this.contarSubarbolVisible(hija, jerarquia, conteos),
+      conteos.get(categoria.idCategoriaItsp) ?? 0,
     );
   }
 
   private armarSeccion(
     raiz: CategoriaItsp,
-    activas: CategoriaItsp[],
+    jerarquia: JerarquiaCategorias<CategoriaItsp>,
     conteos: Map<number, number>,
   ): SeccionPublicaDto {
-    const hijas = this.ordenar(
-      activas.filter((categoria) => categoria.idCategoriaPadre === raiz.idCategoriaItsp),
-    );
+    const hijas = this.hijasVisibles(raiz, jerarquia);
 
     const subsecciones = hijas.map(
       (hija) =>
@@ -297,13 +381,14 @@ export class PortalPublicoService {
           nombre: hija.nombre,
           descripcion: hija.descripcion,
           orden: hija.orden,
-          cantidadDocumentos: conteos.get(hija.idCategoriaItsp) ?? 0,
+          cantidadDocumentos: this.contarSubarbolVisible(hija, jerarquia, conteos),
         }),
     );
 
     // Los documentos de la propia raíz se suman a los de sus subsecciones
-    // activas. Los de una subsección inactiva no se cuentan: esa subsección
-    // no aparece y sus documentos no son alcanzables.
+    // activas, cada una con todo su subárbol visible. Los de una subsección
+    // inactiva no se cuentan: esa subsección no aparece y sus documentos no
+    // son alcanzables.
     const propios = conteos.get(raiz.idCategoriaItsp) ?? 0;
     const deSubsecciones = subsecciones.reduce((total, hija) => total + hija.cantidadDocumentos, 0);
 

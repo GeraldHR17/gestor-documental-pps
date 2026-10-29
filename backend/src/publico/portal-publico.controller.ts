@@ -1,6 +1,6 @@
 // src/publico/portal-publico.controller.ts
 //
-// Portal público de transparencia. Seis rutas, todas GET, todas abiertas a
+// Portal público de transparencia. Ocho rutas, todas GET, todas abiertas a
 // Internet, ninguna de escritura y ninguna con cuerpo de petición.
 //
 // Por qué un controlador propio con prefijo `publico` en vez de colgar
@@ -35,7 +35,7 @@ import { Publico } from '../comun/decoradores/publico.decorator';
 
 import { PortalPublicoService, type ArchivoPublicoResuelto } from './portal-publico.service';
 import { FiltrosListadoPublicoDto } from './dto/filtros-publicos.dto';
-import { SeccionPublicaDto } from './dto/seccion-publica.dto';
+import { NodoPublicoDto, SeccionPublicaDto } from './dto/seccion-publica.dto';
 import { ListaPaginadaDocumentosPublicosDto } from './dto/documento-publico.dto';
 import { FiltroThrottlerPublico } from './filtro-throttler-publico';
 
@@ -124,6 +124,33 @@ export class PortalPublicoController {
       codigoSubseccion,
       filtros,
     );
+  }
+
+  // =====================================================================
+  // Categorías de cualquier nivel (spec-ajustes-niveles-y-estados D-2)
+  // =====================================================================
+
+  /** Un nodo por su código, con sus hijas activas y la ruta de ancestros. */
+  @Publico()
+  @Throttle({ default: { ttl: VENTANA_MS, limit: LIMITE_JSON_POR_MINUTO } })
+  @Header('X-Content-Type-Options', 'nosniff')
+  @Header('Cache-Control', 'no-cache')
+  @Get('categorias/:codigo')
+  obtenerCategoria(@Param('codigo') codigo: string): Promise<NodoPublicoDto> {
+    return this.portalPublicoService.obtenerNodo(codigo);
+  }
+
+  /** Documentos clasificados directamente en ese nodo. */
+  @Publico()
+  @Throttle({ default: { ttl: VENTANA_MS, limit: LIMITE_JSON_POR_MINUTO } })
+  @Header('X-Content-Type-Options', 'nosniff')
+  @Header('Cache-Control', 'no-cache')
+  @Get('categorias/:codigo/documentos')
+  listarDocumentosDeCategoria(
+    @Param('codigo') codigo: string,
+    @Query() filtros: FiltrosListadoPublicoDto,
+  ): Promise<ListaPaginadaDocumentosPublicosDto> {
+    return this.portalPublicoService.listarDocumentosDeNodo(codigo, filtros);
   }
 
   // =====================================================================

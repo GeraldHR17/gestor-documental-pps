@@ -44,3 +44,56 @@ export class SeccionPublicaDto {
     Object.assign(this, datos);
   }
 }
+
+// ---------------------------------------------------------------------
+// Nodo de cualquier nivel (spec-ajustes-niveles-y-estados §8)
+// ---------------------------------------------------------------------
+// Las categorías admiten hasta 10 niveles, y cada una tiene su propia
+// dirección pública `/vista/:codigo`. Estos DTO alimentan esa vista; las
+// formas de arriba (secciones y subsecciones) no cambian para no romper a
+// nadie que ya las consuma. También son lista blanca.
+
+/** Un ancestro, para que la vista diga dónde está sin mostrar migas. */
+export class CategoriaEnRutaPublicaDto {
+  codigo: string;
+  nombre: string;
+
+  constructor(datos: CategoriaEnRutaPublicaDto) {
+    Object.assign(this, datos);
+  }
+}
+
+/** Una hija activa del nodo, como tarjeta. */
+export class HijaPublicaDto {
+  codigo: string;
+  nombre: string;
+  descripcion: string | null;
+  orden: number;
+  /** Documentos PUBLICADOS de todo su subárbol visible. */
+  cantidadDocumentos: number;
+  /** Si tiene a su vez hijas activas. */
+  tieneHijos: boolean;
+
+  constructor(datos: HijaPublicaDto) {
+    Object.assign(this, datos);
+  }
+}
+
+/** `GET /publico/categorias/:codigo`. */
+export class NodoPublicoDto {
+  codigo: string;
+  nombre: string;
+  descripcion: string | null;
+  orden: number;
+  /** Documentos PUBLICADOS de todo su subárbol visible. */
+  cantidadDocumentos: number;
+  /** Los clasificados directamente en este nodo, que lista `/documentos`. */
+  documentosPropios: number;
+  /** Ancestros de la raíz al padre; vacío si el nodo es raíz. */
+  ruta: CategoriaEnRutaPublicaDto[];
+  hijos: HijaPublicaDto[];
+
+  constructor(datos: NodoPublicoDto) {
+    Object.assign(this, datos);
+  }
+}

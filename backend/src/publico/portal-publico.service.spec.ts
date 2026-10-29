@@ -452,11 +452,155 @@ describe('PortalPublicoService', () => {
       await servicio.obtenerSeccion('itsp-01');
 
       // El servicio pasa el código tal cual: la colación de la columna
-      // (utf8mb4_0900_ai_ci) es la que lo hace insensible a mayúsculas.
-      const codigosConsultados = repositorioCategorias.findOne.mock.calls.map(
-        (llamada) => (llamada[0] as { where: { codigo: string } }).where.codigo,
-      );
+      // (utf8mb4_unicode_ci en la VM) es la que lo hace insensible a
+      // mayúsculas. El doble de findOne no declara parámetros, así que sus
+      // llamadas se leen como lo que de verdad reciben.
+      const llamadas = repositorioCategorias.findOne.mock.calls as unknown as [
+        { where: { codigo: string } },
+      ][];
+      const codigosConsultados = llamadas.map((llamada) => llamada[0].where.codigo);
       expect(codigosConsultados).toEqual(['ITSP-01', 'itsp-01']);
+    });
+  });
+
+  describe('categorías de cualquier nivel (spec-ajustes-niveles-y-estados)', () => {
+    /** Rama de prueba: 1 > 12 > 121 > 1211 (nivel 4), más una hija inactiva. */
+    function ramaProfunda(estadoIntermedia = 'ACTIVO'): CategoriaItsp[] {
+      return [
+        ...arbolDePrueba(),
+        categoria({
+          idCategoriaItsp: 121,
+          idCategoriaPadre: 12,
+          codigo: 'ITSP-01-02-01',
+          nombre: 'Organigramas',
+          nivel: 3,
+          orden: 1,
+          estado: estadoIntermedia,
+        }),
+        categoria({
+          idCategoriaItsp: 1211,
+          idCategoriaPadre: 121,
+          codigo: 'ITSP-01-02-01-01',
+          nombre: '2026',
+          nivel: 4,
+          orden: 1,
+        }),
+        categoria({
+          idCategoriaItsp: 1212,
+          idCategoriaPadre: 121,
+          codigo: 'ITSP-01-02-01-02',
+          nombre: 'Borrador interno',
+          nivel: 4,
+          orden: 2,
+          estado: 'INACTIVO',
+        }),
+      ];
+    }
+
+    it('abre un nodo de nivel 4 con su ruta de ancestros en minúsculas', async () => {
+      const arbol = ramaProfunda();
+      const { servicio } = montar({
+        categorias: arbol,
+        categoriaUnica: arbol.find((c) => c.idCategoriaItsp === 1211),
+        conteos: [{ idCategoria: 1211, total: '2' }],
+      });
+
+      const nodo = await servicio.obtenerNodo('ITSP-01-02-01-01');
+
+      expect(nodo).toMatchObject({
+        codigo: 'itsp-01-02-01-01',
+        nombre: '2026',
+        cantidadDocumentos: 2,
+        documentosPropios: 2,
+        hijos: [],
+      });
+      expect(nodo.ruta).toEqual([
+        { codigo: 'itsp-01', nombre: 'Información institucional' },
+        { codigo: 'itsp-01-02', nombre: 'Organización y funciones' },
+        { codigo: 'itsp-01-02-01', nombre: 'Organigramas' },
+      ]);
+    });
+
+    it('lista solo las hijas activas y cuenta los documentos de todo su subárbol', async () => {
+      const arbol = ramaProfunda();
+      const { servicio } = montar({
+        categorias: arbol,
+        categoriaUnica: arbol.find((c) => c.idCategoriaItsp === 12),
+        conteos: [
+          { idCategoria: 12, total: '1' },
+          { idCategoria: 1211, total: '2' },
+          { idCategoria: 1212, total: '5' },
+        ],
+      });
+
+      const nodo = await servicio.obtenerNodo('itsp-01-02');
+
+      // 1212 está inactiva: ni aparece ni suma.
+      expect(nodo.hijos).toEqual([
+        {
+          codigo: 'itsp-01-02-01',
+          nombre: 'Organigramas',
+          descripcion: null,
+          orden: 1,
+          cantidadDocumentos: 2,
+          tieneHijos: true,
+        },
+      ]);
+      expect(nodo.cantidadDocumentos).toBe(3);
+      expect(nodo.documentosPropios).toBe(1);
+    });
+
+    it('un nodo activo cuya categoría superior está inactiva da 404', async () => {
+      const arbol = ramaProfunda('INACTIVO');
+      const { servicio } = montar({
+        categorias: arbol,
+        categoriaUnica: arbol.find((c) => c.idCategoriaItsp === 1211),
+      });
+
+      await expect(servicio.obtenerNodo('itsp-01-02-01-01')).rejects.toBeInstanceOf(
+        RecursoPublicoNoDisponibleException,
+      );
+    });
+
+    it('un código inexistente da 404', async () => {
+      const { servicio } = montar({ categorias: arbolDePrueba(), categoriaUnica: null });
+
+      await expect(servicio.obtenerNodo('itsp-09')).rejects.toBeInstanceOf(
+        RecursoPublicoNoDisponibleException,
+      );
+    });
+
+    it('lista los documentos clasificados directamente en el nodo', async () => {
+      const arbol = ramaProfunda();
+      const { servicio, constructorDocumentos } = montar({
+        categorias: arbol,
+        categoriaUnica: arbol.find((c) => c.idCategoriaItsp === 121),
+      });
+
+      await servicio.listarDocumentosDeNodo('ITSP-01-02-01', {});
+
+      expect(constructorDocumentos.where).toHaveBeenCalledWith(
+        'documento.idCategoriaItsp = :idCategoriaItsp',
+        { idCategoriaItsp: 121 },
+      );
+    });
+
+    it('en el árbol, una subsección cuenta también los documentos de sus descendientes', async () => {
+      const { servicio } = montar({
+        categorias: ramaProfunda(),
+        conteos: [
+          { idCategoria: 12, total: '1' },
+          { idCategoria: 1211, total: '2' },
+        ],
+      });
+
+      const secciones = await servicio.obtenerArbol();
+      const institucional = secciones.find((seccion) => seccion.codigo === 'itsp-01');
+
+      expect(
+        institucional?.subsecciones.find((sub) => sub.codigo === 'itsp-01-02')?.cantidadDocumentos,
+      ).toBe(3);
+      expect(institucional?.cantidadDocumentos).toBe(3);
     });
   });
 
@@ -545,9 +689,12 @@ describe('PortalPublicoService', () => {
 
     it('un documento publicado en una categoría inactiva da 404', async () => {
       const { servicio } = montar({
-        documentoUnico: documento({
-          categoriaItsp: categoria({ idCategoriaItsp: 11, idCategoriaPadre: 1, estado: 'INACTIVO' }),
-        } as Partial<Documento>),
+        documentoUnico: documento(),
+        categorias: [
+          categoria({ idCategoriaItsp: 1 }),
+          categoria({ idCategoriaItsp: 11, idCategoriaPadre: 1, estado: 'INACTIVO' }),
+        ],
+        versionUnica: version(),
       });
 
       await expect(servicio.resolverArchivoPublico(42)).rejects.toBeInstanceOf(
@@ -557,14 +704,12 @@ describe('PortalPublicoService', () => {
 
     it('un documento publicado cuya SECCIÓN PADRE está inactiva da 404', async () => {
       const { servicio } = montar({
-        documentoUnico: documento({
-          categoriaItsp: categoria({
-            idCategoriaItsp: 11,
-            idCategoriaPadre: 1,
-            estado: 'ACTIVO',
-            categoriaPadre: categoria({ idCategoriaItsp: 1, estado: 'INACTIVO' }),
-          } as Partial<CategoriaItsp>),
-        } as Partial<Documento>),
+        documentoUnico: documento(),
+        categorias: [
+          categoria({ idCategoriaItsp: 1, estado: 'INACTIVO' }),
+          categoria({ idCategoriaItsp: 11, idCategoriaPadre: 1 }),
+        ],
+        versionUnica: version(),
       });
 
       await expect(servicio.resolverArchivoPublico(42)).rejects.toBeInstanceOf(
@@ -574,14 +719,25 @@ describe('PortalPublicoService', () => {
 
     it('un documento publicado sin versiones da 404 y no un error del servidor', async () => {
       const { servicio } = montar({
-        documentoUnico: documento({
-          categoriaItsp: categoria({
-            idCategoriaItsp: 11,
-            idCategoriaPadre: 1,
-            categoriaPadre: categoria({ idCategoriaItsp: 1 }),
-          } as Partial<CategoriaItsp>),
-        } as Partial<Documento>),
+        documentoUnico: documento(),
+        categorias: arbolDePrueba(),
         versionUnica: null,
+      });
+
+      await expect(servicio.resolverArchivoPublico(42)).rejects.toBeInstanceOf(
+        RecursoPublicoNoDisponibleException,
+      );
+    });
+
+    it('un documento de nivel 3 cuya ABUELA está inactiva da 404', async () => {
+      const { servicio } = montar({
+        documentoUnico: documento({ idCategoriaItsp: 21 }),
+        categorias: [
+          categoria({ idCategoriaItsp: 1, estado: 'INACTIVO' }),
+          categoria({ idCategoriaItsp: 11, idCategoriaPadre: 1 }),
+          categoria({ idCategoriaItsp: 21, idCategoriaPadre: 11 }),
+        ],
+        versionUnica: version(),
       });
 
       await expect(servicio.resolverArchivoPublico(42)).rejects.toBeInstanceOf(
@@ -591,13 +747,8 @@ describe('PortalPublicoService', () => {
 
     it('devuelve el hash y el tamaño de la versión vigente', async () => {
       const { servicio, repositorioVersiones } = montar({
-        documentoUnico: documento({
-          categoriaItsp: categoria({
-            idCategoriaItsp: 11,
-            idCategoriaPadre: 1,
-            categoriaPadre: categoria({ idCategoriaItsp: 1 }),
-          } as Partial<CategoriaItsp>),
-        } as Partial<Documento>),
+        documentoUnico: documento(),
+        categorias: arbolDePrueba(),
         versionUnica: version({ numeroVersion: 3, hashArchivo: 'b'.repeat(64) }),
       });
 
