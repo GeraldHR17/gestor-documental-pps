@@ -541,8 +541,11 @@ onMounted(cargarDatosIniciales);
         >
           Al moverla cambiarán su código y su dirección pública<template
             v-if="subcategoriasQueSeMueven > 0"
-            >, y los de sus {{ subcategoriasQueSeMueven }}
-            {{ subcategoriasQueSeMueven === 1 ? 'subcategoría' : 'subcategorías' }}</template
+            >{{
+              subcategoriasQueSeMueven === 1
+                ? ', y los de su subcategoría'
+                : `, y los de sus ${subcategoriasQueSeMueven} subcategorías`
+            }}</template
           >. Quedará en el nivel {{ nivelResultante }}. Antes de guardar se mostrará el código
           nuevo.
         </p>
