@@ -22,6 +22,7 @@ import {
   NombreCatalogoDuplicadoException,
   RegistroCatalogoNoEncontradoException,
 } from '../comun/excepciones/excepciones-catalogos';
+import { MAXIMO_CAMBIOS_DETALLADOS_EN_BITACORA } from '../comun/constantes/categorias-itsp';
 
 const usuarioAutenticado: PayloadJwt = {
   idUsuario: 1,
@@ -142,7 +143,7 @@ function montarRepositorio(datos: CategoriaItsp[]) {
     // guarda todas sus filas de una vez).
     save: jest.fn((entidades: CategoriaItsp | CategoriaItsp[]) => {
       const guardar = (entidad: CategoriaItsp): CategoriaItsp => {
-        const guardada = { ...entidad } as CategoriaItsp;
+        const guardada: CategoriaItsp = { ...entidad };
         if (guardada.idCategoriaItsp === undefined) {
           guardada.idCategoriaItsp = proximoId++;
         }
@@ -708,6 +709,49 @@ describe('CategoriasItspService', () => {
           },
         }),
       );
+    });
+
+    it('en un subárbol grande recorta la lista de la bitácora y conserva el total', async () => {
+      // Bajo el 50 (que ya tiene al 51 y al 52): 11 hijas con 10 nietas
+      // cada una, 123 descendientes en total, todos cambian de código.
+      const anchas: CategoriaItsp[] = [];
+      for (let hija = 0; hija < 11; hija++) {
+        const idHija = 1000 + hija * 20;
+        const codigoHija = `ITSP-01-01-01-${String(hija + 3).padStart(2, '0')}`;
+        anchas.push(
+          categoria({ idCategoriaItsp: idHija, idCategoriaPadre: 50, codigo: codigoHija, nombre: `H${hija}`, nivel: 4 }),
+        );
+        for (let nieta = 1; nieta <= 10; nieta++) {
+          anchas.push(
+            categoria({
+              idCategoriaItsp: idHija + nieta,
+              idCategoriaPadre: idHija,
+              codigo: `${codigoHija}-${String(nieta).padStart(2, '0')}`,
+              nombre: `H${hija}N${nieta}`,
+              nivel: 5,
+            }),
+          );
+        }
+      }
+      await construirCon([...PROFUNDA, ...anchas]);
+
+      await servicio.actualizar(50, { idCategoriaPadre: 6 }, usuarioAutenticado);
+
+      const [{ detalles }] = bitacoraService.registrar.mock.calls.at(-1) as [
+        {
+          detalles: {
+            cantidadUrlCambiadas: number;
+            cambiosDescendientes: unknown[];
+            cambiosDescendientesOmitidos: number;
+          };
+        },
+      ];
+      expect(detalles.cantidadUrlCambiadas).toBe(124);
+      expect(detalles.cambiosDescendientes).toHaveLength(MAXIMO_CAMBIOS_DETALLADOS_EN_BITACORA);
+      expect(detalles.cambiosDescendientesOmitidos).toBe(123 - MAXIMO_CAMBIOS_DETALLADOS_EN_BITACORA);
+      // El recorte es solo de la bitácora: el subárbol entero se recodificó.
+      const lista = await servicio.listar();
+      expect(lista.find((fila) => fila.id === 1210)?.codigo).toBe('ITSP-02-01-01-13-10');
     });
 
     it('rechaza mover una categoría dentro de sí misma o de sus descendientes', async () => {

@@ -38,6 +38,7 @@ import { recodificarSubarbol, siguienteCodigoHija, siguienteCodigoRaiz } from '.
 import { JerarquiaCategorias } from './jerarquia-categorias';
 import {
   LONGITUD_MAXIMA_CODIGO_CATEGORIA,
+  MAXIMO_CAMBIOS_DETALLADOS_EN_BITACORA,
   PROFUNDIDAD_MAXIMA_CATEGORIAS,
 } from '../comun/constantes/categorias-itsp';
 import {
@@ -84,6 +85,20 @@ interface CambioDeCodigo {
   id: number;
   codigoAnterior: string;
   codigoNuevo: string;
+}
+
+/**
+ * Lista de cambios para `detalles`, recortada a
+ * MAXIMO_CAMBIOS_DETALLADOS_EN_BITACORA: lo que pase del tope queda como
+ * cuenta, para que un subárbol grande no infle la fila (ajuste 2).
+ */
+function detallarCambiosDescendientes(cambios: CambioDeCodigo[]): Record<string, unknown> {
+  if (cambios.length === 0) return {};
+  const omitidos = cambios.length - MAXIMO_CAMBIOS_DETALLADOS_EN_BITACORA;
+  return {
+    cambiosDescendientes: cambios.slice(0, MAXIMO_CAMBIOS_DETALLADOS_EN_BITACORA),
+    ...(omitidos > 0 ? { cambiosDescendientesOmitidos: omitidos } : {}),
+  };
 }
 
 @Injectable()
@@ -281,7 +296,7 @@ export class CategoriasItspService {
             // Cuántas direcciones públicas dejan de valer: la propia y las
             // de sus descendientes (spec D-17).
             cantidadUrlCambiadas: 1 + cambiosDescendientes.length,
-            ...(cambiosDescendientes.length > 0 ? { cambiosDescendientes } : {}),
+            ...detallarCambiosDescendientes(cambiosDescendientes),
           }
         : {}),
     });

@@ -30,3 +30,13 @@ export const PROFUNDIDAD_MAXIMA_CATEGORIAS = 10;
 
 /** Largo de la columna `categorias_itsp.codigo`. */
 export const LONGITUD_MAXIMA_CODIGO_CATEGORIA = 50;
+
+/**
+ * Cuántos cambios de código de descendientes se detallan en la bitácora al
+ * mover un subárbol. `detalles` es una columna JSON: su límite real es
+ * max_allowed_packet, pero una sola fila con miles de pares la vuelve
+ * pesada de leer y de mostrar. Más allá de este tope se guarda solo la
+ * cuenta (`cambiosDescendientesOmitidos`); `cantidadUrlCambiadas` siempre
+ * lleva el total exacto.
+ */
+export const MAXIMO_CAMBIOS_DETALLADOS_EN_BITACORA = 100;
