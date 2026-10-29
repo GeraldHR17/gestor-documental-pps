@@ -320,7 +320,7 @@ onMounted(() => {
                 v-for="documento in documentos"
                 :key="documento.id"
                 class="hover:bg-surface-container-low transition-colors"
-                :class="{ 'opacity-60': documento.estado === 'INACTIVO' }"
+                :class="{ '[&>td:not(.celda-estado)]:opacity-60': documento.estado === 'INACTIVO' }"
               >
                 <td class="py-gutter-sm px-gutter-lg max-w-md">
                   <router-link
@@ -344,7 +344,7 @@ onMounted(() => {
                     ({{ documento.cantidadVersiones }} en total)
                   </span>
                 </td>
-                <td class="py-gutter-sm px-gutter-lg">
+                <td class="celda-estado py-gutter-sm px-gutter-lg">
                   <BadgeEstadoDocumento :estado="documento.estado" />
                 </td>
                 <td class="py-gutter-sm px-gutter-lg text-right space-x-1 whitespace-nowrap">

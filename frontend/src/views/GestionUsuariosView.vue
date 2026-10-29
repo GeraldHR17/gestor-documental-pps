@@ -9,6 +9,7 @@ import { useRolesPermisos } from '@/composables/useRolesPermisos';
 import { useAutenticacion } from '@/composables/useAutenticacion';
 import { useNotificaciones } from '@/composables/useNotificaciones';
 import ModalConfirmacion from '@/components/ModalConfirmacion.vue';
+import BadgeEstadoRegistro from '@/components/BadgeEstadoRegistro.vue';
 import type { EstadoUsuario, UsuarioResumenDto } from '@/types/usuario.types';
 
 const { usuarios, total, pagina, limite, cargando, error, listar, cambiarEstado } = useUsuarios();
@@ -213,7 +214,7 @@ onMounted(async () => {
                 v-for="usuario in usuarios"
                 :key="usuario.idUsuario"
                 class="hover:bg-surface-container-low transition-colors group"
-                :class="{ 'opacity-60': usuario.estado === 'INACTIVO' }"
+                :class="{ '[&>td:not(.celda-estado)]:opacity-60': usuario.estado === 'INACTIVO' }"
               >
                 <!-- El flex vive en un div interno, no en el <td>: si la
                      celda misma es flex deja de comportarse como celda de
@@ -233,24 +234,8 @@ onMounted(async () => {
                 </td>
                 <td class="py-gutter-sm px-gutter-lg text-secondary">{{ usuario.correo }}</td>
                 <td class="py-gutter-sm px-gutter-lg">{{ usuario.nombreRol }}</td>
-                <td class="py-gutter-sm px-gutter-lg">
-                  <!-- Badge de estado: única forma pill del sistema. El rojo
-                       queda reservado a errores de validación, así que ACTIVO
-                       e INACTIVO se distinguen con dos neutros del stack. -->
-                  <span
-                    class="inline-flex items-center px-3 py-1 rounded-full font-label-sm text-label-sm border"
-                    :class="
-                      usuario.estado === 'ACTIVO'
-                        ? 'bg-secondary-container text-on-surface border-secondary-fixed-dim'
-                        : 'bg-surface-container-high text-on-surface border-surface-dim'
-                    "
-                  >
-                    <span
-                      class="w-1.5 h-1.5 rounded-full mr-1.5"
-                      :class="usuario.estado === 'ACTIVO' ? 'bg-secondary' : 'bg-outline'"
-                    ></span>
-                    {{ usuario.estado === 'ACTIVO' ? 'Activo' : 'Inactivo' }}
-                  </span>
+                <td class="celda-estado py-gutter-sm px-gutter-lg">
+                  <BadgeEstadoRegistro :estado="usuario.estado" />
                 </td>
                 <td class="py-gutter-sm px-gutter-lg text-right space-x-1 whitespace-nowrap">
                   <!-- Botones de ícono: NO son pill. Radio "Secondary

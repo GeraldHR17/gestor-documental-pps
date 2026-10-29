@@ -114,6 +114,28 @@
   --color-acento: #a60001;
   --color-acento-hover: #d30505;
 
+  /* ---------- Colores de estado (spec-ajustes-niveles-y-estados §9.1) ----------
+     Solo para las insignias de estado del área autenticada
+     (InsigniaEstado.vue): Activo y Publicado en verde, Borrador en
+     amarillo, Inactivo en rojo. El texto del estado se conserva siempre;
+     el color no es la única señal. Contrastes en la spec, 12.2.
+       *-contenedor   -> fondo de la insignia
+       on-*-contenedor-> texto (≥ 4.5:1 sobre su contenedor)
+       *-borde        -> borde, decorativo
+       *              -> punto de color (≥ 3:1 sobre su contenedor) */
+  --color-exito: #2e7d43;
+  --color-exito-contenedor: #e3f2e7;
+  --color-on-exito-contenedor: #1b5e30;
+  --color-exito-borde: #9fcfae;
+  --color-advertencia: #a86f00;
+  --color-advertencia-contenedor: #fff3d1;
+  --color-on-advertencia-contenedor: #6b4a00;
+  --color-advertencia-borde: #e8c770;
+  --color-peligro: #c62828;
+  --color-peligro-contenedor: #fde7e5;
+  --color-on-peligro-contenedor: #9b1c16;
+  --color-peligro-borde: #f1b2ac;
+
   /* ==========================================================
      2. TIPOGRAFÍA — Public Sans, escala de DESIGN.md
      ==========================================================
@@ -303,6 +325,20 @@
     /* Avatar y rol seleccionado. */
     --color-primary-fixed: #4a1210;
     --color-on-primary-fixed: #ffdad5;
+
+    /* Insignias de estado (texto ≥ 8.6:1 sobre su contenedor). */
+    --color-exito: #62c27f;
+    --color-exito-contenedor: #14301f;
+    --color-on-exito-contenedor: #8fdaa5;
+    --color-exito-borde: #2f6143;
+    --color-advertencia: #e0b345;
+    --color-advertencia-contenedor: #3a2d0c;
+    --color-on-advertencia-contenedor: #f3cf6e;
+    --color-advertencia-borde: #6e5620;
+    --color-peligro: #f28b82;
+    --color-peligro-contenedor: #3e1614;
+    --color-on-peligro-contenedor: #ffb4ab;
+    --color-peligro-borde: #73302a;
 
     color-scheme: dark;
   }

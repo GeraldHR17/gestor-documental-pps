@@ -10,6 +10,7 @@ import { onMounted, ref, watch } from 'vue';
 import { useCategoriasItsp } from '@/composables/useCategoriasItsp';
 import { useNotificaciones } from '@/composables/useNotificaciones';
 import ModalConfirmacion from '@/components/ModalConfirmacion.vue';
+import BadgeEstadoRegistro from '@/components/BadgeEstadoRegistro.vue';
 import type { CategoriaItspDto, EstadoCatalogo } from '@/types/catalogo.types';
 
 const { categorias, cargando, error, listar, cambiarEstado } = useCategoriasItsp();
@@ -164,7 +165,7 @@ onMounted(recargar);
                 v-for="categoria in categorias"
                 :key="categoria.id"
                 class="hover:bg-surface-container-low transition-colors"
-                :class="{ 'opacity-60': categoria.estado === 'INACTIVO' }"
+                :class="{ '[&>td:not(.celda-estado)]:opacity-60': categoria.estado === 'INACTIVO' }"
               >
                 <td class="py-gutter-sm px-gutter-lg">
                   <!-- La indentación es lo que comunica la jerarquía: las
@@ -194,21 +195,8 @@ onMounted(recargar);
                 <td class="py-gutter-sm px-gutter-lg text-secondary whitespace-nowrap">
                   {{ categoria.nivel === 1 ? 'Raíz' : 'Subsección' }}
                 </td>
-                <td class="py-gutter-sm px-gutter-lg">
-                  <span
-                    class="inline-flex items-center px-3 py-1 rounded-full font-label-sm text-label-sm border whitespace-nowrap"
-                    :class="
-                      categoria.estado === 'ACTIVO'
-                        ? 'bg-secondary-container text-on-surface border-secondary-fixed-dim'
-                        : 'bg-surface-container-high text-on-surface border-surface-dim'
-                    "
-                  >
-                    <span
-                      class="w-1.5 h-1.5 rounded-full mr-1.5"
-                      :class="categoria.estado === 'ACTIVO' ? 'bg-secondary' : 'bg-outline'"
-                    ></span>
-                    {{ categoria.estado === 'ACTIVO' ? 'Activo' : 'Inactivo' }}
-                  </span>
+                <td class="celda-estado py-gutter-sm px-gutter-lg">
+                  <BadgeEstadoRegistro :estado="categoria.estado" />
                 </td>
                 <td class="py-gutter-sm px-gutter-lg text-right space-x-1 whitespace-nowrap">
                   <router-link

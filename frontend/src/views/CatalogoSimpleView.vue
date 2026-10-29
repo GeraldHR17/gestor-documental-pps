@@ -10,6 +10,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useCatalogo } from '@/composables/useCatalogo';
 import { useNotificaciones } from '@/composables/useNotificaciones';
 import ModalConfirmacion from '@/components/ModalConfirmacion.vue';
+import BadgeEstadoRegistro from '@/components/BadgeEstadoRegistro.vue';
 import type { CatalogoDto, EstadoCatalogo } from '@/types/catalogo.types';
 
 const props = defineProps<{ catalogo: string }>();
@@ -183,7 +184,7 @@ onMounted(recargar);
                 v-for="registro in registros"
                 :key="registro.id"
                 class="hover:bg-surface-container-low transition-colors"
-                :class="{ 'opacity-60': registro.estado === 'INACTIVO' }"
+                :class="{ '[&>td:not(.celda-estado)]:opacity-60': registro.estado === 'INACTIVO' }"
               >
                 <td class="py-gutter-sm px-gutter-lg">
                   <div class="flex items-center min-h-list-row font-semibold text-on-surface">
@@ -196,23 +197,8 @@ onMounted(recargar);
                 >
                   {{ registro.descripcion ?? '—' }}
                 </td>
-                <td class="py-gutter-sm px-gutter-lg">
-                  <!-- Badge de estado: única forma pill del sistema, en
-                       neutros; el rojo queda reservado a los errores. -->
-                  <span
-                    class="inline-flex items-center px-3 py-1 rounded-full font-label-sm text-label-sm border whitespace-nowrap"
-                    :class="
-                      registro.estado === 'ACTIVO'
-                        ? 'bg-secondary-container text-on-surface border-secondary-fixed-dim'
-                        : 'bg-surface-container-high text-on-surface border-surface-dim'
-                    "
-                  >
-                    <span
-                      class="w-1.5 h-1.5 rounded-full mr-1.5"
-                      :class="registro.estado === 'ACTIVO' ? 'bg-secondary' : 'bg-outline'"
-                    ></span>
-                    {{ registro.estado === 'ACTIVO' ? 'Activo' : 'Inactivo' }}
-                  </span>
+                <td class="celda-estado py-gutter-sm px-gutter-lg">
+                  <BadgeEstadoRegistro :estado="registro.estado" />
                 </td>
                 <td class="py-gutter-sm px-gutter-lg text-right space-x-1 whitespace-nowrap">
                   <!-- Botones de ícono: radio "Secondary standard" (6px) y

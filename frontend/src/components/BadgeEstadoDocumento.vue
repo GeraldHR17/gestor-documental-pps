@@ -1,32 +1,26 @@
 <script setup lang="ts">
-// Badge de estado de un documento. Estaba duplicado en el listado y en el
-// detalle; se extrajo aquí para que la pantalla de Inicio lo reutilice tal
-// cual en vez de repetir las clases una tercera vez.
+// Badge de estado de un documento (listado, detalle e Inicio).
 //
-// Forma pill en neutros, según DESIGN.md: el rojo primario queda reservado
-// a errores y acciones destacadas, nunca a un estado informativo.
+// Publicado en verde, Borrador en amarillo e Inactivo en rojo, el mismo
+// rojo que un registro Inactivo (spec-ajustes-niveles-y-estados, C-2). La
+// forma y el texto son los de InsigniaEstado.
 import { computed } from 'vue';
+import InsigniaEstado from '@/components/InsigniaEstado.vue';
+import type { TonoEstado } from '@/types/estado.types';
 import { ETIQUETAS_ESTADO_DOCUMENTO } from '@/lib/documentos.config';
 import type { EstadoDocumento } from '@/types/documento.types';
 
 const props = defineProps<{ estado: EstadoDocumento }>();
 
-const publicado = computed(() => props.estado === 'PUBLICADO');
+const TONO_POR_ESTADO: Record<EstadoDocumento, TonoEstado> = {
+  PUBLICADO: 'exito',
+  BORRADOR: 'advertencia',
+  INACTIVO: 'peligro',
+};
+
+const tono = computed(() => TONO_POR_ESTADO[props.estado]);
 </script>
 
 <template>
-  <span
-    class="inline-flex items-center px-3 py-1 rounded-full font-label-sm text-label-sm border whitespace-nowrap"
-    :class="
-      publicado
-        ? 'bg-secondary-container text-on-surface border-secondary-fixed-dim'
-        : 'bg-surface-container-high text-on-surface border-surface-dim'
-    "
-  >
-    <span
-      class="w-1.5 h-1.5 rounded-full mr-1.5"
-      :class="publicado ? 'bg-secondary' : 'bg-outline'"
-    ></span>
-    {{ ETIQUETAS_ESTADO_DOCUMENTO[estado] }}
-  </span>
+  <InsigniaEstado :tono="tono" :texto="ETIQUETAS_ESTADO_DOCUMENTO[estado]" />
 </template>

@@ -19,6 +19,7 @@ import { useUsuarios } from '@/composables/useUsuarios';
 import { useRolesPermisos } from '@/composables/useRolesPermisos';
 import { useNotificaciones, obtenerMensajeError } from '@/composables/useNotificaciones';
 import ModalConfirmacion from '@/components/ModalConfirmacion.vue';
+import BadgeEstadoRegistro from '@/components/BadgeEstadoRegistro.vue';
 import usuariosService from '@/services/usuarios.service';
 import rolesService from '@/services/roles.service';
 import bitacoraService from '@/services/bitacora.service';
@@ -584,7 +585,7 @@ onMounted(cargarDatosIniciales);
             </div>
             <div class="flex justify-between gap-gutter-sm py-2">
               <dt class="text-pure-white/70">{{ modoEdicion ? 'Estado' : 'Estado inicial' }}</dt>
-              <dd class="font-semibold text-right">{{ estado === 'ACTIVO' ? 'Activo' : 'Inactivo' }}</dd>
+              <dd class="text-right"><BadgeEstadoRegistro :estado="estado" /></dd>
             </div>
             <div v-if="modoEdicion" class="flex justify-between gap-gutter-sm py-2">
               <dt class="text-pure-white/70">Documentos registrados</dt>
