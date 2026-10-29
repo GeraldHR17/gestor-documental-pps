@@ -24,13 +24,11 @@ import { Dependencia } from '../entidades/dependencia.entidad';
 import { Etiqueta } from '../entidades/etiqueta.entidad';
 
 import { BitacoraService } from '../bitacora/bitacora.service';
-import {
-  CODIGO_CATEGORIA_RAIZ_EXCLUIDA,
-  MENSAJE_CATEGORIA_EXCLUIDA,
-} from '../comun/constantes/categorias-itsp';
+import { MENSAJE_CATEGORIA_EXCLUIDA } from '../comun/constantes/categorias-itsp';
 import { PermisoDenegadoException } from '../comun/excepciones/excepciones-autenticacion';
 import { CachePermisosService } from '../comun/cache/cache-permisos.service';
 import type { PayloadJwt } from '../autenticacion/estrategias/jwt.strategy';
+import { JerarquiaCategorias } from '../catalogos/jerarquia-categorias';
 
 import {
   AlmacenamientoDocumentosService,
@@ -197,9 +195,10 @@ export class DocumentosService {
     const [documentos, total] = await consulta.getManyAndCount();
     const identificadores = documentos.map((documento) => documento.idDocumento);
 
-    const [etiquetas, versiones] = await Promise.all([
+    const [etiquetas, versiones, jerarquia] = await Promise.all([
       this.cargarEtiquetasDe(identificadores),
       this.cargarVersionesDe(identificadores),
+      this.cargarJerarquia(),
     ]);
 
     return new ListaPaginadaDocumentosRespuestaDto({
@@ -208,6 +207,7 @@ export class DocumentosService {
           etiquetas: etiquetas.get(documento.idDocumento) ?? [],
           versiones: versiones.get(documento.idDocumento) ?? [],
           incluirHistorial: false,
+          jerarquia,
         }),
       ),
       total,
@@ -219,15 +219,17 @@ export class DocumentosService {
   async obtener(id: number, usuario: PayloadJwt): Promise<DocumentoRespuestaDto> {
     const documento = await this.buscarEntidadAccesible(id, usuario);
 
-    const [etiquetas, versiones] = await Promise.all([
+    const [etiquetas, versiones, jerarquia] = await Promise.all([
       this.cargarEtiquetasDe([id]),
       this.cargarVersionesDe([id]),
+      this.cargarJerarquia(),
     ]);
 
     return this.mapear(documento, {
       etiquetas: etiquetas.get(id) ?? [],
       versiones: versiones.get(id) ?? [],
       incluirHistorial: true,
+      jerarquia,
     });
   }
 
@@ -513,10 +515,8 @@ export class DocumentosService {
   // =====================================================================
 
   private async verificarClasificacion(idCategoria: number, idTipo: number): Promise<void> {
-    const categoria = await this.repositorioCategorias.findOne({
-      where: { idCategoriaItsp: idCategoria },
-      relations: { categoriaPadre: true },
-    });
+    const jerarquia = await this.cargarJerarquia();
+    const categoria = jerarquia.obtener(idCategoria);
 
     if (!categoria) {
       throw new ClasificacionInvalidaException('La categoría ITSP seleccionada no existe');
@@ -526,12 +526,19 @@ export class DocumentosService {
       throw new ClasificacionInvalidaException('La categoría ITSP seleccionada está inactiva');
     }
 
-    // La sección informativa no clasifica documentos: ni la raíz ni sus
-    // subsecciones. El formulario ya la oculta; aquí se impone de verdad.
-    if (
-      categoria.codigo === CODIGO_CATEGORIA_RAIZ_EXCLUIDA ||
-      categoria.categoriaPadre?.codigo === CODIGO_CATEGORIA_RAIZ_EXCLUIDA
-    ) {
+    // Activa ella misma pero colgando de una inactiva: hoy la API lo
+    // admitía aunque el formulario no la ofreciera (spec D-6).
+    if (!jerarquia.efectivamenteActiva(idCategoria)) {
+      throw new ClasificacionInvalidaException(
+        'La categoría ITSP seleccionada no está disponible: una categoría superior está inactiva',
+      );
+    }
+
+    // La sección informativa no clasifica documentos: ni la raíz ni nada
+    // de su subárbol, a cualquier profundidad (por cadena de ancestros, no
+    // por prefijo de código). El formulario ya la oculta; aquí se impone de
+    // verdad.
+    if (jerarquia.enSubarbolExcluido(idCategoria)) {
       throw new ClasificacionInvalidaException(MENSAJE_CATEGORIA_EXCLUIDA);
     }
 
@@ -544,6 +551,11 @@ export class DocumentosService {
     if (tipo.estado !== 'ACTIVO') {
       throw new ClasificacionInvalidaException('El tipo documental seleccionado está inactivo');
     }
+  }
+
+  /** Todas las categorías, para resolver ancestros en memoria (son decenas). */
+  private async cargarJerarquia(): Promise<JerarquiaCategorias<CategoriaItsp>> {
+    return new JerarquiaCategorias(await this.repositorioCategorias.find());
   }
 
   private async verificarDependencia(idDependencia: number): Promise<void> {
@@ -706,9 +718,13 @@ export class DocumentosService {
       etiquetas: ReferenciaCatalogoDto[];
       versiones: VersionDocumentoRespuestaDto[];
       incluirHistorial: boolean;
+      jerarquia: JerarquiaCategorias<CategoriaItsp>;
     },
   ): DocumentoRespuestaDto {
     const categoria = documento.categoriaItsp;
+    // Con categorías a cualquier profundidad, el padre directo ya no es la
+    // raíz: la ruta completa sale de la cadena de ancestros (spec D-8).
+    const ancestros = extras.jerarquia.ancestros(documento.idCategoriaItsp);
 
     return new DocumentoRespuestaDto({
       id: documento.idDocumento,
@@ -722,7 +738,8 @@ export class DocumentosService {
 
       idCategoriaItsp: documento.idCategoriaItsp,
       nombreCategoriaItsp: categoria?.nombre ?? '',
-      nombreCategoriaRaiz: categoria?.categoriaPadre?.nombre ?? null,
+      nombreCategoriaRaiz: ancestros[0]?.nombre ?? null,
+      rutaCategoria: ancestros.map((ancestro) => ancestro.nombre),
 
       idTipoDocumento: documento.idTipoDocumento,
       nombreTipoDocumento: documento.tipoDocumento?.nombre ?? '',

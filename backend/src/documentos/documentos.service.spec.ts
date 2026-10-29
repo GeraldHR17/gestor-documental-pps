@@ -65,6 +65,8 @@ function montar(
     /** Código de la categoría 5 y de su raíz, para probar la exclusión. */
     codigoCategoria?: string;
     codigoRaiz?: string | null;
+    /** Tabla de categorías completa, para los casos de varios niveles. */
+    categorias?: Array<Record<string, unknown>>;
   } = {},
 ) {
   const documento = opciones.documento === undefined ? documentoDe('BORRADOR') : opciones.documento;
@@ -86,14 +88,32 @@ function montar(
     }),
   };
 
-  const repositorioCategorias = {
-    findOne: jest.fn().mockResolvedValue({
+  // El servicio lee la tabla completa y arma la jerarquía en memoria: la
+  // categoría 5 cuelga de la raíz 2, salvo que codigoRaiz sea null.
+  const categorias = opciones.categorias ?? [
+    ...(opciones.codigoRaiz === null
+      ? []
+      : [
+          {
+            idCategoriaItsp: 2,
+            idCategoriaPadre: null,
+            codigo: opciones.codigoRaiz ?? 'ITSP-02',
+            nombre: 'Rendición de cuentas',
+            estado: 'ACTIVO',
+            orden: 2,
+          },
+        ]),
+    {
       idCategoriaItsp: 5,
-      estado: 'ACTIVO',
+      idCategoriaPadre: opciones.codigoRaiz === null ? null : 2,
       codigo: opciones.codigoCategoria ?? 'ITSP-02-02',
-      categoriaPadre:
-        opciones.codigoRaiz === null ? null : { codigo: opciones.codigoRaiz ?? 'ITSP-02' },
-    }),
+      nombre: 'Informes institucionales',
+      estado: 'ACTIVO',
+      orden: 1,
+    },
+  ];
+  const repositorioCategorias = {
+    find: jest.fn().mockResolvedValue(categorias),
   };
   const repositorioTipos = {
     findOne: jest.fn().mockResolvedValue({ idTipoDocumento: 3, estado: 'ACTIVO' }),
@@ -267,7 +287,9 @@ describe('DocumentosService', () => {
 
     it('rechaza una categoría inactiva antes de tocar el disco', async () => {
       const { servicio, repositorioCategorias, almacenamiento } = montar();
-      repositorioCategorias.findOne.mockResolvedValue({ idCategoriaItsp: 5, estado: 'INACTIVO' });
+      repositorioCategorias.find.mockResolvedValue([
+        { idCategoriaItsp: 5, idCategoriaPadre: null, codigo: 'ITSP-05', nombre: 'X', estado: 'INACTIVO', orden: 0 },
+      ]);
 
       await expect(servicio.registrar(dto as never, ARCHIVO, GESTOR)).rejects.toThrow(
         ClasificacionInvalidaException,
@@ -523,6 +545,20 @@ describe('DocumentosService — exclusión de "Participación ciudadana" (secci�
     );
   });
 
+  it('rechaza un nieto de ITSP-03, aunque su código no lleve el prefijo', async () => {
+    const { servicio } = montar({
+      categorias: [
+        { idCategoriaItsp: 3, idCategoriaPadre: null, codigo: 'ITSP-03', nombre: 'Participación', estado: 'ACTIVO', orden: 3 },
+        { idCategoriaItsp: 4, idCategoriaPadre: 3, codigo: 'ITSP-03-01', nombre: 'Info', estado: 'ACTIVO', orden: 1 },
+        { idCategoriaItsp: 5, idCategoriaPadre: 4, codigo: 'IRREGULAR', nombre: 'Nieto', estado: 'ACTIVO', orden: 1 },
+      ],
+    });
+
+    await expect(servicio.registrar(dto as never, ARCHIVO, GESTOR)).rejects.toThrow(
+      /Participación ciudadana/,
+    );
+  });
+
   it('acepta cualquier otra categoría', async () => {
     const { servicio } = montar({ codigoCategoria: 'ITSP-02-02', codigoRaiz: 'ITSP-02' });
 
@@ -559,5 +595,39 @@ describe('DocumentosService — registrar y publicar en una operación (sección
       servicio.registrar({ ...dto, publicarInmediatamente: true } as never, ARCHIVO, soloCrea),
     ).rejects.toThrow(PermisoDenegadoException);
     expect(almacenamiento.almacenar).not.toHaveBeenCalled();
+  });
+});
+
+describe('DocumentosService — categorías de varios niveles (spec-ajustes-niveles-y-estados)', () => {
+  const dto = { titulo: 'Informe', anio: 2026, idCategoriaItsp: 5, idTipoDocumento: 3 };
+  // 1 Información institucional > 4 Organización > 5 Organigramas
+  const TRES_NIVELES = (estadoIntermedia: string) => [
+    { idCategoriaItsp: 1, idCategoriaPadre: null, codigo: 'ITSP-01', nombre: 'Información institucional', estado: 'ACTIVO', orden: 1 },
+    { idCategoriaItsp: 4, idCategoriaPadre: 1, codigo: 'ITSP-01-02', nombre: 'Organización', estado: estadoIntermedia, orden: 1 },
+    { idCategoriaItsp: 5, idCategoriaPadre: 4, codigo: 'ITSP-01-02-01', nombre: 'Organigramas', estado: 'ACTIVO', orden: 1 },
+  ];
+
+  it('clasifica en un nodo profundo activo', async () => {
+    const { servicio } = montar({ categorias: TRES_NIVELES('ACTIVO') });
+
+    await expect(servicio.registrar(dto as never, ARCHIVO, GESTOR)).resolves.toBeDefined();
+  });
+
+  it('rechaza un nodo activo cuya categoría superior está inactiva (D-6)', async () => {
+    const { servicio, almacenamiento } = montar({ categorias: TRES_NIVELES('INACTIVO') });
+
+    await expect(servicio.registrar(dto as never, ARCHIVO, GESTOR)).rejects.toThrow(
+      'La categoría ITSP seleccionada no está disponible: una categoría superior está inactiva',
+    );
+    expect(almacenamiento.almacenar).not.toHaveBeenCalled();
+  });
+
+  it('devuelve la raíz real y la ruta completa de la categoría (D-8)', async () => {
+    const { servicio } = montar({ categorias: TRES_NIVELES('ACTIVO') });
+
+    const documento = await servicio.obtener(1, GESTOR);
+
+    expect(documento.nombreCategoriaRaiz).toBe('Información institucional');
+    expect(documento.rutaCategoria).toEqual(['Información institucional', 'Organización']);
   });
 });

@@ -142,6 +142,21 @@ describe('ReportesService.obtenerPorCategoria', () => {
     ]);
   });
 
+  // Con N niveles el padre directo ya no es la raíz (spec D-9).
+  it('suma los documentos de un nieto en su raíz real, no en su padre', async () => {
+    const { servicio } = montar({
+      categorias: [
+        ...CATEGORIAS,
+        { idCategoriaItsp: 20, codigo: 'ITSP-02-01-01', nombre: '2026', nivel: 3, orden: 1, idCategoriaPadre: 12 },
+      ],
+      filasCategoria: [{ idCategoria: 20, cantidad: '4' }],
+    });
+
+    const desglose = await servicio.obtenerPorCategoria();
+
+    expect(desglose.find((fila) => fila.id === 2)?.cantidad).toBe(4);
+  });
+
   it('devuelve las raíces con 0 aunque no tengan documentos', async () => {
     const { servicio } = montar({ categorias: CATEGORIAS, filasCategoria: [] });
 

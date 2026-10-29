@@ -55,6 +55,12 @@ export class DocumentoRespuestaDto {
   nombreCategoriaItsp: string;
   /** Raíz de la categoría; `null` cuando la propia categoría ya es raíz. */
   nombreCategoriaRaiz: string | null;
+  /**
+   * Nombres de sus categorías superiores, de la raíz al padre; vacío si
+   * la propia categoría es raíz. Con N niveles el detalle muestra la ruta
+   * completa (spec-ajustes-niveles-y-estados D-8).
+   */
+  rutaCategoria: string[];
 
   idTipoDocumento: number;
   nombreTipoDocumento: string;

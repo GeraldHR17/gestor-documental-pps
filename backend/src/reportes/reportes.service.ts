@@ -14,6 +14,7 @@ import { CategoriaItsp } from '../entidades/categoria-itsp.entidad';
 import { Dependencia } from '../entidades/dependencia.entidad';
 import { BitacoraLog } from '../entidades/bitacora-log.entidad';
 import { CODIGO_CATEGORIA_RAIZ_EXCLUIDA } from '../comun/constantes/categorias-itsp';
+import { JerarquiaCategorias } from '../catalogos/jerarquia-categorias';
 
 import { ConteoPorGrupoDto, ResumenReportesDto } from './dto/reportes-respuesta.dto';
 
@@ -80,9 +81,11 @@ export class ReportesService {
   }
 
   /**
-   * Conteo por categoría raíz. Un documento se clasifica en una subsección,
-   * así que se agrupa por la raíz a la que pertenece (o por sí misma si la
-   * categoría ya es raíz).
+   * Conteo por categoría raíz. Un documento se clasifica en una
+   * subcategoría de cualquier nivel, así que se agrupa por la raíz real de
+   * su rama, siguiendo la cadena de ancestros (o por sí misma si la
+   * categoría ya es raíz). Antes se tomaba el padre directo, que con dos
+   * niveles coincidía con la raíz (spec-ajustes-niveles-y-estados D-9).
    *
    * "Participación ciudadana" queda fuera: desde el pulido de Fase 6 no
    * clasifica documentos, de modo que su conteo sería siempre 0 y sólo
@@ -91,7 +94,7 @@ export class ReportesService {
    */
   async obtenerPorCategoria(): Promise<ConteoPorGrupoDto[]> {
     const categorias = await this.repositorioCategorias.find();
-    const porId = new Map(categorias.map((categoria) => [categoria.idCategoriaItsp, categoria]));
+    const jerarquia = new JerarquiaCategorias(categorias);
 
     const raices = categorias
       .filter((categoria) => categoria.idCategoriaPadre === null)
@@ -107,9 +110,9 @@ export class ReportesService {
 
     const conteoPorRaiz = new Map<number, number>();
     for (const fila of filas) {
-      const categoria = porId.get(Number(fila.idCategoria));
-      if (!categoria) continue;
-      const idRaiz = categoria.idCategoriaPadre ?? categoria.idCategoriaItsp;
+      const raiz = jerarquia.raizDe(Number(fila.idCategoria));
+      if (!raiz) continue;
+      const idRaiz = raiz.idCategoriaItsp;
       conteoPorRaiz.set(idRaiz, (conteoPorRaiz.get(idRaiz) ?? 0) + Number(fila.cantidad));
     }
 
