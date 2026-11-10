@@ -322,7 +322,7 @@ Get-ChildItem C:\ -Filter nssm.exe -Recurse -ErrorAction SilentlyContinue | Sele
 registro) y ejecute, con la ruta real de NSSM:
 
 ```
-powershell -ExecutionPolicy Bypass -File .\despliegue\desplegar.ps1 -RutaHtdocs "C:\Apache24\htdocs" -RutaNssm "C:\ruta\a\nssm.exe"
+powershell -ExecutionPolicy Bypass -File .\despliegue\desplegar.ps1 -RutaHtdocs "C:\Apache24\htdocs" -RutaNssm "C:\tools\nssm.exe"
 ```
 
 El script comprueba las herramientas **antes** de crear nada, así que si
@@ -365,7 +365,7 @@ comillas viajan como parte del valor.
 El mismo comando del paso 3.3, con el mismo `-RutaNssm`:
 
 ```
-powershell -ExecutionPolicy Bypass -File .\despliegue\desplegar.ps1 -RutaHtdocs "C:\Apache24\htdocs" -RutaNssm "C:\ruta\a\nssm.exe"
+powershell -ExecutionPolicy Bypass -File .\despliegue\desplegar.ps1 -RutaHtdocs "C:\Apache24\htdocs" -RutaNssm "C:\tools\nssm.exe"
 ```
 
 Ahora sí recorre todo: valida las variables, respalda lo que haya
@@ -678,7 +678,7 @@ git rev-parse HEAD
 git pull
 powershell -ExecutionPolicy Bypass -File .\despliegue\diagnosticar-codigos-categorias.ps1
 powershell -ExecutionPolicy Bypass -File .\despliegue\preparar-base-datos.ps1 -SoloScripts
-powershell -ExecutionPolicy Bypass -File .\despliegue\desplegar.ps1 -RutaHtdocs "C:\Apache24\htdocs" -RutaNssm "C:\ruta\a\nssm.exe"
+powershell -ExecutionPolicy Bypass -File .\despliegue\desplegar.ps1 -RutaHtdocs "C:\Apache24\htdocs" -RutaNssm "C:\tools\nssm.exe"
 powershell -ExecutionPolicy Bypass -File .\despliegue\verificar-despliegue.ps1 -UrlPublica "https://su-servidor-real/munipalmares/wp-munidata"
 powershell -ExecutionPolicy Bypass -File .\despliegue\diagnosticar-codigos-categorias.ps1
 ```
@@ -767,7 +767,7 @@ git status
 git rev-parse HEAD
 git pull
 powershell -ExecutionPolicy Bypass -File .\despliegue\diagnosticar-codigos-categorias.ps1
-powershell -ExecutionPolicy Bypass -File .\despliegue\desplegar.ps1 -RutaHtdocs "C:\Apache24\htdocs" -RutaNssm "C:\ruta\a\nssm.exe"
+powershell -ExecutionPolicy Bypass -File .\despliegue\desplegar.ps1 -RutaHtdocs "C:\Apache24\htdocs" -RutaNssm "C:\tools\nssm.exe"
 powershell -ExecutionPolicy Bypass -File .\despliegue\verificar-despliegue.ps1 -UrlPublica "https://su-servidor-real/munipalmares/wp-munidata"
 ```
 
