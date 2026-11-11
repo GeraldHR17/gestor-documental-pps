@@ -49,8 +49,10 @@ termina con código 1 si falta algo. No instala nada.
 ### 1.1 Node.js (versión LTS)
 
 Descargue el instalador MSI de 64 bits de <https://nodejs.org/es> e
-instálelo con las opciones por defecto. Se requiere la versión 20 o
-superior.
+instálelo con las opciones por defecto. Se requiere la versión 22 o
+superior: es lo que declaran los `package.json` del backend (`>=22`) y del
+frontend (`^22.18.0` o `>=24.12.0`). `verificar-requisitos.ps1` da por buena
+la 20: no se fíe de ese OK e instale la 22 o una posterior.
 
 ```
 node --version
@@ -258,6 +260,9 @@ cd C:\munidata\gestor-documental-pps
 git pull
 ```
 
+Cuando el repositorio sea privado, `git clone` y `git pull` pedirán
+credenciales: vea la sección 12 antes del despliegue.
+
 > El repositorio queda en `C:\munidata\gestor-documental-pps`, dentro de
 > la carpeta de datos pero separado de ella: el repositorio es código
 > fuente, y `C:\munidata\backend`, `C:\munidata\config`,
@@ -284,7 +289,7 @@ solo sobre esa base, y aplica los scripts SQL numerados. Al terminar
 imprime un resumen parecido a:
 
 ```
-  Scripts aplicados ahora : 8
+  Scripts aplicados ahora : 9
   Roles                   : 3
   Permisos                : 10
   Categorias ITSP         : 17
@@ -375,7 +380,7 @@ ejecuta la verificación.
 
 **Qué esperar.** Termina con `DESPLIEGUE COMPLETADO`. Las pruebas que pasan
 por Apache fallarán todavía, porque Apache no está configurado: eso se hace
-en el paso 3.
+en la sección 4.
 
 Si el servicio no arranca:
 
@@ -478,7 +483,7 @@ Include conf/extra/munidata.conf
 ### 4.4 Validar y reiniciar
 
 ```
-httpd -t
+C:\Apache24\bin\httpd.exe -t
 ```
 
 Debe responder `Syntax OK`. **Si no lo hace, no reinicie**: corrija primero.
@@ -510,7 +515,7 @@ powershell -ExecutionPolicy Bypass -File .\despliegue\verificar-despliegue.ps1 -
 > por HTTPS (sección 4.3).
 
 Reemplace `<host>` por la dirección real de la VM, la misma que puso en
-`FRONTEND_URL`. Ahora deberían pasar las siete comprobaciones.
+`FRONTEND_URL`. Ahora deberían pasar las diez comprobaciones.
 
 ### 4.6 Revertir el cambio de Apache
 
@@ -523,7 +528,7 @@ Si algo se rompió, comente la línea del paso 4.3:
 Valide y reinicie:
 
 ```
-httpd -t
+C:\Apache24\bin\httpd.exe -t
 Restart-Service -Name Apache2.4
 ```
 
@@ -553,7 +558,7 @@ La plantilla con los comentarios completos está en
 | `BD_USUARIO` | `munidata_app`, nunca `root` | `preparar-base-datos.ps1` |
 | `BD_CONTRASENA` | La definida en el paso 3.2 | Gerald |
 | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | Firman los tokens. 64 bytes aleatorios. Cambiarlos invalida todas las sesiones activas | `desplegar.ps1`, automático |
-| `JWT_ACCESS_EXPIRATION`, `JWT_REFRESH_EXPIRATION` | Vida de cada token. La sesión tiene además un límite absoluto de 8 horas | La plantilla |
+| `JWT_ACCESS_EXPIRATION`, `JWT_REFRESH_EXPIRATION` | Vida de cada token. `JWT_REFRESH_EXPIRATION` es además el límite absoluto de la sesión, contado desde el inicio de sesión: renovar el token no lo extiende. La plantilla de producción usa `2h`; el valor por defecto del código y de desarrollo es `8h` | La plantilla |
 | `BCRYPT_SALT_ROUNDS` | `12`. No lo baje: es el valor con el que se generaron los hash existentes | La plantilla |
 | `LOGIN_MAX_INTENTOS`, `LOGIN_BLOQUEO_MINUTOS` | Bloqueo por intentos fallidos | La plantilla |
 | `TOKEN_RECUPERACION_EXPIRACION_MIN`, `TOKEN_VERIFICACION_EXPIRACION_HORAS` | Vigencia de los enlaces de los correos | La plantilla |
@@ -575,8 +580,11 @@ el servicio las toma del registro de Windows, no del archivo.
 ```
 cd C:\munidata\gestor-documental-pps
 git pull
-powershell -ExecutionPolicy Bypass -File .\despliegue\desplegar.ps1 -RutaHtdocs "C:\Apache24\htdocs"
+powershell -ExecutionPolicy Bypass -File .\despliegue\desplegar.ps1 -RutaHtdocs "C:\Apache24\htdocs" -RutaNssm "C:\tools\nssm.exe"
 ```
+
+Si el repositorio ya es privado, `git pull` necesita credenciales: vea la
+sección 12.
 
 `desplegar.ps1` respalda lo que hay publicado antes de reemplazarlo, así
 que siempre existe una versión a la que volver. No hace falta tocar Apache
@@ -797,7 +805,7 @@ Necesita el mismo `-RutaNssm` que el despliegue, porque también detiene y
 arranca el servicio:
 
 ```
-powershell -ExecutionPolicy Bypass -File .\despliegue\revertir.ps1 -RutaHtdocs "C:\Apache24\htdocs" -RutaNssm "C:\ruta\a\nssm.exe"
+powershell -ExecutionPolicy Bypass -File .\despliegue\revertir.ps1 -RutaHtdocs "C:\Apache24\htdocs" -RutaNssm "C:\tools\nssm.exe"
 ```
 
 Detiene el servicio, restaura el backend y el frontend del último respaldo
@@ -807,7 +815,7 @@ servicio y verifica.
 Para volver a un respaldo concreto, páselo por su marca de tiempo:
 
 ```
-powershell -ExecutionPolicy Bypass -File .\despliegue\revertir.ps1 -RutaHtdocs "C:\Apache24\htdocs" -RutaNssm "C:\ruta\a\nssm.exe" -Respaldo "20261009-154234"
+powershell -ExecutionPolicy Bypass -File .\despliegue\revertir.ps1 -RutaHtdocs "C:\Apache24\htdocs" -RutaNssm "C:\tools\nssm.exe" -Respaldo "20261009-154234"
 ```
 
 **La base de datos no se restaura automáticamente**, y es deliberado:
@@ -832,7 +840,13 @@ Genera en `C:\munidata\respaldos\<fecha-hora>`:
   tablas, así que el sistema sigue funcionando durante el respaldo.
 - `documentos.zip` — copia comprimida de los PDF.
 
-Conserva los 14 más recientes y borra los anteriores.
+Conserva las 14 carpetas más recientes y borra las anteriores. **Ojo:** en
+`C:\munidata\respaldos` también caen las carpetas que crea `desplegar.ps1`
+antes de cada despliegue (solo traen `backend\` y `frontend\`, sin base de
+datos ni documentos), y la rotación las cuenta junto con las diarias. Cada
+despliegue deja, por tanto, un día menos de respaldos de datos. (La tarea
+programada siempre usa el valor por defecto, 14: `-RespaldosAConservar` solo
+se aplica en una ejecución a mano.)
 
 Mientras se genera, la carpeta se llama `<fecha-hora>.parcial` y solo se
 renombra cuando el respaldo termina bien. Si encuentra una carpeta con ese
@@ -843,53 +857,142 @@ no desplace a los respaldos que sí sirven.
 Si `mysqldump.exe` no está en el PATH, pase su ruta con `-RutaMysqldump`
 (véase 3.7).
 
-### 8.2 Restaurar la base de datos
+### 8.2 Restaurar la base de datos y los documentos
 
-> **Destruye** todo lo registrado después de la fecha del volcado. No hay
-> forma de recuperarlo luego. Haga un respaldo del estado actual antes.
+> **Destruye** todo lo registrado después de la fecha del respaldo. No hay
+> forma de recuperarlo luego.
+
+**La restauración se hace con `root`, no con `munidata_app`.** El volcado
+trae `DROP TABLE`, `CREATE TABLE` y los procedimientos almacenados
+(`mysqldump --routines`), y `munidata_app` solo tiene `SELECT, INSERT,
+UPDATE, DELETE` (lo concede así `preparar-base-datos.ps1`): con ese usuario
+la carga se detiene en la primera tabla. El comando que imprimen
+`respaldar.ps1` y `revertir.ps1` al terminar también usa `root`.
+
+Base de datos y documentos se restauran **del mismo respaldo**. Si no,
+habrá documentos registrados cuyo archivo no existe (la API responde un
+error controlado) o archivos huérfanos en disco.
+
+En los comandos, `<fecha-hora>` es el nombre de la carpeta del respaldo
+elegido (por ejemplo `20261009-154234`): sustitúyalo entero, corchetes
+incluidos.
+
+**1. Respaldo del estado actual**, por si hay que deshacer la restauración:
+
+```
+cd C:\munidata\gestor-documental-pps
+powershell -ExecutionPolicy Bypass -File .\despliegue\respaldar.ps1
+```
+
+**2. Detener el servicio**, para que nadie escriba durante la carga:
+
+```
+& "C:\tools\nssm.exe" stop MuniData-API
+```
+
+**3. Descomprimir el volcado:**
 
 ```
 cd C:\munidata\respaldos\<fecha-hora>
 node -e "const z=require('zlib'),f=require('fs');f.writeFileSync('restaurar.sql',z.gunzipSync(f.readFileSync('base-datos.sql.gz')))"
-mysql -u munidata_app -p munidata < restaurar.sql
-del restaurar.sql
 ```
 
-Dos avisos sobre esa penúltima línea, por si la ejecuta en una consola de
-PowerShell y no en `cmd`:
-
-- PowerShell 5.1 **no tiene** el operador `<`; responde que está reservado
-  para un uso futuro. Hay que pasar por `cmd`.
-- `mysql.exe` tampoco está en el PATH de esta VM, igual que `mysqldump.exe`
-  (véase 3.7), así que va por su ruta completa.
-
-Con las dos cosas juntas:
+**4. Cargarlo con `root`** (pide la contraseña sin mostrarla):
 
 ```
-cmd /c '"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u munidata_app -p munidata < restaurar.sql'
+cmd /c '"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root -p munidata < restaurar.sql'
 ```
 
-Las comillas **simples** de fuera son necesarias: hacen que PowerShell
-entregue toda la línea a `cmd` sin interpretarla, y es `cmd` el que aplica
-la redirección.
+Se pasa por `cmd` por dos motivos: PowerShell 5.1 no tiene el operador `<`
+(responde que está reservado para un uso futuro), y `mysql.exe` no está en
+el PATH de esta VM, igual que `mysqldump.exe` (véase 3.7). Las comillas
+**simples** de fuera hacen que PowerShell entregue la línea a `cmd` sin
+interpretarla.
 
-Reinicie el servicio después, para que el pool de conexiones se rehaga:
-
-```
-nssm restart MuniData-API
-```
-
-### 8.3 Restaurar los documentos
+**5. Restaurar los documentos:**
 
 ```
 Expand-Archive -Path C:\munidata\respaldos\<fecha-hora>\documentos.zip -DestinationPath C:\munidata\storage\documentos -Force
 ```
 
-La base guarda las rutas de los archivos relativas a
-`RUTA_ALMACENAMIENTO`, así que los nombres no deben cambiarse. Base de
-datos y documentos deben restaurarse **del mismo respaldo**: si no, habrá
-documentos registrados cuyo archivo no existe (la API responde un error
-controlado) o archivos huérfanos en disco.
+El zip trae la subcarpeta `documentos\`, así que los PDF quedan en
+`C:\munidata\storage\documentos\documentos\<uuid>.pdf`. Es lo correcto: la
+base guarda rutas como `documentos/<uuid>.pdf`, relativas a
+`RUTA_ALMACENAMIENTO` (`C:\munidata\storage\documentos`). No renombre nada.
+`-Force` sobrescribe los archivos del respaldo, pero no borra los PDF
+cargados después: esos quedan huérfanos en disco y no estorban.
+
+**6. Limpiar, arrancar y verificar:**
+
+```
+del C:\munidata\respaldos\<fecha-hora>\restaurar.sql
+& "C:\tools\nssm.exe" start MuniData-API
+cd C:\munidata\gestor-documental-pps
+powershell -ExecutionPolicy Bypass -File .\despliegue\verificar-despliegue.ps1 -UrlPublica "https://<host>/munipalmares/wp-munidata"
+```
+
+`restaurar.sql` contiene la base completa en claro: no lo deje en disco.
+
+### 8.3 Probar la restauración sin tocar la base real
+
+Un respaldo que nunca se restauró no está probado. Este procedimiento carga
+el respaldo más reciente en una base **temporal** y la compara con la real;
+no detiene el servicio ni modifica `munidata`. Conviene hacerlo justo
+después de un respaldo, para que los conteos coincidan, y repetirlo de vez
+en cuando.
+
+**1. Respaldo nuevo y descompresión:**
+
+```
+cd C:\munidata\gestor-documental-pps
+powershell -ExecutionPolicy Bypass -File .\despliegue\respaldar.ps1
+$r = Get-ChildItem C:\munidata\respaldos -Directory | Where-Object { $_.Name -match '^\d{8}-\d{6}$' -and (Test-Path (Join-Path $_.FullName 'base-datos.sql.gz')) } | Sort-Object Name -Descending | Select-Object -First 1
+$r.FullName
+cd $r.FullName
+node -e "const z=require('zlib'),f=require('fs');f.writeFileSync('restaurar.sql',z.gunzipSync(f.readFileSync('base-datos.sql.gz')))"
+```
+
+**2. Base temporal y carga** (cada línea pide la contraseña de `root`):
+
+```
+$mysql = 'C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe'
+& $mysql -u root -p -e "CREATE DATABASE munidata_prueba_restauracion CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+cmd /c '"C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u root -p munidata_prueba_restauracion < restaurar.sql'
+```
+
+La carga debe terminar sin ningún `ERROR`.
+
+**3. Comparar conteos:** las dos filas deben dar los mismos números.
+
+```
+& $mysql -u root -p -e "SELECT 'real' AS base, (SELECT COUNT(*) FROM munidata.documentos) AS documentos, (SELECT COUNT(*) FROM munidata.versiones_documentos) AS versiones, (SELECT COUNT(*) FROM munidata.usuarios) AS usuarios, (SELECT COUNT(*) FROM munidata.categorias_itsp) AS categorias, (SELECT COUNT(*) FROM munidata.bitacora_logs) AS bitacora UNION ALL SELECT 'prueba', (SELECT COUNT(*) FROM munidata_prueba_restauracion.documentos), (SELECT COUNT(*) FROM munidata_prueba_restauracion.versiones_documentos), (SELECT COUNT(*) FROM munidata_prueba_restauracion.usuarios), (SELECT COUNT(*) FROM munidata_prueba_restauracion.categorias_itsp), (SELECT COUNT(*) FROM munidata_prueba_restauracion.bitacora_logs);"
+```
+
+La bitácora puede diferir en unas pocas filas si alguien usó el sistema
+después del respaldo; el resto debe coincidir.
+
+**4. Comprobar el zip de documentos:** debe abrirse y tener tantos archivos
+como la carpeta real.
+
+```
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zip = [IO.Compression.ZipFile]::OpenRead((Join-Path $r.FullName 'documentos.zip'))
+($zip.Entries | Where-Object { $_.Name }).Count
+$zip.Dispose()
+(Get-ChildItem C:\munidata\storage\documentos -File -Recurse).Count
+```
+
+Si todavía no hay documentos cargados, el respaldo no trae `documentos.zip`
+y este paso no aplica.
+
+**5. Limpiar** (borra solo la base temporal y el `.sql` en claro):
+
+```
+& $mysql -u root -p -e "DROP DATABASE munidata_prueba_restauracion;"
+del (Join-Path $r.FullName 'restaurar.sql')
+```
+
+Anote la fecha y el resultado de la prueba.
 
 ---
 
@@ -938,7 +1041,7 @@ https://servidor.ejemplo.go.cr/munipalmares/wp-munidata/iframes/prueba-vista.htm
 Esa página pinta los cuatro iframes sobre el mismo fondo oscuro de la
 portada real, así que permite enseñarle el resultado al PO y validar el
 aspecto **sin que nadie haya creado todavía ninguna página de
-WordPress**. Compruebe ahí los once puntos de la sección 9 de este
+WordPress**. Compruebe ahí los nueve puntos de la sección 9 de este
 documento, y en particular abrir y descargar un PDF desde un iPhone y
 desde un Android: el visor de PDF del sistema y el bloqueo de ventanas
 emergentes se comportan distinto que en escritorio.
@@ -1018,7 +1121,7 @@ Causas, en orden de frecuencia:
 - El servicio está detenido o reiniciándose en bucle. El log de errores
   dice por qué; lo más común es que no alcanza MySQL.
 - El puerto del `ProxyPass` no coincide con `PUERTO` de `.env.produccion`.
-- Falta `proxy_http_module`. Compruebe con `httpd -M`.
+- Falta `proxy_http_module`. Compruebe con `C:\Apache24\bin\httpd.exe -M`.
 
 Si el log del backend no dice nada, el problema está del lado de Apache.
 Sus registros están en `C:\Apache24\logs` y en esta VM se llaman
@@ -1237,9 +1340,11 @@ funciona solo por HTTPS: la API se publica únicamente desde el
 `<VirtualHost *:443>`. El puerto 80 sigue sirviendo el frontend y el resto
 del sitio, pero no la API, de modo que no existe ninguna ruta en claro
 hacia ella. La cookie del refresh token es `httpOnly`, `secure` y
-`sameSite=strict`, y el access token nunca se guarda en `localStorage`. La sesión expira de forma absoluta a las
-8 horas, y la rotación del refresh hereda la fecha original en vez de
-reiniciar el plazo.
+`sameSite=strict`, y el access token nunca se guarda en `localStorage`. La
+sesión expira de forma absoluta cuando se cumple `JWT_REFRESH_EXPIRATION`
+desde el inicio de sesión (`2h` en la plantilla de producción, `8h` por
+defecto en desarrollo), y la rotación del refresh hereda la fecha original en
+vez de reiniciar el plazo.
 
 **Documentos fuera del árbol web** (A.9.4). Los PDF se guardan en
 `C:\munidata\storage\documentos` con nombre UUID, fuera de `htdocs` y sin
@@ -1258,21 +1363,86 @@ histórico más allá de los 3 meses, él mismo hará el respaldo antes de que
 la purga lo elimine. Conviene tenerlo presente al cerrar cada mes.
 
 Los respaldos diarios de la base de datos **no sustituyen** a ese archivo.
-Conservan 14 días, así que durante las dos semanas siguientes a una purga
-todavía se puede recuperar lo borrado restaurando un respaldo en un
-entorno aparte; pasado ese plazo el último respaldo que lo contenía ya
-rotó y la pérdida es definitiva. Un archivo de la bitácora hay que
+Se conservan 14 carpetas, contando las que deja cada despliegue (8.1), así
+que durante unas dos semanas después de una purga todavía se puede
+recuperar lo borrado restaurando un respaldo en una base aparte (8.3);
+pasado ese plazo el último respaldo que lo contenía ya rotó y la pérdida es
+definitiva. Un archivo de la bitácora hay que
 guardarlo aparte y a propósito.
 
 Para cambiar la ventana, `BITACORA_RETENCION_MESES` en `.env.produccion`;
 con el valor `0` la purga queda deshabilitada y la tabla crece sin límite.
 
-**Respaldos** (A.12.3). Diarios y automáticos, con 14 días de retención,
-cubriendo base de datos y documentos. Un respaldo que nunca se probó no es
-un respaldo: pruebe la restauración al menos una vez en un entorno aparte.
+**Respaldos** (A.12.3). Diarios y automáticos, con rotación de 14 carpetas
+(8.1), cubriendo base de datos y documentos. Un respaldo que nunca se probó
+no es un respaldo: pruebe la restauración con el procedimiento de 8.3.
 
 **Credenciales iniciales.** El script
 `06-usuario-superadministrador.sql` no se aplica en producción porque su
 contraseña está publicada en el repositorio. La primera cuenta se crea con
 `crear-administrador.ps1`, que nunca escribe la contraseña en disco ni en la
 línea de comandos.
+
+---
+
+## 12. Repositorio privado: credenciales para `git pull`
+
+Mientras el repositorio de GitHub sea público, `git clone` y `git pull`
+funcionan sin credenciales. Cuando pase a privado, los dos pedirán
+autenticación, y GitHub **no acepta la contraseña de la cuenta** para Git
+por HTTPS: hace falta un token.
+
+**Qué token crear.** En GitHub: *Settings → Developer settings → Personal
+access tokens → Fine-grained tokens → Generate new token*, con:
+
+- *Repository access*: **solo este repositorio**;
+- *Permissions → Repository permissions → Contents*: **Read-only** (y
+  nada más);
+- una fecha de vencimiento. Anótela: cuando venza, `git pull` dejará de
+  funcionar.
+
+Un token de solo lectura no permite publicar cambios desde la VM, que es lo
+que se quiere: el servidor solo descarga código.
+
+**Dónde se guarda.** En el Administrador de credenciales de Windows, a
+través de Git Credential Manager, que viene con Git para Windows.
+Compruebe que está activo:
+
+```
+git config --get credential.helper
+```
+
+Debe responder `manager` (o `manager-core` en versiones antiguas). Después,
+en el primer `git pull` o `git clone`:
+
+1. Si se abre una ventana de inicio de sesión de GitHub, elija la opción de
+   token (*Token*) y péguelo.
+2. Si lo pide la consola: como usuario, el de GitHub; como contraseña, el
+   token.
+
+Queda guardado como `git:https://github.com` y los siguientes `git pull` ya
+no preguntan.
+
+**Lo que no se hace:**
+
+- No escriba el token dentro de la URL del remoto
+  (`https://<token>@github.com/...`): quedaría en claro en `.git\config`.
+- No lo ponga en scripts, en `.env.produccion` ni en ningún archivo del
+  repositorio.
+- No use un token clásico con permiso `repo`: da escritura sobre todos sus
+  repositorios.
+
+**Vencimiento, rotación o sospecha de filtración:**
+
+1. Revoque el token en GitHub (*Fine-grained tokens → Delete*) y cree uno
+   nuevo con los mismos permisos.
+2. En la VM, borre la credencial guardada: *Panel de control → Administrador
+   de credenciales → Credenciales de Windows*, entrada
+   `git:https://github.com` → **Quitar**. Desde la consola:
+
+   ```
+   cmdkey /list | Select-String github
+   cmdkey /delete:git:https://github.com
+   ```
+
+3. Repita `git pull` y entregue el token nuevo cuando lo pida.
