@@ -591,11 +591,11 @@ try {
         Write-Host ' Comandos exactos:' -ForegroundColor Yellow
         Write-Host ('   cd "{0}"' -f (Split-Path -Parent $ultimo)) -ForegroundColor Yellow
         Write-Host ("   node -e `"const z=require('zlib'),f=require('fs');f.writeFileSync('restaurar.sql',z.gunzipSync(f.readFileSync('base-datos.sql.gz')))`"") -ForegroundColor Yellow
-        Write-Host ('   mysql --defaults-extra-file="{0}\mysql-respaldo.cnf" munidata < restaurar.sql' -f $rutaConfig) -ForegroundColor Yellow
+        Write-Host '   mysql -u root -p munidata < restaurar.sql' -ForegroundColor Yellow
         Write-Host '   del restaurar.sql' -ForegroundColor Yellow
         Write-Host '' -ForegroundColor Yellow
-        Write-Host ' Si no existe ese archivo de credenciales, use:' -ForegroundColor Yellow
-        Write-Host '   mysql -u munidata_app -p munidata < restaurar.sql' -ForegroundColor Yellow
+        Write-Host ' Con root: munidata_app no puede crear tablas. Pasos completos,' -ForegroundColor Yellow
+        Write-Host ' con el servicio detenido, en DESPLIEGUE.md, seccion 8.2.' -ForegroundColor Yellow
     }
     Write-Host '------------------------------------------------------------' -ForegroundColor Yellow
 

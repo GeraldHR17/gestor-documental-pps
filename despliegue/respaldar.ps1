@@ -545,7 +545,7 @@ try {
     Write-Host ''
     Write-Host 'Para restaurar la base de datos desde este respaldo (DESTRUYE los datos actuales):' -ForegroundColor Yellow
     Write-Host ("  node -e `"const z=require('zlib'),f=require('fs');f.writeFileSync('restaurar.sql',z.gunzipSync(f.readFileSync('{0}')))`"" -f $archivoGz) -ForegroundColor Yellow
-    Write-Host ("  mysql -u {0} -p {1} < restaurar.sql" -f $UsuarioMysql, $BaseDatos) -ForegroundColor Yellow
+    Write-Host ("  mysql -u root -p {0} < restaurar.sql   (con root; ver DESPLIEGUE.md, 8.2)" -f $BaseDatos) -ForegroundColor Yellow
     exit 0
 
 } catch {
