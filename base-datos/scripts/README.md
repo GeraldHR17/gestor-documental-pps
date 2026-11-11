@@ -1,4 +1,4 @@
-# Scripts de base de datos — Gestor Documental PPS
+# Scripts de base de datos — Muni Data
 
 ## Orden de ejecución (automático vía Docker)
 
@@ -28,26 +28,31 @@ lo que hay ahí. Solo hacen `SELECT`.
 |-------------------------------------------|------------------------------------------------------------------|
 | `10-diagnostico-codigos-categorias.sql`   | Antes de la migración 10: nulos, irregulares, duplicados y vista previa de los códigos. Se ejecuta con `despliegue/diagnosticar-codigos-categorias.ps1`. |
 
-### Credenciales del usuario semilla
+## Usuario semilla de desarrollo
 
-`06-usuario-superadministrador.sql` crea la única cuenta con la que se
-puede entrar al sistema por primera vez:
+`06-usuario-superadministrador.sql` crea un usuario con rol
+Superadministrador para el primer inicio de sesión en desarrollo. Sus datos
+de acceso están en ese script y no se repiten aquí.
 
-- **Correo:** `admin@munipalmares.go.cr`
-- **Contraseña:** `Palmares#2026`
-
-Son credenciales **de desarrollo local**. Cámbielas antes de cualquier
-despliegue.
+- El sistema **no** obliga a cambiar la contraseña ni tiene una pantalla
+  para hacerlo. Cámbiela usted en el primer ingreso con **«¿Olvidó su
+  contraseña?»**. En desarrollo, con `SMTP_HOST` vacío, el correo va a una
+  cuenta de pruebas de Ethereal y el enlace para abrirlo aparece en el log
+  del backend.
+- **No se usa en producción.** `despliegue/preparar-base-datos.ps1` omite
+  este script, y el primer administrador se crea con
+  `despliegue/crear-administrador.ps1`, con una contraseña que solo conoce
+  quien lo ejecuta.
 
 ## Re-ejecutar los scripts manualmente
 
 Docker solo corre `init/` la primera vez. Para reiniciar la base de datos
 desde cero durante desarrollo (por ejemplo, tras modificar el esquema):
 
-\`\`\`powershell
+```powershell
 docker compose down -v
 docker compose up -d
-\`\`\`
+```
 
 El flag `-v` elimina el volumen `mysql_data`, forzando que MySQL vuelva
 a ejecutar todos los scripts de `init/` en el próximo arranque.
@@ -59,6 +64,6 @@ La carpeta `respaldos/` almacena dumps manuales generados con `mysqldump`
 
 Ejemplo de respaldo manual:
 
-\`\`\`powershell
+```powershell
 docker exec gestor_documental_mysql mysqldump -u gestor_app -p gestor_documental_pps > base-datos/respaldos/respaldo_2026-08-21.sql
-\`\`\`
+```
