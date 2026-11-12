@@ -1,9 +1,32 @@
+import { execSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath, URL } from 'node:url'
 
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
+
+function leerVersionAplicacion(): string {
+  try {
+    const paquete = JSON.parse(
+      readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf8'),
+    ) as { version?: string }
+    return paquete.version ?? 'sin-datos'
+  } catch {
+    return 'sin-datos'
+  }
+}
+
+function leerCommitAplicacion(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim() || 'sin-datos'
+  } catch {
+    return 'sin-datos'
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -24,6 +47,11 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: rutaBase,
+    define: {
+      __VERSION_APLICACION__: JSON.stringify(leerVersionAplicacion()),
+      __COMMIT_APLICACION__: JSON.stringify(leerCommitAplicacion()),
+      __FECHA_COMPILACION__: JSON.stringify(new Date().toISOString()),
+    },
     plugins: [
       vue(),
       vueDevTools(),

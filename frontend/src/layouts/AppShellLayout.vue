@@ -3,13 +3,15 @@
 // Las vistas internas (GestionUsuariosView, RolesPermisosView...) asumen
 // vivir dentro de este layout y por eso no repiten navegación; se montan
 // en el <RouterView /> de abajo como rutas hijas (ver router/index.ts).
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAutenticacion } from '@/composables/useAutenticacion';
 import { useNotificaciones } from '@/composables/useNotificaciones';
+import { usePanelAcercaDe } from '@/composables/usePanelAcercaDe';
 import { useTema } from '@/composables/useTema';
 import ModalConfirmacion from '@/components/ModalConfirmacion.vue';
-import { CATALOGOS_SIMPLES } from '@/lib/catalogos.config';
+import PaletaComandos from '@/components/PaletaComandos.vue';
+import { ENLACES, ENLACES_CATALOGOS, visiblesSegunPermisos } from '@/lib/navegacion';
 
 const route = useRoute();
 const router = useRouter();
@@ -19,64 +21,13 @@ const { esOscuro, alternarTema } = useTema();
 
 const menuLateralAbierto = ref(false);
 
-interface EnlaceNavegacion {
-  nombreRuta: string;
-  etiqueta: string;
-  icono: string;
-  /** Si se declara, el enlace solo aparece cuando el rol lo tiene. */
-  permisoRequerido?: string;
-}
-
-const ENLACES: EnlaceNavegacion[] = [
-  { nombreRuta: 'dashboard', etiqueta: 'Inicio', icono: 'dashboard' },
-  {
-    nombreRuta: 'usuarios',
-    etiqueta: 'Gestión de Usuarios',
-    icono: 'group',
-    permisoRequerido: 'usuarios.administrar',
-  },
-  { nombreRuta: 'roles-permisos', etiqueta: 'Roles y Permisos', icono: 'admin_panel_settings' },
-  {
-    nombreRuta: 'documentos',
-    etiqueta: 'Documentos',
-    icono: 'folder_open',
-    permisoRequerido: 'documentos.consultar',
-  },
-  {
-    nombreRuta: 'bitacora',
-    etiqueta: 'Bitácora',
-    icono: 'history',
-    permisoRequerido: 'bitacora.consultar',
-  },
-];
-
-// Los catálogos van en su propio grupo, bajo un encabezado: son cuatro
-// entradas que comparten permiso y propósito, y mezclarlas con las de
-// arriba dejaría una lista larga y plana difícil de recorrer.
-const ENLACES_CATALOGOS: EnlaceNavegacion[] = [
-  {
-    nombreRuta: 'categorias-itsp',
-    etiqueta: 'Categorías ITSP',
-    icono: 'account_tree',
-    permisoRequerido: 'catalogos.administrar',
-  },
-  ...Object.values(CATALOGOS_SIMPLES).map((catalogo) => ({
-    nombreRuta: catalogo.nombreRutaLista,
-    etiqueta: catalogo.titulo,
-    icono: catalogo.icono,
-    permisoRequerido: 'catalogos.administrar',
-  })),
-];
-
 // RF-05: la navegación refleja los permisos efectivos del usuario; ocultar
 // el enlace es solo cosmético — el acceso real lo sigue bloqueando el
 // guard del router y, sobre todo, el backend.
-function visiblesSegunPermisos(enlaces: EnlaceNavegacion[]): EnlaceNavegacion[] {
-  return enlaces.filter((enlace) => !enlace.permisoRequerido || tienePermiso(enlace.permisoRequerido));
-}
-
-const enlacesVisibles = computed(() => visiblesSegunPermisos(ENLACES));
-const enlacesCatalogosVisibles = computed(() => visiblesSegunPermisos(ENLACES_CATALOGOS));
+const enlacesVisibles = computed(() => visiblesSegunPermisos(ENLACES, tienePermiso));
+const enlacesCatalogosVisibles = computed(() =>
+  visiblesSegunPermisos(ENLACES_CATALOGOS, tienePermiso),
+);
 
 // El título busca en ambos grupos, y además reconoce las rutas de alta y
 // edición: estando en '/catalogos/etiquetas/nueva' la cabecera debe seguir
@@ -86,7 +37,7 @@ const tituloSeccion = computed(() => {
   const coincidencia =
     todos.find((e) => e.nombreRuta === route.name) ??
     todos.find((e) => route.path.startsWith(rutaBaseDe(e.nombreRuta)));
-  return coincidencia?.etiqueta ?? 'Inicio';
+  return coincidencia?.etiqueta ?? route.meta.titulo ?? 'Inicio';
 });
 
 function rutaBaseDe(nombreRuta: string): string {
@@ -103,6 +54,24 @@ const iniciales = computed(() =>
 );
 
 const anioActual = new Date().getFullYear();
+
+const panelAcercaDe = usePanelAcercaDe();
+const paletaAbierta = ref(false);
+
+function alPresionarAtajo(evento: KeyboardEvent): void {
+  if (!(evento.ctrlKey || evento.metaKey) || evento.key.toLowerCase() !== 'k') return;
+  if (panelAcercaDe.abierto.value) return;
+  evento.preventDefault();
+  paletaAbierta.value = !paletaAbierta.value;
+}
+
+function solicitarCierreSesion(): void {
+  paletaAbierta.value = false;
+  mostrarModalCerrarSesion.value = true;
+}
+
+onMounted(() => window.addEventListener('keydown', alPresionarAtajo));
+onBeforeUnmount(() => window.removeEventListener('keydown', alPresionarAtajo));
 
 const mostrarModalCerrarSesion = ref(false);
 const cerrandoSesion = ref(false);
@@ -282,7 +251,7 @@ async function manejarCerrarSesion(): Promise<void> {
         class="border-t border-surface-alt bg-surface-container-lowest px-margin-mobile md:px-margin-desktop py-gutter-sm flex flex-col sm:flex-row items-center justify-between gap-2 font-body-md text-body-md text-tertiary"
       >
         <span>© {{ anioActual }} Municipalidad de Palmares — Portal de Gobierno Abierto</span>
-        <span class="flex items-center gap-1">
+        <span class="flex items-center gap-1" @click="panelAcercaDe.registrarClic">
           <span aria-hidden="true" class="material-symbols-outlined text-[16px]">shield</span>
           Muni Data
         </span>
@@ -296,6 +265,12 @@ async function manejarCerrarSesion(): Promise<void> {
       :procesando="cerrandoSesion"
       @cancelar="mostrarModalCerrarSesion = false"
       @confirmar="manejarCerrarSesion"
+    />
+
+    <PaletaComandos
+      v-if="paletaAbierta"
+      @cerrar="paletaAbierta = false"
+      @solicitar-cierre-sesion="solicitarCierreSesion"
     />
   </div>
 </template>

@@ -5,6 +5,7 @@
 // mockup (con roles y acciones ilustrativas como "Auditor" o "Firmar
 // digitalmente") se usó únicamente como referencia visual, según lo
 // confirmado en el spec.md.
+import TextoCarga from '@/components/TextoCarga.vue';
 import { onMounted, ref, computed } from 'vue';
 import { useRolesPermisos } from '@/composables/useRolesPermisos';
 import { useAutenticacion } from '@/composables/useAutenticacion';
@@ -173,7 +174,7 @@ onMounted(async () => {
           </p>
 
           <div v-if="cargando" class="flex-1 flex items-center justify-center text-secondary">
-            Cargando matriz de permisos...
+            <TextoCarga />
           </div>
 
           <div v-else class="flex-1 overflow-y-auto pr-2">

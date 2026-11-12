@@ -34,3 +34,7 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+declare const __VERSION_APLICACION__: string;
+declare const __COMMIT_APLICACION__: string;
+declare const __FECHA_COMPILACION__: string;

@@ -12,6 +12,7 @@
 //
 // El backend ya devuelve las filas en orden de despliegue, así que esta
 // vista sólo indenta, no reordena.
+import TextoCarga from '@/components/TextoCarga.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useCategoriasItsp } from '@/composables/useCategoriasItsp';
 import { useNotificaciones } from '@/composables/useNotificaciones';
@@ -179,7 +180,7 @@ onMounted(recargar);
           </thead>
           <tbody class="divide-y divide-surface-alt font-body-md text-body-md text-on-surface">
             <tr v-if="cargando">
-              <td colspan="5" class="py-8 px-gutter-lg text-center text-secondary">Cargando...</td>
+              <td colspan="5" class="py-8 px-gutter-lg text-center text-secondary"><TextoCarga /></td>
             </tr>
             <tr v-else-if="categorias.length === 0">
               <td colspan="5" class="py-8 px-gutter-lg text-center text-secondary">

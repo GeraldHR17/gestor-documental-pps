@@ -11,6 +11,7 @@
 //
 // Mismo patrón de UX que el resto: validación en tiempo real, modal de
 // confirmación PREVIA, aviso de "salir sin guardar" y toast DESPUÉS.
+import TextoCarga from '@/components/TextoCarga.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { onBeforeRouteLeave, useRouter } from 'vue-router';
 import { useDocumentos } from '@/composables/useDocumentos';
@@ -329,7 +330,7 @@ const PASOS: Array<{ numero: Paso; titulo: string; subtitulo: string }> = [
       </li>
     </ol>
 
-    <div v-if="cargando" class="text-secondary font-body-lg text-body-lg">Cargando...</div>
+    <div v-if="cargando" class="text-secondary font-body-lg text-body-lg"><TextoCarga /></div>
 
     <div v-else class="grid grid-cols-1 xl:grid-cols-[1fr_20rem] gap-gutter-lg items-start">
       <!-- ================= Paso 1: Archivo ================= -->

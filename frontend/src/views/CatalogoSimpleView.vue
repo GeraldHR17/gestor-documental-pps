@@ -6,6 +6,7 @@
 //
 // Sigue el mismo patrón ya verificado en Gestión de Usuarios: modal de
 // confirmación PREVIA a inactivar/activar, y toast de resultado DESPUÉS.
+import TextoCarga from '@/components/TextoCarga.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useCatalogo } from '@/composables/useCatalogo';
 import { useNotificaciones } from '@/composables/useNotificaciones';
@@ -171,7 +172,7 @@ onMounted(recargar);
           <tbody class="divide-y divide-surface-alt font-body-md text-body-md text-on-surface">
             <tr v-if="cargando">
               <td :colspan="cantidadColumnas" class="py-8 px-gutter-lg text-center text-secondary">
-                Cargando...
+                <TextoCarga />
               </td>
             </tr>
             <tr v-else-if="registros.length === 0">

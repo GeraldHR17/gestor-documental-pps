@@ -12,6 +12,7 @@
 // puede moverse bajo cualquier otra categoría salvo ella misma y su
 // subárbol, avisando antes de cuántas direcciones públicas cambiarán
 // (spec-ajustes-posdespliegue §9.1; spec-ajustes-niveles-y-estados D-18).
+import TextoCarga from '@/components/TextoCarga.vue';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { onBeforeRouteLeave, useRouter } from 'vue-router';
 import { useCategoriasItsp } from '@/composables/useCategoriasItsp';
@@ -405,7 +406,7 @@ onMounted(cargarDatosIniciales);
       </p>
     </div>
 
-    <div v-if="cargando" class="text-secondary font-body-lg text-body-lg">Cargando...</div>
+    <div v-if="cargando" class="text-secondary font-body-lg text-body-lg"><TextoCarga /></div>
 
     <form
       v-else

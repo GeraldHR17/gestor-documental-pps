@@ -3,6 +3,7 @@
 // el de usuarios: el modo lo decide la presencia de `id` en la ruta, la
 // validación corre en tiempo real, hay modal de confirmación PREVIA al
 // guardado y aviso de "cambios sin guardar" al intentar salir.
+import TextoCarga from '@/components/TextoCarga.vue';
 import { computed, onMounted, reactive, ref } from 'vue';
 import { onBeforeRouteLeave, useRouter } from 'vue-router';
 import { useCatalogo } from '@/composables/useCatalogo';
@@ -206,7 +207,7 @@ onMounted(cargarDatosIniciales);
       </p>
     </div>
 
-    <div v-if="cargando" class="text-secondary font-body-lg text-body-lg">Cargando...</div>
+    <div v-if="cargando" class="text-secondary font-body-lg text-body-lg"><TextoCarga /></div>
 
     <form
       v-else

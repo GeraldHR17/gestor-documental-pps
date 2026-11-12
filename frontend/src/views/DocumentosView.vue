@@ -3,6 +3,7 @@
 // Usuarios y en los catálogos: filtros arriba, tabla con badges neutros,
 // modal de confirmación PREVIA a cada transición de estado y toast de
 // resultado DESPUÉS.
+import TextoCarga from '@/components/TextoCarga.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useDocumentos } from '@/composables/useDocumentos';
@@ -310,7 +311,7 @@ onMounted(() => {
           </thead>
           <tbody class="divide-y divide-surface-alt font-body-md text-body-md text-on-surface">
             <tr v-if="cargando">
-              <td colspan="6" class="py-8 px-gutter-lg text-center text-secondary">Cargando...</td>
+              <td colspan="6" class="py-8 px-gutter-lg text-center text-secondary"><TextoCarga /></td>
             </tr>
             <tr v-else-if="documentos.length === 0">
               <td colspan="6" class="py-8 px-gutter-lg text-center text-secondary">

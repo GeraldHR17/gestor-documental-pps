@@ -91,6 +91,10 @@ export class AlmacenamientoDocumentosService {
     this.raizAlmacenamiento = resolve(rutaConfigurada || join(process.cwd(), 'storage'));
   }
 
+  get raiz(): string {
+    return this.raizAlmacenamiento;
+  }
+
   /**
    * Las cuatro comprobaciones de RNF-005, en orden de costo creciente. Se
    * ejecuta ANTES de tocar la base de datos: el CHECK de MySQL queda como

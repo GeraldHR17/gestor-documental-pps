@@ -1,0 +1,24 @@
+/* TEAM */
+Desarrollo: Gerald Huertas Rodríguez
+Institución: Universidad Nacional de Costa Rica (UNA)
+Carrera: Ingeniería en Sistemas de Información
+Ubicación: Costa Rica
+
+Supervisor técnico y Product Owner: Joseph Granda Vargas
+Cargo: Jefe de TICs, Municipalidad de Palmares
+Ubicación: Palmares, Alajuela, Costa Rica
+
+Supervisión académica: MSc. Cristian Gerardo Herrera Alvarado
+Institución: Universidad Nacional de Costa Rica (UNA)
+
+/* THANKS */
+Municipalidad de Palmares, Costa Rica
+Universidad Nacional de Costa Rica (UNA)
+Práctica Profesional Supervisada 2026
+
+/* SITE */
+Nombre: Muni Data
+Descripción: Sistema Integral de Gestión Documental y Portal Web de Gobierno Abierto y Transparencia Municipal
+Idioma: Español
+Estándares: HTML5, CSS3, WCAG 2.1 AA, REST/JSON
+Componentes: NestJS, TypeORM, Vue 3, Vite, Tailwind CSS, MySQL, TypeScript

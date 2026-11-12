@@ -10,6 +10,7 @@
 //  - Acción: texto libre (ej. PUBLICAR).
 // El formulario de usuario enlaza aquí con `?entidad=usuarios&idRegistro=N`;
 // ese id sólo viaja en la URL, en pantalla se resuelve a su nombre.
+import TextoCarga from '@/components/TextoCarga.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import bitacoraService from '@/services/bitacora.service';
@@ -198,7 +199,7 @@ onMounted(recargar);
           </thead>
           <tbody class="divide-y divide-surface-alt font-body-md text-body-md text-on-surface">
             <tr v-if="cargando">
-              <td colspan="5" class="py-8 px-gutter-lg text-center text-secondary">Cargando...</td>
+              <td colspan="5" class="py-8 px-gutter-lg text-center text-secondary"><TextoCarga /></td>
             </tr>
             <tr v-else-if="entradas.length === 0">
               <td colspan="5" class="py-8 px-gutter-lg text-center text-secondary">

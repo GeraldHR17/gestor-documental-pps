@@ -3,6 +3,7 @@
 // topbar y footer institucionales del mockup) ya vive en un layout compartido
 // (ej. AppShellLayout.vue) fuera de este archivo. Aquí solo se convirtió el
 // contenido específico de "Gestión de Usuarios" para no duplicar navegación.
+import TextoCarga from '@/components/TextoCarga.vue';
 import { onMounted, ref, computed, watch } from 'vue';
 import { useUsuarios } from '@/composables/useUsuarios';
 import { useRolesPermisos } from '@/composables/useRolesPermisos';
@@ -201,7 +202,7 @@ onMounted(async () => {
           <tbody class="divide-y divide-surface-alt font-body-md text-body-md text-on-surface">
             <tr v-if="cargando">
               <td colspan="5" class="py-8 px-gutter-lg text-center text-secondary">
-                Cargando usuarios...
+                <TextoCarga />
               </td>
             </tr>
             <tr v-else-if="usuarios.length === 0">

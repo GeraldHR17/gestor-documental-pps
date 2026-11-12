@@ -7,6 +7,7 @@
 // Authorization, y devolvería 401. En su lugar se pide el PDF como blob a
 // través del cliente HTTP —que sí adjunta el token y sabe renovarlo— y se
 // muestra el `blob:` resultante. Lo mismo vale para la descarga.
+import TextoCarga from '@/components/TextoCarga.vue';
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import documentosService, { TRANSICIONES_PERMITIDAS } from '@/services/documentos.service';
@@ -461,7 +462,7 @@ onMounted(cargar);
           </div>
 
           <p v-if="cargandoVisor" class="font-body-md text-body-md text-secondary">
-            Cargando vista previa...
+            <TextoCarga />
           </p>
           <p
             v-else-if="errorVisor"

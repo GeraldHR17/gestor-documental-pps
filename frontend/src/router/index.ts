@@ -7,6 +7,7 @@ import AppShellLayout from '@/layouts/AppShellLayout.vue';
 import LoginView from '@/views/LoginView.vue';
 import { CATALOGOS_SIMPLES } from '@/lib/catalogos.config';
 import { aplicarSuperficie, superficieDeRuta } from '@/lib/superficie';
+import { ROL_ADMINISTRADOR_SISTEMA } from '@/lib/navegacion';
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -28,6 +29,8 @@ declare module 'vue-router' {
      * más en cada visita, con su cookie y su entrada en el log.
      */
     sinSesion?: boolean;
+    rol?: string;
+    titulo?: string;
   }
 }
 
@@ -237,6 +240,12 @@ const router = createRouter({
           props: true,
           meta: { permiso: 'catalogos.administrar' },
         },
+        {
+          path: 'sistema/estado',
+          name: 'estado-sistema',
+          component: () => import('@/views/EstadoSistemaView.vue'),
+          meta: { rol: ROL_ADMINISTRADOR_SISTEMA, titulo: 'Estado del sistema' },
+        },
       ],
     },
 
@@ -263,7 +272,7 @@ router.beforeEach(async (destino) => {
     return true;
   }
 
-  const { usuario, motivoCierre, restaurarSesion, tienePermiso } = useAutenticacion();
+  const { usuario, motivoCierre, restaurarSesion, tienePermiso, esRol } = useAutenticacion();
 
   // El access token vive solo en memoria, así que tras un F5 hay que
   // intentar rehacer la sesión con la cookie httpOnly antes de decidir
@@ -296,6 +305,10 @@ router.beforeEach(async (destino) => {
   // Segunda barrera, cosmética: la autorización real la impone el backend
   // (PermisosGuard). Esto solo evita mostrar una pantalla que devolvería 403.
   if (destino.meta.permiso && !tienePermiso(destino.meta.permiso)) {
+    return { name: 'dashboard' };
+  }
+
+  if (destino.meta.rol && !esRol(destino.meta.rol)) {
     return { name: 'dashboard' };
   }
 
